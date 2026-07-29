@@ -643,6 +643,11 @@ cursor and only persists to `config.toml` on `Enter`; `Esc` reverts to
 dead code — the notes-scope search (`/`) and global search (leader+`g`) were both built directly
 in `App` instead.
 
+The scratchpad (`leader+p`) is intentionally an in-memory `InlineEditor`, not a temporary file:
+notebooks are independent git repositories and any file placed inside one can be picked up by
+auto-sync. `Esc` discards the buffer; `Ctrl+S` stages it for the existing new-note title/template
+flow, which is the only path that gives it a filesystem location.
+
 **The theme picker's `Enter` (and `shiki theme set`) only reset `config.theme.overrides` when the
 base theme name is actually *changing*, not on every confirm/set.** Both used to zero out
 `ThemeOverrides` unconditionally — even re-confirming the theme that was already active with no

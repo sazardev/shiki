@@ -2028,6 +2028,7 @@ impl App {
             KeyCode::Esc | KeyCode::Char('q') => {
                 self.show_template_picker = false;
                 self.pending_new_note_title.clear();
+                self.pending_new_note_body = None;
                 self.set_status("new note cancelled".into());
             }
             KeyCode::Char('j') | KeyCode::Down => {
@@ -2065,18 +2066,21 @@ impl App {
     /// (`apply_quick_template`), so the two can't drift into creating notes
     /// differently from each other.
     fn create_note_with_template(&mut self, title: String, template_choice: Option<String>) {
-        let body = match &template_choice {
-            Some(name) => Config::default_templates_dir()
-                .ok()
-                .and_then(|dir| shiki_core::Template::load(&dir, name).ok())
-                .map(|template| {
-                    let mut vars = std::collections::HashMap::new();
-                    vars.insert("title", title.clone());
-                    vars.insert("date", chrono::Local::now().format("%Y-%m-%d").to_string());
-                    template.render(&vars)
-                })
-                .unwrap_or_default(),
-            None => String::new(),
+        let body = match self.pending_new_note_body.take() {
+            Some(body) => body,
+            None => match &template_choice {
+                Some(name) => Config::default_templates_dir()
+                    .ok()
+                    .and_then(|dir| shiki_core::Template::load(&dir, name).ok())
+                    .map(|template| {
+                        let mut vars = std::collections::HashMap::new();
+                        vars.insert("title", title.clone());
+                        vars.insert("date", chrono::Local::now().format("%Y-%m-%d").to_string());
+                        template.render(&vars)
+                    })
+                    .unwrap_or_default(),
+                None => String::new(),
+            },
         };
 
         match self.selected_notebook().cloned() {
@@ -2139,6 +2143,24 @@ impl App {
             self.mode = Mode::Edit;
         }
     }
+    /// Opens a session-only editor buffer. Nothing is written when it closes;
+    /// Ctrl+S stages the contents for the ordinary new-note flow instead.
+    fn start_scratchpad(&mut self) {
+        if self.mode == Mode::Edit {
+            return;
+        }
+        let mut editor = InlineEditor::from_contents("");
+        self.style_inline_editor(&mut editor, format!(" {}  Scratchpad ", icons::PENCIL));
+        editor
+            .textarea
+            .set_placeholder_text("Scratchpad — Ctrl+S saves as a note; Esc discards");
+        editor.textarea.set_placeholder_style(
+            ratatui::style::Style::default().fg(hex_to_color(&self.theme.muted)),
+        );
+        self.editor = Some(editor);
+        self.editing_scratchpad = true;
+        self.mode = Mode::Edit;
+    }
     /// Opens `config.toml`'s actual on-disk contents (whatever's really
     /// there — comments included, if the file has any) in the same inline
     /// editor notes use. `editing_config` tells `save_and_exit_edit` which
@@ -2179,6 +2201,12 @@ impl App {
             self.mode = Mode::Normal;
             self.show_settings = true;
             self.set_status(format!("snippet '{trigger}': body saved"));
+            return;
+        }
+        if self.editing_scratchpad {
+            self.editing_scratchpad = false;
+            self.set_status("scratchpad discarded".into());
+            self.mode = Mode::Normal;
             return;
         }
         if let (Some(editor), Some(mut note)) = (editor, self.selected_note().cloned()) {
@@ -2230,6 +2258,7 @@ impl App {
             Action::ToggleDrawer => self.toggle_drawer(),
             Action::UndoDelete => self.undo_delete(),
             Action::ToggleSettings => self.toggle_settings(),
+            Action::Scratchpad => self.start_scratchpad(),
 
             Action::NewNotebook => self.start_input(PendingInput::NewNotebook, String::new()),
             Action::RenameNotebook => self.start_rename_notebook(),
@@ -2240,7 +2269,10 @@ impl App {
             Action::PullAllNotebooks => self.pull_all_notebooks(),
             Action::SetRemote => self.start_set_remote(),
 
-            Action::NewNote => self.start_input(PendingInput::NewNote, String::new()),
+            Action::NewNote => {
+                self.pending_new_note_body = None;
+                self.start_input(PendingInput::NewNote, String::new());
+            }
             Action::NewFolder => self.start_input(PendingInput::NewFolder, String::new()),
             Action::RenameNote => self.start_rename_note(),
             Action::DeleteNote => self.start_delete_note(),
@@ -2904,6 +2936,9 @@ impl App {
                 let kind = self.pending_input.take();
                 self.pending_input_title = None;
                 self.pending_batch = None;
+                if kind == Some(PendingInput::NewNote) {
+                    self.pending_new_note_body = None;
+                }
                 self.mode = Mode::Normal;
                 // Every `Settings*` prompt is only ever started from inside
                 // the Settings modal, which hides it first since a modal
@@ -2939,6 +2974,17 @@ impl App {
             return;
         }
         match key.code {
+            KeyCode::Char('s')
+                if self.editing_scratchpad && key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                let Some(editor) = self.editor.take() else {
+                    return;
+                };
+                self.pending_new_note_body = Some(editor.contents());
+                self.editing_scratchpad = false;
+                self.start_input(PendingInput::NewNote, String::new());
+                self.set_status("scratchpad ready to save as a note".into());
+            }
             // Esc first collapses multi-cursor editing back to just the
             // primary (VS Code's own "Escape removes secondary cursors"
             // convention) — only a *second* Esc, with no secondaries left,

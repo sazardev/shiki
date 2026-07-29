@@ -273,6 +273,7 @@ fn check_keybinding_health(config: &Config, r: &mut Report) {
                 ("drawer", kb.global.drawer.as_str()),
                 ("undo_delete", kb.global.undo_delete.as_str()),
                 ("settings", kb.global.settings.as_str()),
+                ("scratchpad", kb.global.scratchpad.as_str()),
             ],
         ),
         (

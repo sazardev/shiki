@@ -506,6 +506,9 @@ pub struct App {
     /// `editing_config`, same three-way "which of these is this edit
     /// actually for" dispatch.
     pub(crate) editing_snippet: Option<String>,
+    /// True while the editor contains the session-only scratchpad buffer.
+    /// It has no path and is discarded unless explicitly saved as a note.
+    pub(crate) editing_scratchpad: bool,
     /// True from the moment THEME's `name` row opens the theme picker from
     /// inside Settings until the picker closes — `show_settings` is hidden
     /// first (its render call in `draw()` comes after the theme picker's,
@@ -557,6 +560,8 @@ pub struct App {
     /// while the template picker is up — the note isn't actually created
     /// until a template (or "blank") is chosen.
     pub(crate) pending_new_note_title: String,
+    /// Scratchpad contents staged while the new-note title flow is active.
+    pub(crate) pending_new_note_body: Option<String>,
     /// Selected row in the `@`-triggered quick-template dropdown (see
     /// `QuickCommand`) — only meaningful while `NewNote`'s input contains an
     /// `@`; reset to 0 on every keystroke that changes the filter, same
@@ -864,6 +869,7 @@ impl App {
             settings_field_selected: 0,
             editing_config: false,
             editing_snippet: None,
+            editing_scratchpad: false,
             reopen_settings_after_theme_picker: false,
             pending_delete_snippet: None,
             log_history,
@@ -875,6 +881,7 @@ impl App {
             template_picker_options: Vec::new(),
             template_picker_index: 0,
             pending_new_note_title: String::new(),
+            pending_new_note_body: None,
             quick_template_selected: 0,
             show_tree: false,
             tree_rows: Vec::new(),

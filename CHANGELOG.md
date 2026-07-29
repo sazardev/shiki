@@ -8,6 +8,9 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ### Added
 
+- In-memory scratchpad (`leader+p`) for temporary writing. `Ctrl+S` saves its contents as a real
+  note through the existing new-note flow; closing it with `Esc` discards the buffer.
+
 - New `[editor]` config section (EDITOR tab in Settings, leader+`s`) — six independently toggleable
   behaviors for the native note editor's mouse/keyboard UX: `mouse_selection`, `find_replace`,
   `os_clipboard`, `select_all_ctrl_a`, `line_numbers`, `multi_cursor`.

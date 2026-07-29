@@ -21,6 +21,7 @@ pub enum Action {
     /// Opens the Settings screen — a read-only summary of the current
     /// config, with a key to jump straight to editing `config.toml` itself.
     ToggleSettings,
+    Scratchpad,
     // Notebooks-focus
     NewNotebook,
     RenameNotebook,
@@ -127,6 +128,7 @@ impl KeyMaps {
         bind(&mut global, &cfg.global.drawer, Action::ToggleDrawer);
         bind(&mut global, &cfg.global.undo_delete, Action::UndoDelete);
         bind(&mut global, &cfg.global.settings, Action::ToggleSettings);
+        bind(&mut global, &cfg.global.scratchpad, Action::Scratchpad);
 
         let mut notebooks = HashMap::new();
         bind(&mut notebooks, &cfg.notebooks.new, Action::NewNotebook);
@@ -256,6 +258,7 @@ pub fn action_label(action: Action) -> &'static str {
         Action::ToggleDrawer => "toggle notebook drawer",
         Action::UndoDelete => "undo last delete",
         Action::ToggleSettings => "settings (view + edit config.toml)",
+        Action::Scratchpad => "open scratchpad",
         Action::NewNotebook => "new notebook",
         Action::RenameNotebook => "rename notebook",
         Action::DeleteNotebook => "delete notebook",
@@ -312,5 +315,6 @@ pub fn action_icon(action: Action) -> char {
         Action::ShowLinks => crate::icons::LINK,
         Action::UndoDelete => crate::icons::UNDO,
         Action::ToggleSettings => crate::icons::GEAR,
+        Action::Scratchpad => crate::icons::PENCIL,
     }
 }
