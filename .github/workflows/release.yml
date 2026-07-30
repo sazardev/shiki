@@ -126,7 +126,7 @@ jobs:
           sha256sum * > SHA256SUMS.txt
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           # Explicit, not left to default to `github.ref` — that's not a
           # tag ref at all when this runs via `workflow_dispatch` (it's
