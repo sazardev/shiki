@@ -59,7 +59,7 @@ jobs:
             ext: tar.gz
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -141,7 +141,7 @@ jobs:
     needs: [release, resolve-tag]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
           # main requires a pull request for everything pushed with the
@@ -381,7 +381,7 @@ jobs:
     needs: [release, resolve-tag, update-packaging-manifests]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
           token: ${{ secrets.RELEASE_TAG_PAT || github.token }}
@@ -485,7 +485,7 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
 
