@@ -22,8 +22,8 @@ shiki-core = { path = "shiki-core", version = "0.8.2" }
 shiki-config = { path = "shiki-config", version = "0.8.2" }
 shiki-tui = { path = "shiki-tui", version = "0.8.2" }
 
-ratatui = "0.29"
-crossterm = "0.28"
+ratatui = "0.30"
+crossterm = "0.29"
 tokio = { version = "1", features = ["full"] }
 git2 = { version = "0.21", features = ["ssh", "https", "vendored-libgit2", "vendored-openssl"] }
 comrak = "0.54"
