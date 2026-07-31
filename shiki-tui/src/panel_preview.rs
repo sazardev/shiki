@@ -6,7 +6,7 @@ use ratatui::Frame;
 
 use crate::app::{App, Focus};
 use crate::icons;
-use crate::render::{borrow_lines, hex_to_color, panel_block};
+use crate::render::{borrow_lines, hex_to_color, panel_block, panel_block_reading};
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let focused = app.focus == Focus::Preview;
@@ -23,7 +23,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         (None, Some(folder)) => Line::from(format!(" {}  {folder}/ ", icons::NOTEBOOK)),
         (None, None) => Line::from(format!(" {}  Preview ", icons::EYE)),
     };
-    let block = panel_block(title, focused, &app.theme);
+    let block = if focused && app.selected_note().is_some() {
+        panel_block_reading(title, &app.theme)
+    } else {
+        panel_block(title, focused, &app.theme)
+    };
 
     let mut lines = match (app.selected_note(), app.selected_folder()) {
         // Both branches read from an `App`-level cache
@@ -92,6 +96,33 @@ pub fn preview_row_at(
     }
     let doc_row = scroll as usize + (row - content_top) as usize;
     (doc_row < row_count).then_some(doc_row)
+}
+
+/// Given one already-rendered PREVIEW row (from `App::note_preview_lines`)
+/// and a column offset within it (0-based from the panel's own left content
+/// edge — the caller subtracts `preview_row_at`'s `content_left` first),
+/// resolves which `[[wikilink]]` span, if any, the column lands on —
+/// returning its inner text with the brackets stripped. `inline_spans`
+/// (render.rs) renders a wikilink as a single span whose *content* is the
+/// literal `[[Title]]` text; that's the one thing distinguishing it from an
+/// ordinary `[label](url)` link or an image placeholder, which share the
+/// exact same `link` style but never carry doubled brackets in their span
+/// content. Plain function of a `Line`/column, not `&App`, same convention
+/// as `preview_row_at`/`panel_drawer::drawer_hit_at`.
+pub fn wikilink_at(line: &Line<'_>, column: usize) -> Option<String> {
+    let mut start = 0usize;
+    for span in &line.spans {
+        let width = unicode_width::UnicodeWidthStr::width(span.content.as_ref());
+        if column >= start && column < start + width {
+            return span
+                .content
+                .strip_prefix("[[")
+                .and_then(|s| s.strip_suffix("]]"))
+                .map(str::to_string);
+        }
+        start += width;
+    }
+    None
 }
 
 /// What's inside a selected-but-not-entered folder, so landing on it already

@@ -465,6 +465,19 @@ pub struct App {
     /// disagree with what's actually in the buffer).
     pub(crate) show_slash_menu: bool,
     pub(crate) slash_menu_selected: usize,
+    /// The inline editor's `[[wikilink]]` autocomplete — opens the instant
+    /// the second `[` completes a `[[` pair (checked live off the buffer,
+    /// same reasoning as `show_slash_menu`'s doc comment). Unlike the
+    /// `/`-menu, this one lists *notes* rather than a fixed command set, so
+    /// the candidate pool is snapshotted once when it opens
+    /// (`wikilink_candidates`, mirroring `global_search_pool`) rather than
+    /// re-walking the notebook on every keystroke — only the fuzzy score
+    /// (`wikilink_results`, via the shared `search_engine`) is recomputed
+    /// as the query changes.
+    pub(crate) show_wikilink_menu: bool,
+    pub(crate) wikilink_menu_selected: usize,
+    pub(crate) wikilink_candidates: Vec<Note>,
+    pub(crate) wikilink_results: Vec<SearchHit>,
     /// Path + editor command to launch externally, picked up by `run()`
     /// between draw calls. The editor is resolved per-invocation (either the
     /// configured `general.editor` for `E`, or the detected OS favorite for
@@ -877,6 +890,10 @@ impl App {
             editor_redo_groups: Vec::new(),
             show_slash_menu: false,
             slash_menu_selected: 0,
+            show_wikilink_menu: false,
+            wikilink_menu_selected: 0,
+            wikilink_candidates: Vec::new(),
+            wikilink_results: Vec::new(),
             want_external_edit: None,
             want_external_edit_config: false,
             show_theme_picker: false,

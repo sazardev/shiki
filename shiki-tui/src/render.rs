@@ -71,7 +71,7 @@ pub fn hex_to_color(value: &str) -> Color {
 }
 
 /// Themed panel `Block`: fills bg/fg from the theme, uses a thicker accent
-/// border when focused and a subtle rounded one otherwise. Shared by every
+/// border when focused and a plain square one otherwise. Shared by every
 /// panel and popup so the whole UI reads as one consistent surface instead of
 /// bare unstyled borders on the terminal's default background.
 pub fn panel_block<'a>(title: impl Into<Line<'a>>, focused: bool, theme: &Theme) -> Block<'a> {
@@ -80,6 +80,30 @@ pub fn panel_block<'a>(title: impl Into<Line<'a>>, focused: bool, theme: &Theme)
     } else {
         hex_to_color(&theme.border)
     };
+    let border_type = if focused {
+        BorderType::Thick
+    } else {
+        BorderType::Plain
+    };
+    styled_block(title, border_color, border_type, theme)
+}
+
+/// Same themed surface as `panel_block`, but always a plain (thin) border,
+/// still accent-colored to show focus. Used for PREVIEW specifically while
+/// actually reading a note's content — a full-width `Thick` border around a
+/// large block of body text otherwise reads as visually loud/shouty in a way
+/// the same border on a narrow list (Notebooks/Notes) doesn't; every other
+/// focused panel/popup keeps the regular `Thick` emphasis from `panel_block`.
+pub fn panel_block_reading<'a>(title: impl Into<Line<'a>>, theme: &Theme) -> Block<'a> {
+    styled_block(title, hex_to_color(&theme.accent), BorderType::Plain, theme)
+}
+
+fn styled_block<'a>(
+    title: impl Into<Line<'a>>,
+    border_color: Color,
+    border_type: BorderType,
+    theme: &Theme,
+) -> Block<'a> {
     Block::default()
         .title(title)
         .title_style(
@@ -88,11 +112,7 @@ pub fn panel_block<'a>(title: impl Into<Line<'a>>, focused: bool, theme: &Theme)
                 .add_modifier(Modifier::BOLD),
         )
         .borders(Borders::ALL)
-        .border_type(if focused {
-            BorderType::Thick
-        } else {
-            BorderType::Rounded
-        })
+        .border_type(border_type)
         .border_style(Style::default().fg(border_color))
         .style(
             Style::default()

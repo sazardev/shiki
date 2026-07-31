@@ -9,7 +9,7 @@
 [data-theme="gruvbox-dark"] {
   --bg: #282828;
   --fg: #ebdbb2;
-  --accent: #458588;
+  --accent: #fabd2f;
   --selection: #3c3836;
   --border: #504945;
   --statusbar: #1d2021;
@@ -23,7 +23,7 @@
 [data-theme="gruvbox-light"] {
   --bg: #fbf1c7;
   --fg: #3c3836;
-  --accent: #458588;
+  --accent: #b57614;
   --selection: #ebdbb2;
   --border: #d5c4a1;
   --statusbar: #f2e5bc;

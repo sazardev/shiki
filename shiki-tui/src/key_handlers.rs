@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use shiki_config::Config;
-use shiki_core::Notebook;
+use shiki_core::{wikilinks, Note, Notebook};
 
 use crate::app::{
     drawer_area, global_search_layout, global_search_popup_area, is_notebook_git_action,
@@ -1137,17 +1137,25 @@ impl App {
                 return;
             }
         };
+        self.jump_to_note(note_path, &title);
+        self.show_links = false;
+    }
+    /// Points the breadcrumb at `path`'s folder, reloads NOTES, selects it,
+    /// and focuses PREVIEW — the deep-link tail shared by every "jump
+    /// straight to a resolved note" flow (the links modal above, and
+    /// Ctrl+Click on a rendered `[[wikilink]]` in PREVIEW below). Each
+    /// caller still owns closing whatever modal/state got it here.
+    fn jump_to_note(&mut self, path: std::path::PathBuf, title: &str) {
         let notebook_path = self.selected_notebook().map(|nb| nb.path.clone());
         if let Some(notebook_path) = notebook_path {
-            self.notes_path = relative_folder(&note_path, &notebook_path);
+            self.notes_path = relative_folder(&path, &notebook_path);
         }
         self.reload_notes();
-        if let Some(idx) = self.notes.iter().position(|n| n.path == note_path) {
+        if let Some(idx) = self.notes.iter().position(|n| n.path == path) {
             self.selected_note = self.folders.len() + idx;
         }
         self.focus = Focus::Preview;
         self.set_status(format!("opened '{title}'"));
-        self.show_links = false;
     }
 
     /// The tags modal has two levels: the tag list itself, and (after
@@ -1341,6 +1349,16 @@ impl App {
                     && mouse.modifiers.contains(KeyModifiers::ALT)
                 {
                     self.on_editor_alt_click(mouse.column, mouse.row);
+                } else if self.mode != Mode::Edit
+                    && mouse.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.try_follow_preview_wikilink(mouse.column, mouse.row)
+                {
+                    // Consumed: the click landed on a resolvable
+                    // `[[wikilink]]` and already navigated there. A plain
+                    // click still enters edit mode (see `on_mouse_down`) —
+                    // this is deliberately opt-in via Ctrl so clicking to
+                    // edit a note that happens to contain links doesn't
+                    // become impossible.
                 } else {
                     self.on_mouse_down(mouse.column, mouse.row);
                 }
@@ -1396,7 +1414,11 @@ impl App {
     /// replayed as if each character had arrived as an ordinary keystroke
     /// — exactly what it looked like before bracketed-paste mode existed.
     pub fn on_paste(&mut self, text: String) {
-        if self.mode == Mode::Edit && self.editor_find.is_none() && !self.show_slash_menu {
+        if self.mode == Mode::Edit
+            && self.editor_find.is_none()
+            && !self.show_slash_menu
+            && !self.show_wikilink_menu
+        {
             if let Some(editor) = &mut self.editor {
                 editor.textarea.insert_str(&text);
                 self.editor_undo_groups.push(1);
@@ -1414,6 +1436,48 @@ impl App {
         }
     }
 
+    /// Ctrl+Click on a rendered `[[wikilink]]` in PREVIEW jumps straight to
+    /// the note it resolves to, instead of the plain click's "enter edit
+    /// mode at this row" (`enter_edit_at_preview_row`) — same gate
+    /// (`can_start_preview_selection`) a plain click already uses, so this
+    /// respects `mouse_drag_selection`/`no_modal_open` identically. Returns
+    /// `false` (falls through to the ordinary click handling in `on_mouse`)
+    /// whenever the click isn't on a note, isn't on a preview row at all,
+    /// or the row's rendered spans don't have a `[[...]]` one under the
+    /// clicked column — Ctrl+Click on ordinary text still just edits.
+    fn try_follow_preview_wikilink(&mut self, column: u16, row: u16) -> bool {
+        if !self.can_start_preview_selection() {
+            return false;
+        }
+        let preview = layout::split(self.last_frame_area, self.focus).preview;
+        let content_left = preview.x + 1;
+        if column < content_left {
+            return false;
+        }
+        let row_count = self.note_preview_lines().map(|l| l.len()).unwrap_or(0);
+        let Some(doc_row) =
+            panel_preview::preview_row_at(preview, self.preview_scroll, row_count, column, row)
+        else {
+            return false;
+        };
+        let click_col = (column - content_left) as usize;
+        let Some(text) = self
+            .note_preview_lines()
+            .and_then(|lines| lines.get(doc_row))
+            .and_then(|line| panel_preview::wikilink_at(line, click_col))
+        else {
+            return false;
+        };
+        let Some(nb) = self.selected_notebook() else {
+            return false;
+        };
+        let all_notes = nb.all_notes_recursive().unwrap_or_default();
+        match wikilinks::resolve_one(&text, &all_notes) {
+            Some(path) => self.jump_to_note(path, &text),
+            None => self.set_status(format!("'{text}' doesn't match any note")),
+        }
+        true
+    }
     fn on_mouse_down(&mut self, column: u16, row: u16) {
         if self.show_global_search {
             if let Some(index) = self.global_search_hit_at(column, row) {
@@ -1727,6 +1791,7 @@ impl App {
     /// `can_start_preview_selection` and mouse-wheel scrolling.
     fn no_modal_open(&self) -> bool {
         !self.show_slash_menu
+            && !self.show_wikilink_menu
             && self.pending_input.is_none()
             && !self.show_tags
             && !self.show_theme_picker
@@ -2144,10 +2209,15 @@ impl App {
                         let _ = note.save();
                     }
                     self.reload_notes();
-                    self.focus = Focus::Notes;
                     if let Some(idx) = self.notes.iter().position(|n| n.path == note.path) {
                         self.selected_note = self.folders.len() + idx;
                     }
+                    // Jump straight to Preview so NOTEBOOKS/NOTES collapse and
+                    // the fresh note's own editor is what's full-screen (in the
+                    // narrow/short `single` layout tier, the inline editor
+                    // always renders into `areas.preview` — leaving focus on
+                    // Notes would render it into a zero-sized area there).
+                    self.focus = Focus::Preview;
                     self.set_status(format!("created '{title}'"));
                     // Drop straight into the inline editor — a fresh note
                     // (blank or templated) isn't useful to just sit on.
@@ -3027,6 +3097,10 @@ impl App {
             self.handle_slash_menu_key(key);
             return;
         }
+        if self.show_wikilink_menu {
+            self.handle_wikilink_menu_key(key);
+            return;
+        }
         match key.code {
             KeyCode::Char('s')
                 if self.editing_scratchpad && key.modifiers.contains(KeyModifiers::CONTROL) =>
@@ -3192,8 +3266,144 @@ impl App {
                         self.show_slash_menu = true;
                     }
                 }
+                // `[[` opens the wikilink menu the instant the second `[`
+                // completes the pair, anywhere in the line — unlike `/`,
+                // a wikilink is meaningful mid-sentence ("see [[Some
+                // Note]] for details"), not just at line start.
+                if key.code == KeyCode::Char('[') {
+                    let opens_wikilink = self.editor.as_ref().is_some_and(|e| {
+                        let (row, col) = crate::editor::cursor_tuple(&e.textarea);
+                        e.textarea
+                            .lines()
+                            .get(row)
+                            .is_some_and(|line| col >= 2 && line.chars().nth(col - 2) == Some('['))
+                    });
+                    if opens_wikilink {
+                        self.open_wikilink_menu();
+                    }
+                }
             }
         }
+    }
+    /// Snapshots the current notebook's notes (excluding the one being
+    /// edited — linking to yourself isn't useful) once, the moment `[[`
+    /// opens the menu — same "expensive walk once, cheap re-score per
+    /// keystroke" shape `open_global_search`/`refresh_global_search`
+    /// already established, just triggered by typing instead of an
+    /// explicit action.
+    fn open_wikilink_menu(&mut self) {
+        let current_path = self.selected_note().map(|n| n.path.clone());
+        let Some(nb) = self.selected_notebook() else {
+            return;
+        };
+        self.wikilink_candidates = nb
+            .all_notes_recursive()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|n| Some(&n.path) != current_path.as_ref())
+            .collect();
+        self.wikilink_menu_selected = 0;
+        self.show_wikilink_menu = true;
+        self.refresh_wikilink_menu();
+    }
+    /// The typed filter for the wikilink menu: everything between the
+    /// opening `[[` closest to (and before) the cursor and the cursor
+    /// itself, read live off the buffer — same reasoning as `slash_query`.
+    /// `None` (closing the menu) covers the query no longer being
+    /// findable (backspaced past the opening `[[`) or already containing
+    /// a `]` (the pair was closed by hand instead of via a selection).
+    pub(crate) fn wikilink_query(&self) -> Option<String> {
+        if !self.show_wikilink_menu {
+            return None;
+        }
+        let editor = self.editor.as_ref()?;
+        let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
+        let line = editor.textarea.lines().get(row)?;
+        let chars: Vec<char> = line.chars().collect();
+        let upto = &chars[..col.min(chars.len())];
+        let start = upto.windows(2).rposition(|w| w == ['[', '['])?;
+        let query: String = upto[start + 2..].iter().collect();
+        if query.contains(['[', ']']) {
+            return None;
+        }
+        Some(query)
+    }
+    /// Re-scores `wikilink_candidates` by title against the current query,
+    /// via the same shared `search_engine` global search/notebook-jump
+    /// already use — fuzzy, not a plain substring match, so `[[whr]]` can
+    /// still find "Weekend Hiking Trip" the way `/` (notebook jump) would.
+    fn refresh_wikilink_menu(&mut self) {
+        let query = self.wikilink_query().unwrap_or_default();
+        let mut hits = self.search_engine.search(&query, &self.wikilink_candidates);
+        hits.truncate(30);
+        self.wikilink_results = hits;
+    }
+    pub(crate) fn wikilink_menu_filtered(&self) -> Vec<&Note> {
+        self.wikilink_results
+            .iter()
+            .filter_map(|hit| self.wikilink_candidates.get(hit.index))
+            .collect()
+    }
+    fn handle_wikilink_menu_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.show_wikilink_menu = false,
+            KeyCode::Up => {
+                self.wikilink_menu_selected = self.wikilink_menu_selected.saturating_sub(1)
+            }
+            KeyCode::Down => {
+                let len = self.wikilink_results.len();
+                if self.wikilink_menu_selected + 1 < len {
+                    self.wikilink_menu_selected += 1;
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(title) = self
+                    .wikilink_menu_filtered()
+                    .get(self.wikilink_menu_selected)
+                    .map(|n| n.frontmatter.title.clone())
+                {
+                    self.show_wikilink_menu = false;
+                    self.apply_wikilink_selection(&title);
+                }
+            }
+            KeyCode::Char(_) | KeyCode::Backspace => {
+                if let Some(editor) = &mut self.editor {
+                    editor.textarea.input(key);
+                }
+                match self.wikilink_query() {
+                    Some(_) => {
+                        self.wikilink_menu_selected = 0;
+                        self.refresh_wikilink_menu();
+                    }
+                    None => self.show_wikilink_menu = false,
+                }
+            }
+            _ => {}
+        }
+    }
+    /// Replaces the typed `[[query` (the same range `wikilink_query` reads)
+    /// with a complete `[[Title]]`, cursor landing right after the closing
+    /// `]]` — same "delete the exact range that was being typed, then
+    /// insert the resolved text" shape as `apply_slash_command`.
+    fn apply_wikilink_selection(&mut self, title: &str) {
+        let Some(editor) = &mut self.editor else {
+            return;
+        };
+        let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
+        let Some(line) = editor.textarea.lines().get(row) else {
+            return;
+        };
+        let chars: Vec<char> = line.chars().collect();
+        let upto = &chars[..col.min(chars.len())];
+        let Some(start) = upto.windows(2).rposition(|w| w == ['[', '[']) else {
+            return;
+        };
+        editor.textarea.cancel_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, start as u16));
+        editor.textarea.delete_str(col - start);
+        editor.textarea.insert_str(format!("[[{title}]]"));
     }
     /// Ctrl+C (`config.editor.os_clipboard`): extracts the selected text
     /// *before* mutating anything (`copy()` may collapse/alter the
