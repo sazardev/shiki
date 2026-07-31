@@ -142,6 +142,13 @@ scoop install shiki
 > or, if you'd added it a while ago, Scoop's local copy of it is stale; run `scoop update` first,
 > then `scoop install shiki` again.
 
+**macOS ([Homebrew](https://brew.sh)):**
+
+```sh
+brew tap sazardev/shiki
+brew install shiki
+```
+
 **Prebuilt binary (Linux/Windows/macOS), no package manager:**
 
 Download the archive for your platform from the
@@ -168,8 +175,8 @@ sure that's on your `$PATH` — `cargo install` will tell you if it isn't). libg
 vendored and built from source (`git2`'s `vendored-libgit2`/`vendored-openssl` features), so
 there's no system libgit2/OpenSSL dependency to install separately on any platform.
 
-**Prerequisites (source/cargo install only — prebuilt binaries/AUR/Scoop don't need a Rust
-toolchain):**
+**Prerequisites (source/cargo install only — prebuilt binaries/AUR/Scoop/Homebrew don't need a
+Rust toolchain):**
 - A recent stable Rust toolchain (`rustup`).
 - `git` on `$PATH` — notebooks are git repos under the hood.
 - A [Nerd Font](https://www.nerdfonts.com) in your terminal — the UI uses Nerd Font icons
@@ -198,11 +205,11 @@ git pull
 cargo install --path shiki-cli --force
 ```
 
-If you installed via `yay`/`paru` or Scoop, prefer their own update command (`yay -Syu`/
-`scoop update shiki`) instead of leader+`U` — the package manager owns that file and needs to stay
-in sync with what's actually on disk. AUR installs in particular install to `/usr/bin`, which
-leader+`U` can't write to without root anyway, so it fails with a permission error there rather
-than silently doing something surprising.
+If you installed via `yay`/`paru`, Scoop, or Homebrew, prefer their own update command
+(`yay -Syu`/`scoop update shiki`/`brew upgrade shiki`) instead of leader+`U` — the package manager
+owns that file and needs to stay in sync with what's actually on disk. AUR installs in particular
+install to `/usr/bin`, which leader+`U` can't write to without root anyway, so it fails with a
+permission error there rather than silently doing something surprising.
 
 ## Verify
 

@@ -59,7 +59,7 @@ jobs:
             ext: tar.gz
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -97,7 +97,7 @@ jobs:
           7z a "shiki-${{ needs.resolve-tag.outputs.tag }}-${{ matrix.target }}.zip" \
             "shiki-${{ needs.resolve-tag.outputs.tag }}-${{ matrix.target }}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: shiki-${{ matrix.target }}
           path: dist/shiki-${{ needs.resolve-tag.outputs.tag }}-${{ matrix.target }}.${{ matrix.ext }}
@@ -126,7 +126,7 @@ jobs:
           sha256sum * > SHA256SUMS.txt
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           # Explicit, not left to default to `github.ref` — that's not a
           # tag ref at all when this runs via `workflow_dispatch` (it's
@@ -137,11 +137,11 @@ jobs:
           generate_release_notes: true
 
   update-packaging-manifests:
-    name: Update AUR/Scoop manifests from release checksums
+    name: Update AUR/Scoop/Homebrew manifests from release checksums
     needs: [release, resolve-tag]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
           # main requires a pull request for everything pushed with the
@@ -202,6 +202,49 @@ jobs:
                   f.write("\n")
           EOF
 
+      - name: Update Homebrew formula
+        run: |
+          set -euo pipefail
+          version="${{ needs.release.outputs.version }}"
+          arm_hash=$(grep 'aarch64-apple-darwin.tar.gz' SHA256SUMS.txt | awk '{print $1}')
+          intel_hash=$(grep 'x86_64-apple-darwin.tar.gz' SHA256SUMS.txt | awk '{print $1}')
+          # Rewritten line-by-line rather than JSON-style key edits (unlike
+          # the Scoop manifest above) since a Ruby formula has no structured
+          # format to parse — tracking which arch block we're in as we walk
+          # the file is simpler than a multiline regex, and doesn't care
+          # about incidental formatting changes to the file around it.
+          python3 - "$version" "$arm_hash" "$intel_hash" <<'EOF'
+          import sys
+          version, arm_hash, intel_hash = sys.argv[1], sys.argv[2], sys.argv[3]
+          path = "packaging/homebrew/shiki.rb"
+          with open(path) as f:
+              lines = f.readlines()
+          out = []
+          current_arch = None
+          for line in lines:
+              stripped = line.strip()
+              if stripped.startswith("version "):
+                  line = f'  version "{version}"\n'
+              elif "aarch64-apple-darwin.tar.gz" in line:
+                  current_arch = "arm"
+                  line = (
+                      f'      url "https://github.com/sazardev/shiki/releases/download/'
+                      f'v{version}/shiki-v{version}-aarch64-apple-darwin.tar.gz"\n'
+                  )
+              elif "x86_64-apple-darwin.tar.gz" in line:
+                  current_arch = "intel"
+                  line = (
+                      f'      url "https://github.com/sazardev/shiki/releases/download/'
+                      f'v{version}/shiki-v{version}-x86_64-apple-darwin.tar.gz"\n'
+                  )
+              elif stripped.startswith("sha256 "):
+                  hash_value = arm_hash if current_arch == "arm" else intel_hash
+                  line = f'      sha256 "{hash_value}"\n'
+              out.append(line)
+          with open(path, "w") as f:
+              f.writelines(out)
+          EOF
+
       - name: Update PKGBUILD (shiki-bin)
         run: |
           set -euo pipefail
@@ -247,7 +290,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add packaging/scoop/shiki.json bucket/shiki.json packaging/aur/PKGBUILD packaging/aur/.SRCINFO \
-                  packaging/aur-src/PKGBUILD packaging/aur-src/.SRCINFO
+                  packaging/aur-src/PKGBUILD packaging/aur-src/.SRCINFO packaging/homebrew/shiki.rb
           if git diff --cached --quiet; then
             echo "No packaging manifest changes to commit"
           elif [ -z "$HAS_PAT" ]; then
@@ -295,6 +338,36 @@ jobs:
             )
           done
 
+      - name: Push Homebrew tap
+        # No separate secret/guard needed here — the "Commit updated
+        # manifests" step above already fails the job (exit 1) if
+        # RELEASE_TAG_PAT isn't set, so reaching this step means it's
+        # already present. Uses the same PAT over HTTPS rather than a
+        # dedicated SSH deploy key, unlike the AUR push above, since
+        # sazardev/homebrew-shiki is a normal GitHub repo the PAT already
+        # has push access to — no separate credential to provision.
+        env:
+          RELEASE_TAG_PAT: ${{ secrets.RELEASE_TAG_PAT }}
+        run: |
+          set -euo pipefail
+          clone_dir="/tmp/homebrew-shiki"
+          rm -rf "$clone_dir"
+          git clone "https://x-access-token:${RELEASE_TAG_PAT}@github.com/sazardev/homebrew-shiki.git" "$clone_dir"
+          mkdir -p "$clone_dir/Formula"
+          cp packaging/homebrew/shiki.rb "$clone_dir/Formula/shiki.rb"
+          (
+            cd "$clone_dir"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add Formula/shiki.rb
+            if git diff --cached --quiet; then
+              echo "No Homebrew tap changes to push"
+            else
+              git commit -m "Update to ${{ needs.resolve-tag.outputs.tag }}"
+              git push origin HEAD:main
+            fi
+          )
+
   update-screenshots:
     name: Regenerate marketing screenshots and demo GIF for the docs site
     # Also needs update-packaging-manifests (not just release/resolve-tag)
@@ -308,7 +381,7 @@ jobs:
     needs: [release, resolve-tag, update-packaging-manifests]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
           token: ${{ secrets.RELEASE_TAG_PAT || github.token }}
@@ -412,7 +485,7 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
 

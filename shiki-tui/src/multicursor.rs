@@ -1,13 +1,13 @@
 //! Multi-cursor editing (`config.editor.multi_cursor`) — Alt+Click adds a
 //! cursor, Ctrl+D adds the next occurrence of the current word/selection.
 //!
-//! `tui-textarea` has no native multi-cursor concept at all: a `TextArea`
+//! `ratatui-textarea` has no native multi-cursor concept at all: a `TextArea`
 //! owns exactly one `cursor: (usize, usize)` and one optional selection
 //! anchor. Rather than reimplementing insert/delete/newline-splitting
 //! ourselves, this module drives the *same* single-cursor `TextArea`
 //! through every extra cursor position in turn — for one keystroke, jump
 //! its real cursor to a stored position, replay the key (reusing every bit
-//! of `tui-textarea`'s own editing logic verbatim), read the result back,
+//! of `ratatui-textarea`'s own editing logic verbatim), read the result back,
 //! and move on to the next position — then restores the shared cursor to
 //! wherever the primary ended up.
 //!
@@ -33,7 +33,7 @@
 //! multi-cursor editors use, just derived from `input`'s own before/after
 //! state instead of reimplementing insert/delete arithmetic by hand.
 
-use tui_textarea::{CursorMove, TextArea};
+use ratatui_textarea::{CursorMove, TextArea};
 
 /// One cursor's position plus its own optional selection anchor —
 /// `anchor.is_some()` means this cursor currently has an active selection
@@ -51,7 +51,7 @@ pub(crate) struct CursorState {
 /// original order, with each cursor's new position/selection. Returns how
 /// many of the cursors (primary included) actually mutated the buffer,
 /// i.e. how many real undo-history entries this one keystroke pushed —
-/// `tui_textarea::TextArea::input`'s own return value already means
+/// `ratatui_textarea::TextArea::input`'s own return value already means
 /// exactly this ("did this input modify the buffer"), so it's read
 /// straight off each per-cursor `input` call rather than inferred.
 pub(crate) fn replay_keystroke(
@@ -60,7 +60,7 @@ pub(crate) fn replay_keystroke(
     secondary: &mut Vec<CursorState>,
 ) -> usize {
     let primary = CursorState {
-        pos: textarea.cursor(),
+        pos: crate::editor::cursor_tuple(textarea),
         anchor: textarea.selection_range().map(|(start, _)| start),
     };
     // `None` tags the primary; `Some(i)` tags `secondary[i]` — original
@@ -102,7 +102,7 @@ pub(crate) fn replay_keystroke(
             edits += undo_history_depth(textarea, &snapshot);
         }
         let lines_after = textarea.lines().len();
-        let (post_row, post_col) = textarea.cursor();
+        let (post_row, post_col) = crate::editor::cursor_tuple(textarea);
 
         let this_row_delta = lines_after as isize - lines_before as isize;
         if this_row_delta != 0 {
@@ -143,7 +143,7 @@ pub(crate) fn replay_keystroke(
 /// deleted selection still missing), while Backspace over that same kind
 /// of selection is just "delete the selection" (1 entry, nothing to
 /// insert). Guessing a fixed count per key/selection combination would
-/// mean re-deriving `tui-textarea`'s own internal history-grouping rules
+/// mean re-deriving `ratatui-textarea`'s own internal history-grouping rules
 /// by hand for every key this module might ever replay; measuring it
 /// directly is correct regardless of which key or selection shape was
 /// involved. Capped at 10 rounds as a safety valve against looping forever

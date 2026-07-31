@@ -648,6 +648,7 @@ Content in **markdown**.
           <tr><td><code>mouse_drag_selection</code></td><td><code>true</code></td><td>A plain click on a note's body in PREVIEW jumps into edit mode with the cursor on that line; click-and-drag instead selects text and copies it to the clipboard as soon as you release the mouse button — the same clipboard mechanism the logs modal's <code>y</code>/<code>c</code> uses</td></tr>
           <tr><td><code>data_dir</code></td><td>unset (platform default)</td><td>Point the <em>entire</em> notebooks root somewhere else — an absolute path to an existing folder of markdown notes (an Obsidian vault, for instance) instead of <code>~/.local/share/shiki/</code>. Every notebook without its own <code>path</code> (below) lives as a subdirectory of this</td></tr>
           <tr><td><code>show_hints</code></td><td><code>true</code></td><td>Shows a small muted hint line under the input box for text prompts whose behavior isn't obvious from the title alone — currently just new-notebook, explaining that a git URL clones and a filesystem path adopts an existing directory</td></tr>
+          <tr><td><code>remember_last_session</code></td><td><code>true</code></td><td>Quitting saves exactly where you were — notebook, folder, selected note/folder, and which panel had focus — and the next launch restores it instead of always starting at the first notebook's root. A renamed/deleted notebook or moved note is ignored gracefully rather than erroring</td></tr>
         </tbody>
       </table>
       <div class="doc-callout">
@@ -852,6 +853,10 @@ mouse_drag_selection = true
 # When true, text-input prompts that have one (e.g. new notebook) show a
 # small hint line explaining non-obvious input, like pasting a git URL.
 show_hints = true
+# When true, quitting the TUI remembers exactly where you were — notebook,
+# folder, selected note/folder, and focused panel — and the next launch
+# restores it instead of always starting at the first notebook's root.
+remember_last_session = true
 
 [keybindings]
 leader = "space"

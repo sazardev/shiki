@@ -468,6 +468,13 @@ mouse_drag_selection = true
 # When true, text-input prompts that have one (e.g. new notebook) show a
 # small hint line explaining non-obvious input, like pasting a git URL.
 show_hints = true
+# When true, quitting the TUI remembers exactly where you were — which
+# notebook, which folder inside it, which note/folder was selected, and
+# which panel (NOTEBOOKS/NOTES/PREVIEW) had focus — and the next launch
+# restores it verbatim instead of always starting at the first notebook's
+# root. A renamed/deleted notebook or moved note is silently ignored rather
+# than erroring; the app just falls back to the default startup state.
+remember_last_session = true
 
 [keybindings]
 leader = "space"

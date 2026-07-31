@@ -4,6 +4,41 @@ All notable changes to shiki are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project doesn't follow strict
 semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
+## [Unreleased]
+
+## [0.8.9] - 2026-07-30
+
+### Added
+
+- `general.remember_last_session` (on by default): quitting the TUI now saves exactly where you
+  were — the selected notebook, the folder inside it, the selected note or folder, and which panel
+  (NOTEBOOKS/NOTES/PREVIEW) had focus — and the next launch restores it verbatim instead of always
+  starting at the first notebook's root. Toggleable from the GENERAL tab in Settings (leader+`s`)
+  or by hand-editing `config.toml`. A renamed/deleted notebook or a moved note is silently ignored
+  rather than erroring — the app just falls back to its normal default startup state.
+- Homebrew tap support: `brew tap sazardev/shiki && brew install shiki` installs a prebuilt binary
+  on macOS (Intel and Apple Silicon). `packaging/homebrew/shiki.rb` is regenerated from each
+  release's checksums and pushed to the `sazardev/homebrew-shiki` tap automatically on every
+  tagged release, the same automation shape `release.yml` already used for the AUR/Scoop
+  manifests. Documented on the marketing site and in `README.md`.
+
+### Changed
+
+- 5 dependencies bumped to their latest compatible versions: `comrak`, `toml`, `thiserror`,
+  `directories`, `base64` — no behavior change.
+
+### Security
+
+- `ratatui` bumped 0.29 → 0.30 and `tui-textarea` swapped for `ratatui-textarea` 0.9 (its
+  maintained successor under the ratatui org), closing the Dependabot alert on `lru`
+  (GHSA-rhfx-m35p-ff5j, an `IterMut` soundness issue) pulled in transitively via `ratatui` —
+  `tui-textarea` 0.7 never moved off the vulnerable `ratatui`/`lru` line, so the fix required
+  moving the whole editor widget, not just bumping a version number. `crossterm` bumped 0.28 →
+  0.29 alongside it to stay unified with what `ratatui` 0.30 itself pulls in. Fallout from both
+  bumps is fixed throughout: `TextArea::cursor()` now returns a `DataCursor` struct instead of a
+  plain tuple, `List::highlight_symbol` no longer accepts `&String`, and ratatui's `Backend` trait
+  gained an associated `Error` type.
+
 ## [0.8.8] - 2026-07-29
 
 ### Added

@@ -44,7 +44,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 .fg(hex_to_color(&app.theme.accent))
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol(&highlight_symbol);
+        .highlight_symbol(highlight_symbol.as_str());
 
     let mut state = ListState::default();
     if !app.notebooks.is_empty() {

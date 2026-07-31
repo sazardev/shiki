@@ -93,7 +93,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
                         .fg(hex_to_color(&app.theme.accent))
                         .add_modifier(Modifier::BOLD),
                 )
-                .highlight_symbol(&highlight_symbol);
+                .highlight_symbol(highlight_symbol.as_str());
             let mut state = ListState::default();
             if !quick_matches.is_empty() {
                 state.select(Some(app.quick_template_selected));
@@ -239,7 +239,7 @@ fn render_theme_picker(frame: &mut Frame, frame_area: Rect, app: &App) {
                 .fg(hex_to_color(&app.theme.accent))
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol(&highlight_symbol);
+        .highlight_symbol(highlight_symbol.as_str());
 
     let mut state = ListState::default();
     state.select(Some(app.theme_picker_index));
@@ -270,7 +270,7 @@ fn render_template_picker(frame: &mut Frame, frame_area: Rect, app: &App) {
                 .fg(hex_to_color(&app.theme.accent))
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol(&highlight_symbol);
+        .highlight_symbol(highlight_symbol.as_str());
 
     let mut state = ListState::default();
     state.select(Some(app.template_picker_index));
@@ -313,7 +313,7 @@ fn render_global_search(frame: &mut Frame, frame_area: Rect, app: &App) {
                 .fg(hex_to_color(&app.theme.accent))
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol(&highlight_symbol);
+        .highlight_symbol(highlight_symbol.as_str());
 
     let mut state = ListState::default();
     if !app.global_search_results.is_empty() {
@@ -391,7 +391,7 @@ fn render_logs(frame: &mut Frame, frame_area: Rect, app: &App) {
                 .fg(hex_to_color(&app.theme.accent))
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol(&highlight_symbol);
+        .highlight_symbol(highlight_symbol.as_str());
 
     let mut state = ListState::default();
     if !app.log_history.is_empty() {
@@ -442,7 +442,7 @@ fn render_tree(frame: &mut Frame, frame_area: Rect, app: &App) {
                 .fg(hex_to_color(&app.theme.accent))
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol(&highlight_symbol);
+        .highlight_symbol(highlight_symbol.as_str());
 
     let mut state = ListState::default();
     state.select(app.tree_selected_row());
@@ -500,7 +500,7 @@ fn render_links(frame: &mut Frame, frame_area: Rect, app: &App) {
                 .fg(hex_to_color(&app.theme.accent))
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol(&highlight_symbol);
+        .highlight_symbol(highlight_symbol.as_str());
 
     let mut state = ListState::default();
     state.select(crate::links_panel::selected_row(
@@ -560,7 +560,7 @@ fn render_history(frame: &mut Frame, frame_area: Rect, app: &App) {
                 .fg(hex_to_color(&app.theme.accent))
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol(&highlight_symbol);
+        .highlight_symbol(highlight_symbol.as_str());
 
     let mut state = ListState::default();
     if !app.history_entries.is_empty() {
@@ -619,7 +619,7 @@ fn render_slash_menu(
                 .fg(hex_to_color(&app.theme.accent))
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol(&highlight_symbol);
+        .highlight_symbol(highlight_symbol.as_str());
     let mut state = ListState::default();
     if !matches.is_empty() {
         state.select(Some(app.slash_menu_selected));

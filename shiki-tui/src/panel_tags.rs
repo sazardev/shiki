@@ -73,7 +73,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 .fg(tag_color)
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol(&highlight_symbol);
+        .highlight_symbol(highlight_symbol.as_str());
 
     let mut state = ListState::default();
     state.select(Some(selected));

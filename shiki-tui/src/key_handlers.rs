@@ -292,6 +292,15 @@ impl App {
             self.set_status(format!("show_hints -> {}", self.config.general.show_hints));
             return;
         }
+        if field == GeneralField::RememberLastSession {
+            self.config.general.remember_last_session = !self.config.general.remember_last_session;
+            self.save_config();
+            self.set_status(format!(
+                "remember_last_session -> {}",
+                self.config.general.remember_last_session
+            ));
+            return;
+        }
         let (label, prefill) = match field {
             GeneralField::DefaultNotebook => (
                 "default_notebook",
@@ -303,7 +312,8 @@ impl App {
             }
             GeneralField::UseFavoriteEditor
             | GeneralField::MouseDragSelection
-            | GeneralField::ShowHints => unreachable!(),
+            | GeneralField::ShowHints
+            | GeneralField::RememberLastSession => unreachable!(),
         };
         self.show_settings = false;
         self.pending_input_title = Some(format!(" {label} "));
@@ -620,6 +630,39 @@ impl App {
         if let Ok(path) = Config::default_path() {
             let _ = self.config.save(&path);
         }
+    }
+    /// Persists `general.remember_last_session`'s state — called once, right
+    /// after the main loop in `run()` exits, just before the process actually
+    /// quits. See `App::restore_session` for the read side, applied at
+    /// startup. A no-op when the setting is off, or when there's no selected
+    /// notebook at all (an empty store) — nothing meaningful to remember.
+    pub(crate) fn save_session(&self) {
+        if !self.config.general.remember_last_session {
+            return;
+        }
+        let Some(notebook) = self.selected_notebook() else {
+            return;
+        };
+        let Ok(path) = Config::default_session_path() else {
+            return;
+        };
+        let selected = if self.selected_note < self.folders.len() {
+            self.folders
+                .get(self.selected_note)
+                .map(|name| shiki_config::session::SelectedEntry::Folder { name: name.clone() })
+        } else {
+            self.selected_note()
+                .map(|note| shiki_config::session::SelectedEntry::Note {
+                    stem: note.file_stem(),
+                })
+        };
+        let session = shiki_config::SessionState {
+            notebook: notebook.name.clone(),
+            notes_path: self.notes_path.clone(),
+            selected,
+            focus: self.focus.as_session_str().to_string(),
+        };
+        let _ = session.save(&path);
     }
     /// Queues `config.toml` for external editing — same
     /// `want_external_edit` mechanism a note's `E`/favorite-editor `i` use,
@@ -1522,7 +1565,7 @@ impl App {
             let target = target_line.min(max_row) as u16;
             editor
                 .textarea
-                .move_cursor(tui_textarea::CursorMove::Jump(target, 0));
+                .move_cursor(ratatui_textarea::CursorMove::Jump(target, 0));
         }
     }
 
@@ -1540,7 +1583,7 @@ impl App {
         let Some(pos) = editor.position_at(preview, line_numbers, column, row) else {
             return;
         };
-        let primary = editor.textarea.cursor();
+        let primary = crate::editor::cursor_tuple(&editor.textarea);
         crate::multicursor::add_cursor_at(&mut self.editor_secondary_cursors, primary, pos);
     }
     /// `config.editor.mouse_selection`'s click handling: single click
@@ -1583,28 +1626,36 @@ impl App {
                 editor.textarea.cancel_selection();
                 editor
                     .textarea
-                    .move_cursor(tui_textarea::CursorMove::Jump(doc_row as u16, start as u16));
+                    .move_cursor(ratatui_textarea::CursorMove::Jump(
+                        doc_row as u16,
+                        start as u16,
+                    ));
                 editor.textarea.start_selection();
                 editor
                     .textarea
-                    .move_cursor(tui_textarea::CursorMove::Jump(doc_row as u16, end as u16));
+                    .move_cursor(ratatui_textarea::CursorMove::Jump(
+                        doc_row as u16,
+                        end as u16,
+                    ));
             }
             3 => {
                 editor.textarea.cancel_selection();
                 editor
                     .textarea
-                    .move_cursor(tui_textarea::CursorMove::Jump(doc_row as u16, 0));
+                    .move_cursor(ratatui_textarea::CursorMove::Jump(doc_row as u16, 0));
                 editor.textarea.start_selection();
                 editor
                     .textarea
-                    .move_cursor(tui_textarea::CursorMove::Jump(doc_row as u16, u16::MAX));
+                    .move_cursor(ratatui_textarea::CursorMove::Jump(doc_row as u16, u16::MAX));
             }
             _ => {
                 editor.textarea.cancel_selection();
-                editor.textarea.move_cursor(tui_textarea::CursorMove::Jump(
-                    doc_row as u16,
-                    doc_col as u16,
-                ));
+                editor
+                    .textarea
+                    .move_cursor(ratatui_textarea::CursorMove::Jump(
+                        doc_row as u16,
+                        doc_col as u16,
+                    ));
             }
         }
         self.editor_drag_active = self.editor_click_count > 1;
@@ -1613,7 +1664,7 @@ impl App {
     /// the editor's own inner area (no auto-scroll in v1, same reasoning
     /// and convention as PREVIEW's own `on_mouse_drag` above). The first
     /// drag event after a plain single click anchors the selection there
-    /// (`tui_textarea::TextArea::move_cursor` auto-extends from an anchor
+    /// (`ratatui_textarea::TextArea::move_cursor` auto-extends from an anchor
     /// set by `start_selection`, so no separate anchor bookkeeping is
     /// needed in shiki itself); a drag following a double/triple click
     /// skips re-anchoring since one already exists (see `editor_drag_active`'s
@@ -1643,10 +1694,12 @@ impl App {
             editor.textarea.start_selection();
             self.editor_drag_active = true;
         }
-        editor.textarea.move_cursor(tui_textarea::CursorMove::Jump(
-            doc_row as u16,
-            doc_col as u16,
-        ));
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(
+                doc_row as u16,
+                doc_col as u16,
+            ));
     }
     /// Guards `on_mouse_down`'s preview-selection branch — which now covers
     /// two gestures a released `PreviewSelection` can resolve to (see its
@@ -2562,6 +2615,7 @@ impl App {
                         GeneralField::UseFavoriteEditor => "use_favorite_editor",
                         GeneralField::MouseDragSelection => "mouse_drag_selection",
                         GeneralField::ShowHints => "show_hints",
+                        GeneralField::RememberLastSession => "remember_last_session",
                     };
                     self.save_config();
                     self.set_status(format!("{label} -> '{value}'"));
@@ -3020,7 +3074,7 @@ impl App {
             {
                 self.editor_paste_os();
             }
-            // Off by default: tui-textarea's own Ctrl+A is Emacs-style
+            // Off by default: ratatui-textarea's own Ctrl+A is Emacs-style
             // "move to start of line," existing muscle memory this
             // shouldn't change unless explicitly opted into. Also
             // collapses any secondary cursors first — "select everything,
@@ -3034,7 +3088,7 @@ impl App {
                     editor.textarea.select_all();
                 }
             }
-            // Off by default, and collides with tui-textarea's own Emacs
+            // Off by default, and collides with ratatui-textarea's own Emacs
             // Ctrl+D ("delete next character") the moment it's turned on —
             // an accepted tradeoff, same category as `select_all_ctrl_a`'s
             // own collision with Emacs Ctrl+A, since multi-cursor is opt-in.
@@ -3069,11 +3123,11 @@ impl App {
             }
             // Always replaces the generic forward for these two — see
             // `editor_scroll_cursor`'s own doc comment for why forwarding
-            // them to `tui-textarea` does nothing in this editor.
+            // them to `ratatui-textarea` does nothing in this editor.
             KeyCode::PageDown => self.editor_scroll_cursor(PAGE_STEP),
             KeyCode::PageUp => self.editor_scroll_cursor(-PAGE_STEP),
             // Plain Home/End already work via the generic forward
-            // (`tui-textarea`'s own `CursorMove::Head`/`End` — start/end of
+            // (`ratatui-textarea`'s own `CursorMove::Head`/`End` — start/end of
             // the *current* line, no viewport dependency). Ctrl+Home/
             // Ctrl+End add the jump-to-document-start/end that plain
             // Home/End don't cover, the common convention this was missing.
@@ -3082,7 +3136,7 @@ impl App {
                     editor.textarea.cancel_selection();
                     editor
                         .textarea
-                        .move_cursor(tui_textarea::CursorMove::Jump(0, 0));
+                        .move_cursor(ratatui_textarea::CursorMove::Jump(0, 0));
                 }
             }
             KeyCode::End if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -3090,10 +3144,12 @@ impl App {
                     let last_row = editor.textarea.lines().len().saturating_sub(1);
                     let last_col = editor.textarea.lines()[last_row].chars().count();
                     editor.textarea.cancel_selection();
-                    editor.textarea.move_cursor(tui_textarea::CursorMove::Jump(
-                        last_row as u16,
-                        last_col as u16,
-                    ));
+                    editor
+                        .textarea
+                        .move_cursor(ratatui_textarea::CursorMove::Jump(
+                            last_row as u16,
+                            last_col as u16,
+                        ));
                 }
             }
             _ => {
@@ -3179,7 +3235,7 @@ impl App {
         }
     }
     /// Ctrl+V — tries the real OS clipboard first; if arboard can't reach
-    /// one (no display server), falls through to `tui-textarea`'s own
+    /// one (no display server), falls through to `ratatui-textarea`'s own
     /// internal yank register (`paste()`), exactly what Ctrl+V already did
     /// before `os_clipboard` existed, so nothing regresses in that case.
     fn editor_paste_os(&mut self) {
@@ -3240,9 +3296,9 @@ impl App {
     /// buffer), preserving column as closely as the target row allows —
     /// drives both `PageUp`/`PageDown` (`delta = ±PAGE_STEP`) and mouse
     /// wheel scrolling. This exists because forwarding `PageUp`/`PageDown`
-    /// to `tui-textarea` (as the generic catch-all does for every other
+    /// to `ratatui-textarea` (as the generic catch-all does for every other
     /// key) does nothing at all in this editor: verified live.
-    /// `tui-textarea`'s own `Scrolling::PageUp/PageDown` scrolls its
+    /// `ratatui-textarea`'s own `Scrolling::PageUp/PageDown` scrolls its
     /// *internal* `Viewport`, which is only ever populated by its own
     /// `Widget` impl — and `InlineEditor::render` deliberately bypasses
     /// that entirely (see the struct doc comment), so the viewport
@@ -3256,7 +3312,7 @@ impl App {
         let Some(editor) = &mut self.editor else {
             return;
         };
-        let (row, col) = editor.textarea.cursor();
+        let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
         let last_row = editor.textarea.lines().len().saturating_sub(1);
         let new_row = (row as isize + delta).clamp(0, last_row as isize) as usize;
         if new_row == row {
@@ -3264,10 +3320,12 @@ impl App {
         }
         let new_col = col.min(editor.textarea.lines()[new_row].chars().count());
         editor.textarea.cancel_selection();
-        editor.textarea.move_cursor(tui_textarea::CursorMove::Jump(
-            new_row as u16,
-            new_col as u16,
-        ));
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(
+                new_row as u16,
+                new_col as u16,
+            ));
     }
     /// Ctrl+Alt+Up/Down (`config.editor.multi_cursor`): adds a cursor one
     /// row above (`dir < 0`) or below (`dir > 0`) whichever existing
@@ -3281,7 +3339,7 @@ impl App {
         let Some(editor) = &self.editor else {
             return;
         };
-        let primary = editor.textarea.cursor();
+        let primary = crate::editor::cursor_tuple(&editor.textarea);
         let reference = self
             .editor_secondary_cursors
             .iter()
@@ -3323,7 +3381,7 @@ impl App {
             return;
         };
         if editor.textarea.selection_range().is_none() {
-            let (row, col) = editor.textarea.cursor();
+            let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
             let chars: Vec<char> = editor.textarea.lines()[row].chars().collect();
             let (start, end) = crate::editor::word_range(&chars, col);
             if start == end {
@@ -3331,11 +3389,11 @@ impl App {
             }
             editor
                 .textarea
-                .move_cursor(tui_textarea::CursorMove::Jump(row as u16, start as u16));
+                .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, start as u16));
             editor.textarea.start_selection();
             editor
                 .textarea
-                .move_cursor(tui_textarea::CursorMove::Jump(row as u16, end as u16));
+                .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, end as u16));
             return;
         }
         let (start, end) = editor.textarea.selection_range().unwrap();
@@ -3379,7 +3437,7 @@ impl App {
             .selection_range()
             .map(|(start, end)| crate::editor::selection_text(editor.textarea.lines(), start, end))
             .unwrap_or_default();
-        let anchor = editor.textarea.cursor();
+        let anchor = crate::editor::cursor_tuple(&editor.textarea);
         self.editor_find = Some(EditorFindState {
             query: InputBox { value: seed },
             replace: InputBox::default(),
@@ -3469,11 +3527,11 @@ impl App {
             editor.textarea.cancel_selection();
             editor
                 .textarea
-                .move_cursor(tui_textarea::CursorMove::Jump(row as u16, start as u16));
+                .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, start as u16));
             editor.textarea.start_selection();
             editor
                 .textarea
-                .move_cursor(tui_textarea::CursorMove::Jump(row as u16, end as u16));
+                .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, end as u16));
         }
     }
     /// Ctrl+Enter: replaces the currently-selected match (if the selection
@@ -3540,14 +3598,14 @@ impl App {
             editor.textarea.cancel_selection();
             editor
                 .textarea
-                .move_cursor(tui_textarea::CursorMove::Jump(row as u16, start as u16));
+                .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, start as u16));
             editor.textarea.start_selection();
             editor
                 .textarea
-                .move_cursor(tui_textarea::CursorMove::Jump(row as u16, end as u16));
+                .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, end as u16));
             group += usize::from(editor.textarea.cut());
             group += usize::from(editor.textarea.insert_str(&replacement));
-            search_from = editor.textarea.cursor();
+            search_from = crate::editor::cursor_tuple(&editor.textarea);
             count += 1;
         }
         editor.textarea.cancel_selection();
@@ -3571,7 +3629,7 @@ impl App {
             return None;
         }
         let editor = self.editor.as_ref()?;
-        let (row, col) = editor.textarea.cursor();
+        let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
         if col == 0 {
             return None;
         }
@@ -3660,7 +3718,7 @@ impl App {
         let Some(editor) = &mut self.editor else {
             return;
         };
-        let (insert_row, _) = editor.textarea.cursor();
+        let (insert_row, _) = crate::editor::cursor_tuple(&editor.textarea);
         editor.textarea.delete_line_by_head();
         match &cursor_marker {
             Some(after) => editor.textarea.insert_str(format!("{before}{after}")),
@@ -3669,10 +3727,12 @@ impl App {
         if cursor_marker.is_some() {
             let target_row = insert_row + before.matches('\n').count();
             let target_col = before.rsplit('\n').next().unwrap_or("").chars().count();
-            editor.textarea.move_cursor(tui_textarea::CursorMove::Jump(
-                target_row as u16,
-                target_col as u16,
-            ));
+            editor
+                .textarea
+                .move_cursor(ratatui_textarea::CursorMove::Jump(
+                    target_row as u16,
+                    target_col as u16,
+                ));
         }
     }
     fn handle_normal_key(&mut self, key: KeyEvent) {

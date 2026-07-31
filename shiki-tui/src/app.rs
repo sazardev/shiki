@@ -69,6 +69,27 @@ impl Focus {
             Focus::Preview => Focus::Notes,
         }
     }
+
+    /// For `general.remember_last_session` — `shiki_config::SessionState`
+    /// doesn't know about this enum at all (shiki-config sits below
+    /// shiki-tui in the dependency chain), so it's persisted as a plain
+    /// lowercase string and translated on both ends here instead.
+    pub(crate) fn as_session_str(self) -> &'static str {
+        match self {
+            Focus::Notebooks => "notebooks",
+            Focus::Notes => "notes",
+            Focus::Preview => "preview",
+        }
+    }
+
+    pub(crate) fn from_session_str(s: &str) -> Option<Self> {
+        match s {
+            "notebooks" => Some(Focus::Notebooks),
+            "notes" => Some(Focus::Notes),
+            "preview" => Some(Focus::Preview),
+            _ => None,
+        }
+    }
 }
 
 /// How the NOTES list is ordered; cycled by `Action::SortNotes`.
@@ -401,7 +422,7 @@ pub struct App {
     /// How many consecutive clicks landed on the same cell within the
     /// double/triple-click window — capped at 3 (single/word/line).
     pub(crate) editor_click_count: u8,
-    /// Whether `tui_textarea::TextArea::start_selection` has already been
+    /// Whether `ratatui_textarea::TextArea::start_selection` has already been
     /// called for the drag gesture currently in progress — a single-click
     /// `Down` doesn't start a selection by itself (it might just be a plain
     /// click-to-position), so the *first* `Drag` event after it is what
@@ -818,7 +839,7 @@ impl App {
             .position(|t| t.name == theme.name)
             .unwrap_or(0);
 
-        Ok(Self {
+        let mut app = Self {
             config,
             theme,
             store,
@@ -931,7 +952,58 @@ impl App {
             sync_in_flight: None,
             sync_rx: None,
             spinner_frame: 0,
-        })
+        };
+
+        if app.config.general.remember_last_session {
+            if let Some(session) = Config::default_session_path()
+                .ok()
+                .and_then(|path| shiki_config::SessionState::load(&path))
+            {
+                app.restore_session(session);
+            }
+        }
+
+        Ok(app)
+    }
+
+    /// Applies a previously saved `SessionState` (`general.remember_last_session`)
+    /// on top of the just-constructed default state (first notebook, root
+    /// folder, `Focus::Notebooks`) — called once from `new`, right after
+    /// construction, since restoring is really a post-construction mutation
+    /// (select a different notebook, descend into a folder, re-select an
+    /// entry) rather than something `new` can compute up front. Anything that
+    /// no longer resolves (a renamed/deleted notebook, a moved note, an
+    /// unrecognized focus string) is silently left at that default instead
+    /// of erroring — a stale session file should degrade gracefully, never
+    /// block startup.
+    fn restore_session(&mut self, session: shiki_config::SessionState) {
+        let Some(idx) = self
+            .notebooks
+            .iter()
+            .position(|nb| nb.name == session.notebook)
+        else {
+            return;
+        };
+        self.selected_notebook = idx;
+        self.notes_path = session.notes_path;
+        self.reload_notes();
+
+        self.selected_note = match session.selected {
+            Some(shiki_config::session::SelectedEntry::Folder { name }) => {
+                self.folders.iter().position(|f| *f == name).unwrap_or(0)
+            }
+            Some(shiki_config::session::SelectedEntry::Note { stem }) => self
+                .notes
+                .iter()
+                .position(|n| n.file_stem() == stem)
+                .map(|i| self.folders.len() + i)
+                .unwrap_or(0),
+            None => 0,
+        };
+
+        if let Some(focus) = Focus::from_session_str(&session.focus) {
+            self.focus = focus;
+        }
     }
 
     /// Sets the status-bar message and records it in `log_history`, so an
@@ -1854,7 +1926,10 @@ pub fn global_search_layout(popup_area: Rect) -> (Rect, Rect) {
     (chunks[0], chunks[1])
 }
 
-pub fn run<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<()> {
+pub fn run<B: Backend<Error = io::Error>>(
+    terminal: &mut Terminal<B>,
+    app: &mut App,
+) -> io::Result<()> {
     while !app.should_quit {
         if let Ok(size) = terminal.size() {
             app.last_frame_area = Rect::new(0, 0, size.width, size.height);
@@ -1910,6 +1985,7 @@ pub fn run<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
             }
         }
     }
+    app.save_session();
     Ok(())
 }
 
@@ -1932,7 +2008,7 @@ fn relaunch_into_updated_binary(exe_path: &std::path::Path) -> io::Result<()> {
 
 /// Leaves the alternate screen and disables raw mode so `$EDITOR` gets a
 /// normal terminal, then restores everything and forces a full redraw.
-fn suspend_and_edit<B: Backend>(
+fn suspend_and_edit<B: Backend<Error = io::Error>>(
     terminal: &mut Terminal<B>,
     editor: &str,
     path: &std::path::Path,

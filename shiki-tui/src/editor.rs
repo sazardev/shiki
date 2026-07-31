@@ -5,31 +5,43 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
-use tui_textarea::TextArea;
+use ratatui_textarea::TextArea;
 
 /// One source line's `wrap_line` break points — `(start, end)` char-index
 /// ranges, one per visual (post-wrap) segment. A plain type alias purely to
 /// keep signatures like `char_rows_and_wraps`'s readable.
 type WrapRanges = Vec<(usize, usize)>;
 
-/// Thin wrapper over `tui-textarea` for the inline editor (key `e`/`i`).
+/// `TextArea::cursor` returns a `DataCursor` struct as of `ratatui-textarea` 0.9 (it used to
+/// be a plain tuple in `tui-textarea` 0.7) — converts back to the `(row, col)` shape every
+/// call site in this codebase already assumes.
+pub(crate) fn cursor_tuple(ta: &TextArea) -> (usize, usize) {
+    let ratatui_textarea::DataCursor(row, col) = ta.cursor();
+    (row, col)
+}
+
+/// Thin wrapper over `ratatui-textarea` for the inline editor (key `e`/`i`).
 ///
-/// `tui-textarea` 0.7 has no soft line-wrap at all — confirmed against its
-/// own `Widget for &TextArea` impl (`widget.rs` in the vendored crate
-/// source): it always renders exactly one screen row per *source* line and
-/// horizontally scrolls to keep the cursor visible instead
-/// (`scroll_top_col`/`next_scroll_top`), with no `set_wrap`-style toggle
-/// anywhere in its public API, at any published version. That's fine for
-/// the read-only PREVIEW panel, which builds its own plain `Paragraph` and
-/// turns on `Wrap { trim: false }` itself (`panel_preview.rs`) — but it
+/// This crate was `tui-textarea` 0.7 until the fix for
+/// [GHSA-rhfx-m35p-ff5j](https://github.com/advisories/GHSA-rhfx-m35p-ff5j) (an `lru`
+/// soundness issue pulled in transitively via `ratatui`) forced a bump to `ratatui` 0.30,
+/// which `tui-textarea` 0.7 doesn't support — `ratatui-textarea` 0.9 is its
+/// maintained-under-the-ratatui-org successor and the only version that does. At the time
+/// this module's manual render path was written, that predecessor crate had no soft
+/// line-wrap at all — confirmed against its own `Widget for &TextArea` impl: it always
+/// rendered exactly one screen row per *source* line and horizontally scrolled to keep the
+/// cursor visible instead, with no `set_wrap`-style toggle anywhere in its public API.
+/// `ratatui-textarea` 0.9 does have one now (`WrapMode`), but this module still doesn't use
+/// it — switching to it would be a real behavior change (its wrap semantics haven't been
+/// verified against `wrap_line`'s own word/grapheme-wrap rules), not something to fold into
+/// a dependency-swap. That's fine for the read-only PREVIEW panel, which builds its own
+/// plain `Paragraph` and turns on `Wrap { trim: false }` itself (`panel_preview.rs`) — but it
 /// meant a long line typed directly into the editor just ran off the edge
 /// of the panel instead of wrapping, only becoming visible again once you
 /// left edit mode and PREVIEW re-rendered the same text wrapped.
 ///
-/// Rather than forking/patching `tui-textarea` (its `Widget` impl is the
-/// only place that would need the change, and it's not a project with
-/// fast-merging PRs to depend on for that), `render` bypasses its `Widget`
-/// impl entirely and draws the buffer itself — `TextArea` still owns every
+/// Rather than adopting the upstream `WrapMode` (see above) or patching it further, `render`
+/// bypasses its `Widget` impl entirely and draws the buffer itself — `TextArea` still owns every
 /// bit of actual editing (insert/delete/undo/cursor movement/selection all
 /// keep going through `editor.textarea.input(key)` unchanged in
 /// `key_handlers.rs`), it's just not used to *paint* itself anymore.
@@ -40,11 +52,11 @@ type WrapRanges = Vec<(usize, usize)>;
 pub struct InlineEditor<'a> {
     pub textarea: TextArea<'a>,
     /// Topmost visible *visual* (post-wrap) line, auto-following the
-    /// cursor on every render — replaces `tui-textarea`'s own private
+    /// cursor on every render — replaces `ratatui-textarea`'s own private
     /// `Viewport` scroll tracking (which only ever handled horizontal
     /// scroll, and is bypassed along with the rest of its rendering). A
     /// `Cell`, not a plain field, because `render` only borrows `&self` —
-    /// the same reason `tui-textarea` itself stores its `Viewport` in an
+    /// the same reason `ratatui-textarea` itself stores its `Viewport` in an
     /// `AtomicU64` rather than a plain field: rendering can't take `&mut`.
     scroll_top: Cell<u16>,
     /// The cursor's screen row on the *last* render, relative to the
@@ -78,7 +90,7 @@ impl<'a> InlineEditor<'a> {
         self.cursor_screen_row.get()
     }
 
-    /// `area` minus whatever block/border `tui-textarea` has configured —
+    /// `area` minus whatever block/border `ratatui-textarea` has configured —
     /// the one place this match lives, reused by `render`, `position_at`,
     /// and `draw.rs`'s slash-menu anchoring (which used to duplicate this
     /// same match independently).
@@ -104,7 +116,7 @@ impl<'a> InlineEditor<'a> {
     /// points, at `width` columns — the one place both `render` and
     /// `position_at` derive this, so a hit-test can never disagree with
     /// what was actually painted (see the struct doc comment's own
-    /// reasoning for why `render` bypasses `tui-textarea`'s `Widget` impl
+    /// reasoning for why `render` bypasses `ratatui-textarea`'s `Widget` impl
     /// in the first place).
     fn char_rows_and_wraps(&self, width: usize) -> (Vec<Vec<char>>, Vec<WrapRanges>) {
         let char_rows: Vec<Vec<char>> = self
@@ -167,7 +179,7 @@ impl<'a> InlineEditor<'a> {
     }
 
     /// Renders the buffer word-wrapped to `area`'s width, instead of
-    /// `tui-textarea`'s own unwrapped-with-horizontal-scroll rendering —
+    /// `ratatui-textarea`'s own unwrapped-with-horizontal-scroll rendering —
     /// see the struct doc comment for why this exists at all.
     pub(crate) fn render(
         &self,
@@ -191,7 +203,7 @@ impl<'a> InlineEditor<'a> {
             .max(1);
         let height = inner.height as usize;
 
-        // Bypassing `tui-textarea`'s own `Widget` impl (see the struct doc
+        // Bypassing `ratatui-textarea`'s own `Widget` impl (see the struct doc
         // comment) means its placeholder-when-empty behavior needs its own
         // reimplementation too — same trigger condition as its `widget.rs`
         // (`!placeholder.is_empty() && self.is_empty()`), reusing
@@ -219,7 +231,7 @@ impl<'a> InlineEditor<'a> {
 
         let (char_rows, wraps) = self.char_rows_and_wraps(width);
 
-        let (cursor_row, cursor_col) = self.textarea.cursor();
+        let (cursor_row, cursor_col) = cursor_tuple(&self.textarea);
         let (cursor_local_row, _) = locate_in_wrap(&wraps[cursor_row], cursor_col);
         let visual_offset_of: usize = wraps[..cursor_row].iter().map(Vec::len).sum();
         let cursor_visual_row = visual_offset_of + cursor_local_row;
@@ -241,7 +253,7 @@ impl<'a> InlineEditor<'a> {
             base: self.textarea.style(),
             cursor: self.textarea.cursor_style(),
             cursor_line: self.textarea.cursor_line_style(),
-            // `tui-textarea` only exposes `selection_style` via a getter
+            // `ratatui-textarea` only exposes `selection_style` via a getter
             // that oddly takes `&mut self` (a quirk of its 0.7.0 API) and
             // shiki never calls `set_selection_style`, so this is the same
             // value `TextArea::default()` already uses internally.
@@ -294,7 +306,7 @@ struct RowStyles {
     cursor_line: Style,
     select: Style,
     /// A solid, theme-accent-colored block — deliberately *not* the same
-    /// style as `cursor` (a bare `Modifier::REVERSED`, tui-textarea's
+    /// style as `cursor` (a bare `Modifier::REVERSED`, ratatui-textarea's
     /// default). A terminal can only ever blink *one* real caret, so
     /// secondary cursors can't blink like the primary does regardless of
     /// styling — but reusing the exact same subtle reverse-video look for
@@ -365,10 +377,10 @@ impl SegmentCtx<'_> {
 
 /// Builds one visual (already-wrapped) screen line's spans — plain runs
 /// get `cursor_line` style when `ctx.row` is the cursor's row (mirroring
-/// `tui-textarea`'s own current-line underline), individual selected
+/// `ratatui-textarea`'s own current-line underline), individual selected
 /// characters get `select`, and the cursor's own cell gets `cursor`
 /// (a styled space past the last character when the cursor sits at the
-/// end of the line, same fallback `tui-textarea`'s `LineHighlighter` uses).
+/// end of the line, same fallback `ratatui-textarea`'s `LineHighlighter` uses).
 fn build_segment_line(
     chars: &[char],
     (start, end): (usize, usize),
@@ -493,7 +505,7 @@ fn locate_in_wrap(ranges: &[(usize, usize)], col: usize) -> (usize, usize) {
 /// word-characters (alphanumeric/`_`) is a different "word" than an
 /// adjacent run of punctuation — `"foo.bar"` double-clicked on `foo` should
 /// select just `foo`, not the whole dotted path. Mirrors the idea of
-/// `tui-textarea`'s own internal (non-`pub`, unreachable from shiki)
+/// `ratatui-textarea`'s own internal (non-`pub`, unreachable from shiki)
 /// `word.rs` classifier, reimplemented here since it can't be imported.
 #[derive(PartialEq, Eq)]
 enum CharKind {

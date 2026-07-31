@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.8.8"
+version = "0.8.9"
 edition = "2021"
 authors = ["Omar"]
 license = "MIT"
@@ -22,16 +22,16 @@ shiki-core = { path = "shiki-core", version = "0.8.2" }
 shiki-config = { path = "shiki-config", version = "0.8.2" }
 shiki-tui = { path = "shiki-tui", version = "0.8.2" }
 
-ratatui = "0.29"
-crossterm = "0.28"
+ratatui = "0.30"
+crossterm = "0.29"
 tokio = { version = "1", features = ["full"] }
 git2 = { version = "0.21", features = ["ssh", "https", "vendored-libgit2", "vendored-openssl"] }
-comrak = "0.29"
+comrak = "0.54"
 syntect = "5"
-tui-textarea = "0.7"
+ratatui-textarea = "0.9"
 nucleo-matcher = "0.3"
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
+toml = "1.1"
 clap = { version = "4", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 notify = "6"
@@ -41,10 +41,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 regex = "1"
 pulldown-cmark = "0.12"
 anyhow = "1"
-thiserror = "1"
-directories = "5"
+thiserror = "2"
+directories = "6"
 uuid = { version = "1", features = ["v4"] }
-base64 = "0.22"
+base64 = "0.23"
 unicode-width = "0.2"
 self_update = { version = "1.0.0-rc.6", default-features = false, features = [
     "reqwest",

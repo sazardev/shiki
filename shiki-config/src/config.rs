@@ -58,6 +58,14 @@ pub struct General {
     /// initial fields.
     #[serde(default = "default_true")]
     pub show_hints: bool,
+    /// When true, quitting the TUI saves exactly where you were (notebook,
+    /// folder, selected note/folder, and which panel had focus) and the next
+    /// launch restores it verbatim instead of always starting at the first
+    /// notebook's root. Defaults to `true`, so this needs the named-default-fn
+    /// form rather than bare `#[serde(default)]`, which would resolve a
+    /// missing key to `false`. See `shiki_config::SessionState`.
+    #[serde(default = "default_true")]
+    pub remember_last_session: bool,
 }
 
 impl Default for General {
@@ -70,6 +78,7 @@ impl Default for General {
             mouse_drag_selection: true,
             data_dir: None,
             show_hints: true,
+            remember_last_session: true,
         }
     }
 }
@@ -995,6 +1004,18 @@ impl Config {
             .join("trash"))
     }
 
+    /// Where `general.remember_last_session`'s state (`SessionState`) is
+    /// persisted — the config dir, for the exact same collision reason as
+    /// `default_log_path`/`default_trash_dir`: the data dir's top level is
+    /// user-named notebooks, so a fixed filename placed there could collide
+    /// with one.
+    pub fn default_session_path() -> Result<PathBuf> {
+        Ok(Self::default_path()?
+            .parent()
+            .expect("config path always has a parent")
+            .join("session.toml"))
+    }
+
     /// Loads the config from `path`, or creates and saves a default config if it doesn't exist.
     pub fn load_or_init(path: &Path) -> Result<Self> {
         if path.exists() {
@@ -1084,7 +1105,10 @@ fn section_comment(line: &str) -> Option<&'static str> {
 #   at an existing Obsidian vault or any markdown folder to use it as the
 #   notebooks root. Unset defaults to the platform data directory.
 # - show_hints: when true, text-input prompts that have one (e.g. new
-#   notebook) show a small hint line explaining non-obvious input."
+#   notebook) show a small hint line explaining non-obvious input.
+# - remember_last_session: when true, quitting saves exactly where you were
+#   (notebook, folder, selected note/folder, focused panel) and the next
+#   launch restores it instead of starting at the first notebook's root."
         }
         "[keybindings]" => {
             "\
