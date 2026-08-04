@@ -82,6 +82,35 @@ fn macos_default_editor() -> Option<String> {
     Some("open -W -t".to_string())
 }
 
+/// Splits an editor command string into tokens, honoring `"..."`/`'...'`
+/// quoting around a single token — needed for a program path that itself
+/// contains a space (common on Windows, e.g. `"C:\Program Files\Editor\
+/// editor.exe" --wait`), which a plain `split_whitespace` would otherwise
+/// tear into bogus argv pieces. Deliberately minimal: no escape sequences,
+/// no nested quotes — just enough to keep one quoted path together.
+fn split_command(input: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes: Option<char> = None;
+    for c in input.chars() {
+        match in_quotes {
+            Some(q) if c == q => in_quotes = None,
+            Some(_) => current.push(c),
+            None if c == '"' || c == '\'' => in_quotes = Some(c),
+            None if c.is_whitespace() => {
+                if !current.is_empty() {
+                    tokens.push(std::mem::take(&mut current));
+                }
+            }
+            None => current.push(c),
+        }
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    tokens
+}
+
 /// Splits an editor command string (e.g. `"code --wait"` or `"open -W -t"`)
 /// into a program + base args, then builds a ready-to-run `Command` with
 /// `path` appended as the final argument. Editor strings are single words
@@ -89,10 +118,51 @@ fn macos_default_editor() -> Option<String> {
 /// user configs produce multi-word commands, so callers should always go
 /// through this instead of `Command::new(editor)` directly.
 pub fn command_for(editor: &str, path: &std::path::Path) -> std::process::Command {
-    let mut parts = editor.split_whitespace();
-    let program = parts.next().unwrap_or(editor);
+    let mut parts = split_command(editor);
+    if parts.is_empty() {
+        parts.push(editor.to_string());
+    }
+    let program = parts.remove(0);
     let mut command = std::process::Command::new(program);
     command.args(parts);
     command.arg(path);
     command
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_command_splits_plain_whitespace() {
+        assert_eq!(split_command("code --wait"), vec!["code", "--wait"]);
+    }
+
+    #[test]
+    fn split_command_keeps_a_quoted_path_with_spaces_together() {
+        assert_eq!(
+            split_command(r#""C:\Program Files\Editor\editor.exe" --wait"#),
+            vec![r"C:\Program Files\Editor\editor.exe", "--wait"]
+        );
+    }
+
+    #[test]
+    fn split_command_supports_single_quotes_too() {
+        assert_eq!(
+            split_command("'my editor' --flag"),
+            vec!["my editor", "--flag"]
+        );
+    }
+
+    #[test]
+    fn command_for_uses_quoted_program_as_a_single_argv0() {
+        let command = command_for(
+            r#""C:\Program Files\Editor\editor.exe" --wait"#,
+            std::path::Path::new("note.md"),
+        );
+        assert_eq!(
+            command.get_program().to_string_lossy(),
+            r"C:\Program Files\Editor\editor.exe"
+        );
+    }
 }

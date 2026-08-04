@@ -1,8 +1,83 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::note::{Frontmatter, Note};
 use crate::{git, Error, Result};
+
+/// Slug for a new note in `dir`, guaranteed to not collide with an existing
+/// file there. Falls back to a timestamp-based slug when `title` slugifies
+/// to an empty string (symbol/emoji-only titles), then appends `-2`, `-3`,
+/// etc. if that slug (or the timestamp fallback) is already taken — two
+/// titles that slugify the same, e.g. "Q3 Report" and "Q3, Report!", must
+/// not silently overwrite each other.
+fn unique_slug(dir: &Path, title: &str) -> String {
+    let base = Note::slugify(title);
+    let base = if base.is_empty() {
+        format!("untitled-{}", chrono::Local::now().timestamp())
+    } else {
+        base
+    };
+    let mut candidate = base.clone();
+    let mut n = 2;
+    while dir.join(format!("{candidate}.md")).exists() {
+        candidate = format!("{base}-{n}");
+        n += 1;
+    }
+    candidate
+}
+
+/// Same as `unique_slug`, but a collision with `ignore` (the note's own
+/// current path, mid-rename) doesn't count — renaming a note to the title
+/// it already effectively has shouldn't be blocked by itself.
+fn unique_slug_excluding(dir: &Path, title: &str, ignore: &Path) -> String {
+    let base = Note::slugify(title);
+    let base = if base.is_empty() {
+        format!("untitled-{}", chrono::Local::now().timestamp())
+    } else {
+        base
+    };
+    let mut candidate = base.clone();
+    let mut n = 2;
+    loop {
+        let path = dir.join(format!("{candidate}.md"));
+        if !path.exists() || path == *ignore {
+            return candidate;
+        }
+        candidate = format!("{base}-{n}");
+        n += 1;
+    }
+}
+
+/// Whether `dest` is `source` itself, or nested anywhere inside it —
+/// checked via canonicalized path components (`Path::starts_with`), not a
+/// naive string prefix, so e.g. `projects` vs `projects-archive` don't
+/// false-positive. `dest` typically doesn't exist yet (the caller only
+/// calls this once it's confirmed nothing already sits there), so this
+/// walks up to the nearest existing ancestor to canonicalize, then
+/// re-appends the not-yet-created suffix components before comparing.
+fn is_same_or_nested(source: &Path, dest: &Path) -> bool {
+    let source = source
+        .canonicalize()
+        .unwrap_or_else(|_| source.to_path_buf());
+    let mut existing_ancestor = dest;
+    let mut pending: Vec<&std::ffi::OsStr> = Vec::new();
+    while !existing_ancestor.exists() {
+        match (existing_ancestor.file_name(), existing_ancestor.parent()) {
+            (Some(name), Some(parent)) => {
+                pending.push(name);
+                existing_ancestor = parent;
+            }
+            _ => break,
+        }
+    }
+    let mut dest_resolved = existing_ancestor
+        .canonicalize()
+        .unwrap_or_else(|_| existing_ancestor.to_path_buf());
+    for part in pending.into_iter().rev() {
+        dest_resolved.push(part);
+    }
+    dest_resolved == source || dest_resolved.starts_with(&source)
+}
 
 /// A notebook is a directory with its own git repo, containing `.md` notes.
 #[derive(Debug, Clone)]
@@ -72,10 +147,31 @@ impl Notebook {
     }
 
     fn collect_notes(&self, relative: &Path, out: &mut Vec<Note>) -> Result<()> {
+        let mut visited = HashSet::new();
+        self.collect_notes_guarded(relative, out, &mut visited)
+    }
+
+    /// `visited` holds the canonicalized path of every directory already
+    /// walked — a self-referential symlink inside a notebook would otherwise
+    /// recurse forever and stack-overflow global search. A directory that
+    /// can't be canonicalized (rare I/O race) is walked anyway rather than
+    /// skipped, matching this function's existing "best effort" behavior.
+    fn collect_notes_guarded(
+        &self,
+        relative: &Path,
+        out: &mut Vec<Note>,
+        visited: &mut HashSet<PathBuf>,
+    ) -> Result<()> {
+        let dir = self.path.join(relative);
+        if let Ok(real) = dir.canonicalize() {
+            if !visited.insert(real) {
+                return Ok(());
+            }
+        }
         let (folders, notes) = self.list_dir(relative)?;
         out.extend(notes);
         for folder in folders {
-            self.collect_notes(&relative.join(folder), out)?;
+            self.collect_notes_guarded(&relative.join(folder), out, visited)?;
         }
         Ok(())
     }
@@ -90,7 +186,7 @@ impl Notebook {
     ) -> Result<Note> {
         let dir = self.path.join(relative);
         std::fs::create_dir_all(&dir)?;
-        let slug = Note::slugify(title);
+        let slug = unique_slug(&dir, title);
         let path = dir.join(format!("{slug}.md"));
         let note = Note::new(path, Frontmatter::new(title, &self.name), body.into());
         note.save()?;
@@ -134,7 +230,8 @@ impl Notebook {
     pub fn rename_note_at(&self, path: &Path, new_title: &str) -> Result<Note> {
         let mut note = Note::from_file_in_notebook(path, &self.name)?;
         let dir = path.parent().unwrap_or(&self.path);
-        let new_path = dir.join(format!("{}.md", Note::slugify(new_title)));
+        let slug = unique_slug_excluding(dir, new_title, path);
+        let new_path = dir.join(format!("{slug}.md"));
         note.frontmatter.title = new_title.to_string();
         note.path = new_path;
         note.save()?;
@@ -225,6 +322,18 @@ impl Notebook {
         let dest_dir = dest_notebook.path.join(&dest_relative);
         if dest_dir.exists() {
             return Err(Error::DestinationExists(dest_dir.display().to_string()));
+        }
+        // A destination equal to (or nested inside) the source folder would
+        // otherwise recurse forever: `dest_dir` gets created *before* this
+        // walks the source's own children, so once the walk reaches that
+        // freshly created directory it recurses into itself indefinitely —
+        // reachable in practice through the `m` (move) prompt, which
+        // prefills the item's current address; appending a segment to that
+        // prefill targets a subpath of the source itself.
+        if is_same_or_nested(&source_dir, &dest_dir) {
+            return Err(Error::DestinationInsideSource(
+                source_dir.display().to_string(),
+            ));
         }
         std::fs::create_dir_all(&dest_dir)?;
         let (folders, notes) = self.list_dir(relative)?;
@@ -526,6 +635,33 @@ mod tests {
 
         let result = a.copy_folder_to(Path::new("projects"), &b, Path::new(""));
         assert!(matches!(result, Err(Error::DestinationExists(_))));
+    }
+
+    #[test]
+    fn copy_folder_to_rejects_a_destination_nested_inside_the_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        let a = test_notebook(tmp.path(), "a");
+        a.create_folder_in(Path::new(""), "projects").unwrap();
+
+        // Same notebook, destination is a subpath of the source itself —
+        // this used to create `projects/projects/projects/...` forever.
+        let result = a.copy_folder_to(Path::new("projects"), &a, Path::new("projects/nested"));
+
+        assert!(matches!(result, Err(Error::DestinationInsideSource(_))));
+    }
+
+    #[test]
+    fn copy_folder_to_rejects_copying_a_folder_onto_itself() {
+        let tmp = tempfile::tempdir().unwrap();
+        let a = test_notebook(tmp.path(), "a");
+        a.create_folder_in(Path::new(""), "projects").unwrap();
+
+        let result = a.copy_folder_to(Path::new("projects"), &a, Path::new(""));
+
+        assert!(matches!(
+            result,
+            Err(Error::DestinationExists(_)) | Err(Error::DestinationInsideSource(_))
+        ));
     }
 
     #[test]

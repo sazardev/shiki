@@ -44,11 +44,17 @@ impl SearchEngine {
                 .collect();
         }
         let pattern = Pattern::parse(query, CaseMatching::Smart, Normalization::Smart);
+        // One scratch buffer reused across every haystack (`.clear()` keeps
+        // its allocated capacity instead of freeing it) rather than a fresh
+        // `Vec::new()` per haystack inside the loop — global search re-runs
+        // this on every keystroke across every note in the notebook, so a
+        // per-note allocation here is a real, avoidable cost at scale.
+        let mut buf = Vec::new();
         let mut hits: Vec<SearchHit> = haystacks
             .iter()
             .enumerate()
             .filter_map(|(index, text)| {
-                let mut buf = Vec::new();
+                buf.clear();
                 let utf32 = nucleo_matcher::Utf32Str::new(text, &mut buf);
                 pattern
                     .score(utf32, &mut self.matcher)

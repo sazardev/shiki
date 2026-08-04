@@ -39,3 +39,56 @@ impl TagIndex {
         self.index.is_empty()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::note::Frontmatter;
+
+    fn note_with_tags(path: &str, tags: &[&str]) -> Note {
+        let mut fm = Frontmatter::new("Title", "test");
+        fm.tags = tags.iter().map(|t| t.to_string()).collect();
+        Note::new(PathBuf::from(path), fm, String::new())
+    }
+
+    #[test]
+    fn build_indexes_notes_by_every_tag_they_carry() {
+        let notes = vec![
+            note_with_tags("a.md", &["work", "urgent"]),
+            note_with_tags("b.md", &["work"]),
+            note_with_tags("c.md", &[]),
+        ];
+
+        let index = TagIndex::build(&notes);
+
+        assert_eq!(index.len(), 2);
+        assert_eq!(
+            index.notes_for("work"),
+            &[PathBuf::from("a.md"), PathBuf::from("b.md")]
+        );
+        assert_eq!(index.notes_for("urgent"), &[PathBuf::from("a.md")]);
+    }
+
+    #[test]
+    fn notes_for_unknown_tag_is_empty() {
+        let notes = vec![note_with_tags("a.md", &["work"])];
+        let index = TagIndex::build(&notes);
+        assert!(index.notes_for("nonexistent").is_empty());
+    }
+
+    #[test]
+    fn build_of_no_tags_at_all_is_empty() {
+        let notes = vec![note_with_tags("a.md", &[])];
+        let index = TagIndex::build(&notes);
+        assert!(index.is_empty());
+        assert_eq!(index.tags().count(), 0);
+    }
+
+    #[test]
+    fn tags_are_returned_in_sorted_order() {
+        let notes = vec![note_with_tags("a.md", &["zeta", "alpha", "mid"])];
+        let index = TagIndex::build(&notes);
+        let tags: Vec<&String> = index.tags().collect();
+        assert_eq!(tags, vec!["alpha", "mid", "zeta"]);
+    }
+}

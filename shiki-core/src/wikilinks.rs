@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use regex::Regex;
@@ -33,14 +34,35 @@ pub fn resolve_one(link: &str, notes: &[Note]) -> Option<PathBuf> {
 /// `[[wikilink]]` that resolves to `target` — the reverse of `extract` +
 /// `resolve_one`, used to answer "what links here?" without every note
 /// needing to maintain its own back-reference list.
+///
+/// Builds a title/slug -> path index once up front rather than calling
+/// `resolve_one` (a linear scan + `slugify` over every note) once per link
+/// per note — that combination made this function cost O(notes × total
+/// links in the notebook), visibly slow on a notebook with a few thousand
+/// notes even though each note only has a handful of links.
 pub fn backlinks<'a>(target: &std::path::Path, notes: &'a [Note]) -> Vec<&'a Note> {
+    let mut by_title: HashMap<String, &std::path::Path> = HashMap::with_capacity(notes.len());
+    let mut by_slug: HashMap<String, &std::path::Path> = HashMap::with_capacity(notes.len());
+    for n in notes {
+        by_title
+            .entry(n.frontmatter.title.to_ascii_lowercase())
+            .or_insert(&n.path);
+        by_slug.entry(n.file_stem()).or_insert(&n.path);
+    }
+    let resolve = |link: &str| -> Option<&std::path::Path> {
+        let link = link.trim();
+        by_title
+            .get(&link.to_ascii_lowercase())
+            .or_else(|| by_slug.get(&Note::slugify(link)))
+            .copied()
+    };
     notes
         .iter()
         .filter(|n| {
             n.path != target
                 && extract(&n.body)
                     .iter()
-                    .any(|link| resolve_one(link, notes).as_deref() == Some(target))
+                    .any(|link| resolve(link) == Some(target))
         })
         .collect()
 }

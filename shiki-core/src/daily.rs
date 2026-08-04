@@ -15,14 +15,24 @@ pub fn daily_note_path(notebook: &Notebook, date: NaiveDate) -> std::path::PathB
         .join(format!("{}-daily.md", date.format("%Y-%m-%d")))
 }
 
-/// Creates (or opens, if it already exists) today's daily note in the given notebook.
-pub fn create_or_open(notebook: &Notebook, date: NaiveDate, templates_dir: &Path) -> Result<Note> {
+/// Creates (or opens, if it already exists) today's daily note in the given
+/// notebook. `template_name` is `general.daily_template` from config (by
+/// filename, without `.md`) — callers pass the configured value through
+/// rather than this function hardcoding `"daily"`, so customizing that
+/// setting (already editable in the Settings GENERAL tab) actually takes
+/// effect instead of being silently ignored.
+pub fn create_or_open(
+    notebook: &Notebook,
+    date: NaiveDate,
+    templates_dir: &Path,
+    template_name: &str,
+) -> Result<Note> {
     let path = daily_note_path(notebook, date);
     if path.exists() {
         return Note::from_file_in_notebook(&path, &notebook.name);
     }
 
-    let body = match Template::load(templates_dir, "daily") {
+    let body = match Template::load(templates_dir, template_name) {
         Ok(template) => {
             let mut vars = HashMap::new();
             vars.insert("date", date.format("%Y-%m-%d").to_string());
@@ -37,9 +47,69 @@ pub fn create_or_open(notebook: &Notebook, date: NaiveDate, templates_dir: &Path
     let mut frontmatter =
         Frontmatter::new(format!("{} Daily", date.format("%Y-%m-%d")), &notebook.name);
     frontmatter.date = date;
-    frontmatter.template = Some("daily".to_string());
+    frontmatter.template = Some(template_name.to_string());
 
     let note = Note::new(path, frontmatter, body);
     note.save()?;
     Ok(note)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_notebook(root: &Path, name: &str) -> Notebook {
+        let path = root.join(name);
+        std::fs::create_dir_all(&path).unwrap();
+        Notebook::new(name, path)
+    }
+
+    #[test]
+    fn daily_note_path_is_date_stamped_at_the_notebook_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let nb = test_notebook(tmp.path(), "personal");
+        let date = NaiveDate::from_ymd_opt(2024, 3, 7).unwrap();
+
+        let path = daily_note_path(&nb, date);
+
+        assert_eq!(path, nb.path.join("2024-03-07-daily.md"));
+    }
+
+    #[test]
+    fn create_or_open_creates_a_new_note_with_fallback_body_when_no_template_exists() {
+        let tmp = tempfile::tempdir().unwrap();
+        let nb = test_notebook(tmp.path(), "personal");
+        let templates_dir = tmp.path().join("templates"); // deliberately never created
+        let date = NaiveDate::from_ymd_opt(2024, 3, 7).unwrap();
+
+        let note = create_or_open(&nb, date, &templates_dir, "daily").unwrap();
+
+        assert_eq!(note.frontmatter.title, "2024-03-07 Daily");
+        assert_eq!(note.frontmatter.date, date);
+        assert_eq!(note.frontmatter.template.as_deref(), Some("daily"));
+        assert!(note.body.contains("2024-03-07"));
+        assert!(note.path.exists());
+    }
+
+    #[test]
+    fn create_or_open_reopens_the_existing_note_instead_of_overwriting_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let nb = test_notebook(tmp.path(), "personal");
+        let templates_dir = tmp.path().join("templates");
+        let date = NaiveDate::from_ymd_opt(2024, 3, 7).unwrap();
+
+        let first = create_or_open(&nb, date, &templates_dir, "daily").unwrap();
+        std::fs::write(
+            &first.path,
+            format!(
+                "{}custom edit",
+                "---\ntitle: 2024-03-07 Daily\ndate: 2024-03-07\nnotebook: personal\n---\n\n"
+            ),
+        )
+        .unwrap();
+
+        let second = create_or_open(&nb, date, &templates_dir, "daily").unwrap();
+
+        assert_eq!(second.body, "custom edit");
+    }
 }

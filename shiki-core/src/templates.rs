@@ -23,12 +23,38 @@ impl Template {
         })
     }
 
-    /// Substitutes `{{key}}` placeholders with the given values.
+    /// Substitutes `{{key}}` placeholders with the given values, in a
+    /// single left-to-right pass over `self.contents`. Deliberately not a
+    /// sequential `String::replace` per key: that approach rescans the
+    /// *already-substituted* output on every subsequent key, so a value
+    /// that happens to contain another placeholder's literal text (e.g.
+    /// a title of `Meeting {{date}} notes`) gets that text substituted
+    /// again on the next iteration instead of being left alone.
     pub fn render(&self, vars: &HashMap<&str, String>) -> String {
-        let mut out = self.contents.clone();
-        for (key, value) in vars {
-            out = out.replace(&format!("{{{{{key}}}}}"), value);
+        let contents = self.contents.as_str();
+        let mut out = String::with_capacity(contents.len());
+        let mut rest = contents;
+        while let Some(start) = rest.find("{{") {
+            out.push_str(&rest[..start]);
+            let after_open = &rest[start + 2..];
+            match after_open.find("}}") {
+                Some(end) => {
+                    let key = &after_open[..end];
+                    match vars.get(key) {
+                        Some(value) => out.push_str(value),
+                        None => out.push_str(&rest[start..start + 4 + end]),
+                    }
+                    rest = &after_open[end + 2..];
+                }
+                None => {
+                    // Unterminated `{{` — emit it literally and stop scanning.
+                    out.push_str(&rest[start..]);
+                    rest = "";
+                    break;
+                }
+            }
         }
+        out.push_str(rest);
         out
     }
 }
@@ -77,4 +103,36 @@ pub fn ensure_defaults(templates_dir: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_does_not_resubstitute_a_value_containing_placeholder_text() {
+        let template = Template {
+            name: "t".to_string(),
+            contents: "# {{title}}\n\nDate: {{date}}\n".to_string(),
+        };
+        let mut vars = HashMap::new();
+        vars.insert("title", "Meeting {{date}} notes".to_string());
+        vars.insert("date", "2026-08-02".to_string());
+
+        let out = template.render(&vars);
+
+        assert_eq!(out, "# Meeting {{date}} notes\n\nDate: 2026-08-02\n");
+    }
+
+    #[test]
+    fn render_leaves_unknown_placeholders_untouched() {
+        let template = Template {
+            name: "t".to_string(),
+            contents: "{{title}} / {{unknown}}".to_string(),
+        };
+        let mut vars = HashMap::new();
+        vars.insert("title", "Todo".to_string());
+
+        assert_eq!(template.render(&vars), "Todo / {{unknown}}");
+    }
 }

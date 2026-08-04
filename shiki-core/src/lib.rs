@@ -43,6 +43,12 @@ pub enum Error {
     /// already there.
     #[error("already exists: {0}")]
     DestinationExists(String),
+    /// A folder move/copy whose destination is the source itself, or nested
+    /// inside it — copying a folder into its own subtree would otherwise
+    /// recurse forever (the freshly created destination becomes one of the
+    /// source's own children by the time the walk reaches it).
+    #[error("cannot move/copy '{0}' into itself or one of its own subfolders")]
+    DestinationInsideSource(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

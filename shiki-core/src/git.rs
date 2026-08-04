@@ -111,6 +111,12 @@ pub struct GitStatus {
     /// reflects what was fetched at the last `pull`/`pull_all` — computing
     /// this doesn't itself talk to the network.
     pub behind: usize,
+    /// Set when `repo.statuses(None)` itself failed (locked index,
+    /// permission issue, corrupted repo) — `dirty_count` falls back to `0`
+    /// in that case (see `status()`), which used to be indistinguishable
+    /// from a genuinely clean notebook. `None` means the check actually
+    /// succeeded, regardless of what it found.
+    pub status_error: Option<String>,
 }
 
 /// Initializes a git repo at `path` if one doesn't already exist.
@@ -369,16 +375,35 @@ pub fn pull(path: &Path, remote: &str, branch: &str) -> Result<String> {
 /// them — a plain SSH `git@host:path` loses its (non-secret) "git" prefix
 /// this way too, which is an acceptable trade for never accidentally
 /// leaving a real token unredacted.
+/// Redacts userinfo (`user[:password]@`) from a `scheme://...` URL, or the
+/// whole `user@` from an scp-style `user@host:path` remote — never a bare
+/// `@` search over the *entire* string. A self-hosted remote can legitimately
+/// have an `@` in its path (e.g. `https://git.example.com/repos/notes@backup.git`);
+/// searching the whole string for the first `@` would treat that as
+/// userinfo and redact straight through the real host/path, not just hide a
+/// credential. The userinfo `@`, if any, only ever appears in the authority
+/// component — between `://` and the first `/` that starts the path — so
+/// only that slice is searched.
 pub fn redact_credentials(url: &str) -> String {
-    let Some(at_idx) = url.find('@') else {
-        return url.to_string();
-    };
     match url.find("://") {
-        Some(scheme_end) if scheme_end < at_idx => {
-            format!("{}***@{}", &url[..scheme_end + 3], &url[at_idx + 1..])
+        Some(scheme_end) => {
+            let authority_start = scheme_end + 3;
+            let authority_end = url[authority_start..]
+                .find('/')
+                .map(|i| authority_start + i)
+                .unwrap_or(url.len());
+            match url[authority_start..authority_end].find('@') {
+                Some(rel_at) => {
+                    let at_idx = authority_start + rel_at;
+                    format!("{}***@{}", &url[..authority_start], &url[at_idx + 1..])
+                }
+                None => url.to_string(),
+            }
         }
-        Some(_) => url.to_string(), // '@' appears before any "://" — not userinfo
-        None => format!("***@{}", &url[at_idx + 1..]), // scp-style, no scheme
+        None => match url.find('@') {
+            Some(at_idx) => format!("***@{}", &url[at_idx + 1..]), // scp-style, no scheme
+            None => url.to_string(),
+        },
     }
 }
 
@@ -494,7 +519,10 @@ pub fn status(path: &Path, remote: &str) -> GitStatus {
         Ok(r) => r,
         Err(_) => return GitStatus::default(),
     };
-    let dirty_count = repo.statuses(None).map(|s| s.len()).unwrap_or(0);
+    let (dirty_count, status_error) = match repo.statuses(None) {
+        Ok(statuses) => (statuses.len(), None),
+        Err(e) => (0, Some(e.to_string())),
+    };
     let branch = repo
         .head()
         .ok()
@@ -516,6 +544,7 @@ pub fn status(path: &Path, remote: &str) -> GitStatus {
         branch,
         ahead,
         behind,
+        status_error,
     }
 }
 
@@ -561,6 +590,17 @@ mod tests {
         assert_eq!(
             redact_credentials("/home/omar/bare-repos/notes.git"),
             "/home/omar/bare-repos/notes.git"
+        );
+    }
+
+    #[test]
+    fn leaves_a_legitimate_at_sign_in_the_path_untouched() {
+        // The '@' here is part of the repo path, not userinfo — it comes
+        // after the first '/' that starts the path, past the authority
+        // component entirely.
+        assert_eq!(
+            redact_credentials("https://git.example.com/repos/notes@backup.git"),
+            "https://git.example.com/repos/notes@backup.git"
         );
     }
 }
