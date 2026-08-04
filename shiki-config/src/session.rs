@@ -45,6 +45,25 @@ pub struct SessionState {
     pub focus: String,
 }
 
+/// Rejects a `notes_path` component that would escape the notebook when
+/// joined onto its real path (`self.path.join(relative)` in
+/// `shiki-core::Notebook::list_dir`) — empty, `.`/`..`, or containing a
+/// path separator. `notes_path` is restored verbatim from a persisted
+/// `session.toml`, so a hand-edited or corrupted file with e.g.
+/// `notes_path = ["..", "..", "etc"]` would otherwise let the NOTES panel
+/// walk outside the notebook (and outside the data directory entirely) the
+/// moment the session is restored. Mirrors `notebook::validate_name`'s
+/// rules in `shiki-core` — duplicated rather than shared, since
+/// `shiki-config` doesn't depend on `shiki-core` (see CLAUDE.md's
+/// Architecture section on the one-way dependency chain).
+fn is_safe_path_component(component: &str) -> bool {
+    !component.is_empty()
+        && component != "."
+        && component != ".."
+        && !component.contains('/')
+        && !component.contains('\\')
+}
+
 impl SessionState {
     /// Reads a previously saved session, if the file exists and is valid.
     /// Any failure (missing file, unreadable, malformed TOML) is treated the
@@ -53,7 +72,11 @@ impl SessionState {
     /// worth failing startup over.
     pub fn load(path: &Path) -> Option<Self> {
         let contents = std::fs::read_to_string(path).ok()?;
-        toml::from_str(&contents).ok()
+        let mut session: Self = toml::from_str(&contents).ok()?;
+        session
+            .notes_path
+            .retain(|component| is_safe_path_component(component));
+        Some(session)
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
@@ -98,6 +121,37 @@ mod tests {
     #[test]
     fn load_returns_none_for_a_missing_file() {
         assert!(SessionState::load(Path::new("/nonexistent/shiki-session.toml")).is_none());
+    }
+
+    #[test]
+    fn load_strips_path_traversal_components_from_notes_path() {
+        let dir = std::env::temp_dir().join(format!(
+            "shiki-session-traversal-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("session.toml");
+        std::fs::write(
+            &path,
+            r#"
+notebook = "work"
+notes_path = ["..", "..", "etc", "projects"]
+focus = "notes"
+"#,
+        )
+        .unwrap();
+
+        let loaded = SessionState::load(&path).expect("valid TOML must still load");
+
+        assert_eq!(
+            loaded.notes_path,
+            vec!["etc".to_string(), "projects".to_string()]
+        );
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
