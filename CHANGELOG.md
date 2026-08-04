@@ -6,6 +6,104 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- `shiki notebook delete <name> --yes` — the CLI had no way to delete a notebook at all, despite
+  the TUI supporting it; `--yes` is required (mirrors the TUI's own confirm dialog) since this
+  permanently removes the notebook's directory and every note in it.
+- `shiki doctor` now also checks: unrecognized keys anywhere in `config.toml` (a generic diff
+  against `Config::default()`'s own shape, so it can't drift out of sync with the struct fields the
+  way a hand-maintained list of "known keys" would); `general.default_notebook` actually matching an
+  existing notebook; `data_dir` being a real directory, not just existing; two notebooks resolving to
+  the same path on disk; `git.remote_template` containing its `{notebook}` placeholder; and
+  `git.sign_commits` having an actual signing key configured.
+- `shiki-core`/`shiki-config` test coverage: `note.rs`, `tags.rs`, `daily.rs`, and `session.rs` had
+  zero tests despite being pure, easily-testable logic — added coverage for frontmatter parsing
+  (including the CRLF and YAML-block-scalar fixes below), slugify, tag indexing, daily-note
+  creation, and session-path sanitization.
+- CI: a `cargo audit` job (with a `.cargo/audit.toml` ignore-list mechanism for a known,
+  not-yet-fixable transitive advisory) and a real `cargo test --workspace` job, both missing before.
+
+### Changed
+
+- `shiki sync` (CLI) now resolves `auto_push`/`auto_commit` per-notebook (`Config::sync_for`)
+  instead of always reading the global `[git]` defaults, matching the TUI's `s`/`u` behavior; it also
+  now writes the same file-named commit message the TUI does (`git::diff_summary`) instead of a bare
+  `"{prefix}sync"`, and gives a clear error instead of a raw libgit2 one when no remote is configured.
+- `shiki search`/`shiki list`/`shiki notebook list`'s note counts now walk every folder
+  (`all_notes_recursive`), not just the notebook root — a note nested in a subfolder used to be
+  invisible to these commands while still being editable by name via `shiki edit`.
+- `shiki new`/`shiki edit`/`shiki daily` now respect `general.use_favorite_editor` the same way the
+  TUI's `i` binding does, instead of always using the plain configured `general.editor`.
+- The self-updater (leader+`U`) now installs the *exact* version its confirm dialog showed, rather
+  than re-resolving "latest" a second time — a new release landing in the gap between check and
+  confirmation could previously install a different version than what was displayed.
+- CI's `fmt-and-clippy` job is now matrixed across all three OSes (fmt itself still only runs once,
+  on Linux) so clippy actually lints the `#[cfg(target_os = "macos"/"windows")]` blocks in
+  `shiki-core/src/editor.rs`; the old separate `build` job was folded into `test` (it was paying for
+  close to the same compilation a second time on every push).
+- Every workflow job across all 5 `.github/workflows/*.yml` files now has a `timeout-minutes`, and
+  `release.yml`'s `contents: write` permission is scoped to just the `release` job instead of the
+  whole workflow.
+- The marketing site: a working hamburger menu below 900px (the nav used to just disappear with no
+  replacement), with a real focus trap and no lingering stale popover state when it closes; `.ref-table`
+  now scrolls horizontally in its own container instead of the whole page; TOC/search jumps in
+  `documentation.html` no longer land headings underneath the sticky top bars; the 12 per-theme
+  gallery screenshots no longer double-download (wrong theme, then the right one) on load; the hero
+  GIF respects `prefers-reduced-motion`; `loadLatestRelease`'s fetch has a timeout.
+
+### Fixed
+
+- A note's frontmatter parser used to truncate at the *first* line reading exactly `---` anywhere in
+  the file — a YAML block scalar that legitimately contained such a line lost every field after it.
+  It now requires that line to be the real closing delimiter.
+- Frontmatter written with CRLF line endings (round-tripped through an external editor on Windows)
+  used to fail to parse entirely, falling back to a synthesized title as if the note had no
+  frontmatter at all.
+- `create_note_in`/`rename_note_at` could silently overwrite another note whose title slugified to
+  the same filename (e.g. "Q3 Report" vs. "Q3, Report!"); both now dedupe with a `-2`/`-3` suffix, and
+  a symbol/emoji-only title falls back to a timestamp-based slug instead of an empty one.
+- `Notebook::collect_notes`'s recursive walk had no guard against a self-referential symlink inside a
+  notebook, which could stack-overflow global search.
+- `Template::render` (used by note templates and the `/`-menu) did naive sequential
+  find-and-replace per placeholder, so a variable's value containing another placeholder's literal
+  text (e.g. a title like "Meeting {{date}} notes") got that text substituted again on the next pass.
+  It now does a single left-to-right scan.
+- `editor::command_for` split an editor command on plain whitespace with no quoting support, breaking
+  any configured/detected editor whose path contains a space (common on Windows).
+- `git::redact_credentials` treated the *first* `@` anywhere in a URL as credentials to redact — a
+  self-hosted remote with a legitimate `@` in its path (e.g. `.../notes@backup.git`) got silently
+  mangled in logs.
+- `general.daily_template` was a fully documented, Settings-editable config field that
+  `daily::create_or_open` never actually read — it always hardcoded `"daily"` regardless. Both the
+  CLI (`shiki daily`) and the TUI now pass the configured value through.
+- `copy_folder_to`/`move_folder_to` had no guard against a destination that is the source itself, or
+  nested inside it — reachable through the `m` (move) prompt's prefilled address — which used to
+  recurse forever creating nested copies of the folder inside itself.
+- `git::status()` reported a notebook as clean (`dirty_count = 0`) even when the underlying
+  `repo.statuses(None)` call itself failed (locked index, permissions, a corrupted repo); the footer
+  and drawer now show a distinct "status?" indicator instead.
+- Applying a slash-command or a `[[wikilink]]` selection while multiple cursors were active only
+  ever edited the primary cursor's text, leaving every secondary cursor with its own unconsumed
+  literal text and a desynced position for the rest of the editing session. Both now collapse to a
+  single cursor before applying.
+- `p` (pull one notebook) reset the NOTES selection and preview scroll back to the top whenever the
+  pulled notebook was still selected, even if the user had since navigated to a different note/folder
+  within it — same bug already fixed for `P` (pull all), now fixed for the single-notebook case too.
+- A hand-edited or corrupted `session.toml` with `notes_path` containing `".."` components could
+  make the NOTES panel navigate outside the notebook (and the data directory) on restore; path
+  components are now sanitized on load.
+- `find_note` (used by `edit`/`show`/`daily`/`new`) could silently resolve to the wrong note when two
+  notes in different folders shared a title/slug, a possible ambiguity introduced when note lookup
+  became recursive; it now errors with both folders listed instead of guessing.
+- `TagIndex::build` was rebuilt on every draw tick while the tags modal was open, and even after
+  being cached, `App::tag_index()` still cloned the whole cached index on every draw call — both are
+  now a real cache hit with no per-frame rebuild or clone.
+- `wikilinks::backlinks` re-scanned every note (with a fresh `slugify` call) once per link per note,
+  making it cost O(notes × total links in the notebook); it now builds a title/slug index once.
+- `search_text` (global search) allocated a fresh scratch buffer per note on every keystroke instead
+  of reusing one across the scan.
+
 ## [0.8.10] - 2026-07-31
 
 ### Added

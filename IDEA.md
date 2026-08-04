@@ -348,6 +348,7 @@ shiki config              # show config path
 shiki notebook create <name>
 shiki notebook list
 shiki notebook rename <old> <new>
+shiki notebook delete <name> --yes  # permanently deletes the notebook and every note in it
 shiki theme list          # list built-in themes, marking the active one
 shiki theme set <name>    # switch theme (persisted to config.toml)
 shiki theme create [--from <name>]  # scaffold all 19 color overrides from a real palette
