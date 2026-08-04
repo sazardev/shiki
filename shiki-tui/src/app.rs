@@ -315,14 +315,17 @@ pub(crate) enum DeleteTarget {
     Notebook,
 }
 
-/// `(note path, [fg, accent, muted, link], content width, formatted lines,
-/// source-line-per-row)` — see `App::note_preview_cache`'s own doc comment
-/// for what each element means. Named only to keep clippy's
-/// `type_complexity` lint quiet; still just a plain tuple everywhere it's
-/// used.
+/// `(note path, [fg, accent, muted, link, bg], content width, formatted
+/// lines, source-line-per-row)` — see `App::note_preview_cache`'s own doc
+/// comment for what each element means. `bg` rides along in the same array
+/// purely so it participates in the cache-key equality check (it drives
+/// `render::is_dark_color`, which picks the syntect syntax-highlighting
+/// theme for code fences) without a whole extra tuple field. Named only to
+/// keep clippy's `type_complexity` lint quiet; still just a plain tuple
+/// everywhere it's used.
 type NotePreviewCache = (
     std::path::PathBuf,
-    [Color; 4],
+    [Color; 5],
     u16,
     Vec<Line<'static>>,
     Vec<usize>,
@@ -1684,6 +1687,7 @@ impl App {
             hex_to_color(&self.theme.accent),
             hex_to_color(&self.theme.muted),
             hex_to_color(&self.theme.link),
+            hex_to_color(&self.theme.bg),
         ];
         let width = layout::split(self.last_frame_area, self.focus)
             .preview
@@ -1697,8 +1701,9 @@ impl App {
             return;
         }
         let body = note.body.clone();
+        let dark = crate::render::is_dark_color(colors[4]);
         let indexed = crate::render::markdown_to_lines_indexed(
-            &body, colors[0], colors[1], colors[2], colors[3],
+            &body, colors[0], colors[1], colors[2], colors[3], dark,
         );
         let (source_indices, plain_lines): (Vec<usize>, Vec<Line<'static>>) =
             indexed.into_iter().unzip();

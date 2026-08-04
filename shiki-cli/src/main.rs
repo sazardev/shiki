@@ -20,16 +20,31 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Creates a new note and opens $EDITOR
+    /// Creates a new note. Opens $EDITOR unless `--body`/`--stdin` is given,
+    /// in which case the note is created non-interactively — for scripting/
+    /// automation (piping generated content in from another program).
     New {
         title: String,
         #[arg(short, long)]
         notebook: Option<String>,
+        /// Note body text, given directly instead of opening $EDITOR.
+        #[arg(long, conflicts_with = "stdin")]
+        body: Option<String>,
+        /// Reads the note body from stdin instead of opening $EDITOR —
+        /// e.g. `echo "content" | shiki new "title" --stdin`.
+        #[arg(long)]
+        stdin: bool,
+        /// Comma-separated tags, e.g. `--tags work,idea`.
+        #[arg(long, value_delimiter = ',')]
+        tags: Vec<String>,
     },
     /// Lists the notes in a notebook
     List {
         #[arg(short = 'n', long)]
         notebook: Option<String>,
+        /// Emits a JSON array instead of plain text — for scripting.
+        #[arg(long)]
+        json: bool,
     },
     /// Edits a note with $EDITOR
     Edit {
@@ -42,12 +57,18 @@ enum Commands {
         note: String,
         #[arg(short, long)]
         notebook: Option<String>,
+        /// Emits a JSON object instead of plain text — for scripting.
+        #[arg(long)]
+        json: bool,
     },
     /// Searches notes by title (fuzzy)
     Search {
         query: String,
         #[arg(short, long)]
         notebook: Option<String>,
+        /// Emits a JSON array instead of plain text — for scripting.
+        #[arg(long)]
+        json: bool,
     },
     /// Creates or opens today's daily note
     Daily {
@@ -58,6 +79,17 @@ enum Commands {
     Sync {
         #[arg(short = 'n', long)]
         notebook: Option<String>,
+    },
+    /// Exports every note in a notebook to a single HTML or Markdown file
+    Export {
+        #[arg(short = 'n', long)]
+        notebook: Option<String>,
+        /// Output file path.
+        #[arg(short, long)]
+        out: PathBuf,
+        /// Output format — defaults to a self-contained HTML file.
+        #[arg(long, value_enum, default_value = "html")]
+        format: commands::export::ExportFormat,
     },
     /// Shows the path to the config file
     Config,
@@ -80,7 +112,11 @@ enum NotebookAction {
     Create {
         name: String,
     },
-    List,
+    List {
+        /// Emits a JSON array instead of plain text — for scripting.
+        #[arg(long)]
+        json: bool,
+    },
     Rename {
         old: String,
         new: String,
@@ -171,27 +207,58 @@ fn main() -> Result<()> {
 
     match cli.command {
         None => tui::launch(ctx.config, ctx.store),
-        Some(Commands::New { title, notebook }) => {
+        Some(Commands::New {
+            title,
+            notebook,
+            body,
+            stdin,
+            tags,
+        }) => {
             let notebook = ctx.notebook_name(notebook);
             let editor = ctx.resolve_editor();
-            commands::new::run(&ctx.store, &notebook, &title, &editor)
+            let non_interactive_body = if stdin {
+                use std::io::Read as _;
+                let mut buf = String::new();
+                std::io::stdin()
+                    .read_to_string(&mut buf)
+                    .context("failed to read note body from stdin")?;
+                Some(buf)
+            } else {
+                body
+            };
+            commands::new::run(
+                &ctx.store,
+                &notebook,
+                &title,
+                &editor,
+                non_interactive_body.as_deref(),
+                &tags,
+            )
         }
-        Some(Commands::List { notebook }) => {
+        Some(Commands::List { notebook, json }) => {
             let notebook = ctx.notebook_name(notebook);
-            commands::list::run(&ctx.store, &notebook)
+            commands::list::run(&ctx.store, &notebook, json)
         }
         Some(Commands::Edit { note, notebook }) => {
             let notebook = ctx.notebook_name(notebook);
             let editor = ctx.resolve_editor();
             commands::edit::run(&ctx.store, &notebook, &note, &editor)
         }
-        Some(Commands::Show { note, notebook }) => {
+        Some(Commands::Show {
+            note,
+            notebook,
+            json,
+        }) => {
             let notebook = ctx.notebook_name(notebook);
-            commands::show::run(&ctx.store, &notebook, &note)
+            commands::show::run(&ctx.store, &notebook, &note, json)
         }
-        Some(Commands::Search { query, notebook }) => {
+        Some(Commands::Search {
+            query,
+            notebook,
+            json,
+        }) => {
             let notebook = ctx.notebook_name(notebook);
-            commands::search::run(&ctx.store, &notebook, &query)
+            commands::search::run(&ctx.store, &notebook, &query, json)
         }
         Some(Commands::Daily { notebook }) => {
             let notebook = ctx.notebook_name(notebook);
@@ -209,11 +276,19 @@ fn main() -> Result<()> {
             let notebook = ctx.notebook_name(notebook);
             commands::sync::run(&ctx.store, &notebook, &ctx.config)
         }
+        Some(Commands::Export {
+            notebook,
+            out,
+            format,
+        }) => {
+            let notebook = ctx.notebook_name(notebook);
+            commands::export::run(&ctx.store, &notebook, &out, format)
+        }
         Some(Commands::Config) => commands::config::run(),
         Some(Commands::Doctor) => unreachable!("handled before Context::load() above"),
         Some(Commands::Notebook { action }) => match action {
             NotebookAction::Create { name } => commands::notebook::create(&ctx.store, &name),
-            NotebookAction::List => commands::notebook::list(&ctx.store),
+            NotebookAction::List { json } => commands::notebook::list(&ctx.store, json),
             NotebookAction::Rename { old, new } => {
                 commands::notebook::rename(&ctx.store, &old, &new)
             }

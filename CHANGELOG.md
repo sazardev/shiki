@@ -23,6 +23,30 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   creation, and session-path sanitization.
 - CI: a `cargo audit` job (with a `.cargo/audit.toml` ignore-list mechanism for a known,
   not-yet-fixable transitive advisory) and a real `cargo test --workspace` job, both missing before.
+- Real syntax highlighting for fenced code blocks in the PREVIEW panel (`shiki-tui/src/syntax.rs`),
+  via `syntect` — a workspace dependency that, until now, wasn't actually used anywhere. Every code
+  fence used to render as flat dimmed text regardless of its language tag; ` ```lang ` fences with a
+  language `syntect`'s bundled syntax defs recognize now get real per-token coloring, picked to match
+  the active theme's light/dark bias (`render::is_dark_color`) so a light theme like
+  catppuccin-latte doesn't get a dark-on-dark syntect theme. ` ```mermaid ` fences render in a
+  distinct accent color (a terminal can't render an actual diagram) instead of being visually
+  indistinguishable from a blockquote.
+- `shiki list`/`shiki search`/`shiki show`/`shiki notebook list` all gained a `--json` flag, emitting
+  structured output instead of plain text — none of the CLI's read commands had a machine-readable
+  format before, which made them unusable from scripts/other programs without fragile text parsing.
+- `shiki new` gained `--body <text>`/`--stdin` (reads the note body from stdin) and `--tags`, so a
+  note can be created fully non-interactively — every content-producing CLI command used to
+  unconditionally spawn `$EDITOR` and block on it, with no way to script note creation at all.
+- `shiki export --notebook <name> --out <path> --format html|md` — a new command bundling every note
+  in a notebook into a single file. `--format html` (the default) is real Markdown-to-HTML via
+  `pulldown-cmark` (another previously-declared-but-unused workspace dependency) with a small
+  embedded stylesheet (light/dark aware, no external assets); `--format md` is a plain concatenated
+  Markdown bundle. There was previously no export path of any kind.
+- Notebooks now tolerate `.txt` and `.mdx` files alongside `.md` when listing/reading notes
+  (`Notebook::list_dir`'s `NOTE_EXTENSIONS`) — a notebook pointed at an existing Obsidian vault
+  commonly has both, and they used to be silently invisible to shiki (not deleted, just never
+  listed). New notes are still always created as `.md`; renaming a `.txt`/`.mdx` note now preserves
+  its original extension instead of silently converting it to `.md`.
 
 ### Changed
 

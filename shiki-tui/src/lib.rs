@@ -21,6 +21,7 @@ pub mod render;
 pub mod slash_menu;
 pub mod status_bar;
 pub(crate) mod sync;
+pub(crate) mod syntax;
 pub mod tree;
 pub mod which;
 pub mod wrap;

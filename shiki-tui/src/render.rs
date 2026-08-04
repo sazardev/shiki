@@ -49,6 +49,25 @@ pub fn git_status_suffix(gs: &shiki_core::git::GitStatus) -> String {
     extras
 }
 
+/// Whether a resolved theme color reads as "dark" (perceptual luminance
+/// under half) — used to pick a syntect syntax-highlighting theme
+/// (`syntax::CodeHighlighter`) that won't clash with the active shiki theme
+/// (e.g. a light-on-light syntect theme under catppuccin-latte). `Reset`
+/// (the "default" theme's un-set background) defaults to `true` — most
+/// terminals default to a dark background, and a wrong guess here only
+/// affects code-fence coloring, not correctness.
+pub fn is_dark_color(color: Color) -> bool {
+    match color {
+        Color::Rgb(r, g, b) => {
+            let luminance = 0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32;
+            luminance < 128.0
+        }
+        Color::Black | Color::DarkGray => true,
+        Color::White | Color::Gray => false,
+        _ => true,
+    }
+}
+
 /// Converts a theme color slot to `ratatui::Color`. Accepts `#rrggbb` hex
 /// (every built-in palette), the terminal's native ANSI names, or `"reset"`
 /// to inherit whatever the terminal's own default color is — that's what
@@ -365,8 +384,9 @@ pub fn markdown_to_lines(
     accent: Color,
     muted: Color,
     link: Color,
+    dark: bool,
 ) -> Vec<Line<'static>> {
-    markdown_to_lines_indexed(body, fg, accent, muted, link)
+    markdown_to_lines_indexed(body, fg, accent, muted, link, dark)
         .into_iter()
         .map(|(_, line)| line)
         .collect()
@@ -388,6 +408,7 @@ pub fn markdown_to_lines_indexed(
     accent: Color,
     muted: Color,
     link: Color,
+    dark: bool,
 ) -> Vec<(usize, Line<'static>)> {
     let heading = Style::default().fg(accent).add_modifier(Modifier::BOLD);
     let text = Style::default().fg(fg);
@@ -401,17 +422,56 @@ pub fn markdown_to_lines_indexed(
 
     let mut in_code_block = false;
     let mut in_math_block = false;
+    let mut code_lang: Option<String> = None;
+    let mut code_highlighter: Option<crate::syntax::CodeHighlighter> = None;
     let mut lines: Vec<(usize, Line<'static>)> = Vec::new();
 
     let mut source = body.lines().enumerate().peekable();
     while let Some((idx, line)) = source.next() {
         if line.trim_start().starts_with("```") {
             in_code_block = !in_code_block;
-            lines.push((idx, Line::from(Span::styled(line.to_string(), dim))));
+            if in_code_block {
+                let lang = line
+                    .trim_start()
+                    .trim_start_matches("```")
+                    .trim()
+                    .to_ascii_lowercase();
+                code_highlighter = if lang.is_empty() || lang == "mermaid" {
+                    None
+                } else {
+                    crate::syntax::CodeHighlighter::new(&lang, dark)
+                };
+                // The opening fence line itself gets a distinct style when
+                // the language is recognized (real highlighting follows) or
+                // is a mermaid diagram (styled like the math-block accent
+                // below, not the flat code dim — a terminal can't render an
+                // actual diagram, but at least the fence reads as "special"
+                // rather than indistinguishable from an unrecognized one).
+                let fence_style = if lang == "mermaid" {
+                    math
+                } else if crate::syntax::is_known_language(&lang) {
+                    heading
+                } else {
+                    dim
+                };
+                code_lang = Some(lang);
+                lines.push((idx, Line::from(Span::styled(line.to_string(), fence_style))));
+            } else {
+                code_highlighter = None;
+                code_lang = None;
+                lines.push((idx, Line::from(Span::styled(line.to_string(), dim))));
+            }
             continue;
         }
         if in_code_block {
-            lines.push((idx, Line::from(Span::styled(line.to_string(), dim))));
+            let rendered = if code_lang.as_deref() == Some("mermaid") {
+                Line::from(Span::styled(line.to_string(), math))
+            } else if let Some(hl) = code_highlighter.as_mut() {
+                Line::from(hl.highlight(line))
+            } else {
+                Line::from(Span::styled(line.to_string(), dim))
+            };
+            lines.push((idx, rendered));
             continue;
         }
         if line.trim_start().starts_with("$$") {
@@ -623,7 +683,7 @@ mod tests {
 
     #[test]
     fn bold_inside_a_blockquote_is_still_bold_not_literal_asterisks() {
-        let lines = markdown_to_lines("> **Warning:** be careful", FG, ACCENT, MUTED, LINK);
+        let lines = markdown_to_lines("> **Warning:** be careful", FG, ACCENT, MUTED, LINK, true);
         assert_eq!(lines.len(), 1);
         let full = line_text(&lines[0]);
         assert!(!full.contains('*'), "asterisks must not survive: {full:?}");
@@ -655,14 +715,14 @@ mod tests {
 
     #[test]
     fn horizontal_rule_renders_as_a_visible_divider() {
-        let lines = markdown_to_lines("above\n---\nbelow", FG, ACCENT, MUTED, LINK);
+        let lines = markdown_to_lines("above\n---\nbelow", FG, ACCENT, MUTED, LINK, true);
         assert_eq!(line_text(&lines[1]), "─".repeat(40));
     }
 
     #[test]
     fn table_renders_aligned_columns_with_a_header_rule() {
         let body = "| Name | Age |\n| --- | --- |\n| Alice | 30 |\n| Bo | 7 |";
-        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK);
+        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, true);
         // header row + divider row + 2 body rows = 4 lines, no leftover
         // raw `|---|` separator line rendered literally.
         assert_eq!(lines.len(), 4);
@@ -682,7 +742,7 @@ mod tests {
     fn table_like_prose_without_a_real_separator_is_left_alone() {
         // A single line with pipes (e.g. a shell example) but no valid
         // `---`-only separator row after it must not trigger table mode.
-        let lines = markdown_to_lines("ls | grep foo | wc -l", FG, ACCENT, MUTED, LINK);
+        let lines = markdown_to_lines("ls | grep foo | wc -l", FG, ACCENT, MUTED, LINK, true);
         assert_eq!(lines.len(), 1);
         assert_eq!(line_text(&lines[0]), "ls | grep foo | wc -l");
     }
@@ -690,7 +750,7 @@ mod tests {
     #[test]
     fn details_summary_is_shown_expanded_with_tags_stripped() {
         let body = "<details>\n<summary>Click to expand</summary>\nhidden content\n</details>";
-        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK);
+        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, true);
         // <details>/</details> themselves produce no line; summary becomes
         // a styled header; the body content still renders normally.
         assert_eq!(lines.len(), 2);
@@ -701,7 +761,7 @@ mod tests {
     #[test]
     fn math_block_is_styled_distinctly_from_code_block() {
         let body = "$$\nx = y\n$$";
-        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK);
+        let lines = markdown_to_lines(body, FG, ACCENT, MUTED, LINK, true);
         assert_eq!(lines.len(), 3);
         // Content line inside the math block uses `accent`, not `muted`
         // (which code fences use) — the whole point of the distinction.

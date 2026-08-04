@@ -2,6 +2,7 @@ pub mod config;
 pub mod daily;
 pub mod doctor;
 pub mod edit;
+pub mod export;
 pub mod list;
 pub mod new;
 pub mod notebook;

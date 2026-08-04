@@ -7,8 +7,31 @@ pub fn create(store: &NotebookStore, name: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn list(store: &NotebookStore) -> Result<()> {
+pub fn list(store: &NotebookStore, json: bool) -> Result<()> {
     let notebooks = store.list()?;
+
+    if json {
+        let items: Vec<serde_json::Value> = notebooks
+            .iter()
+            .map(|nb| match nb.all_notes_recursive() {
+                Ok(notes) => serde_json::json!({
+                    "name": nb.name,
+                    "path": nb.path,
+                    "note_count": notes.len(),
+                    "error": null,
+                }),
+                Err(e) => serde_json::json!({
+                    "name": nb.name,
+                    "path": nb.path,
+                    "note_count": null,
+                    "error": e.to_string(),
+                }),
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&items)?);
+        return Ok(());
+    }
+
     if notebooks.is_empty() {
         println!("(no notebooks)");
         return Ok(());

@@ -28,8 +28,11 @@ fn unique_slug(dir: &Path, title: &str) -> String {
 
 /// Same as `unique_slug`, but a collision with `ignore` (the note's own
 /// current path, mid-rename) doesn't count — renaming a note to the title
-/// it already effectively has shouldn't be blocked by itself.
-fn unique_slug_excluding(dir: &Path, title: &str, ignore: &Path) -> String {
+/// it already effectively has shouldn't be blocked by itself. `ext` is the
+/// note's own extension (`rename_note_at` preserves it rather than always
+/// renaming onto `.md` — see there), so the collision check looks for the
+/// same file type the rename is actually producing.
+fn unique_slug_excluding(dir: &Path, title: &str, ignore: &Path, ext: &str) -> String {
     let base = Note::slugify(title);
     let base = if base.is_empty() {
         format!("untitled-{}", chrono::Local::now().timestamp())
@@ -39,7 +42,7 @@ fn unique_slug_excluding(dir: &Path, title: &str, ignore: &Path) -> String {
     let mut candidate = base.clone();
     let mut n = 2;
     loop {
-        let path = dir.join(format!("{candidate}.md"));
+        let path = dir.join(format!("{candidate}.{ext}"));
         if !path.exists() || path == *ignore {
             return candidate;
         }
@@ -79,7 +82,19 @@ fn is_same_or_nested(source: &Path, dest: &Path) -> bool {
     dest_resolved == source || dest_resolved.starts_with(&source)
 }
 
-/// A notebook is a directory with its own git repo, containing `.md` notes.
+/// File extensions shiki treats as a note when listing a notebook's
+/// contents — `.md` (what shiki itself always creates), plus `.mdx` and
+/// `.txt` so a notebook pointed at an existing Obsidian vault (which
+/// commonly has both) shows those files too instead of silently hiding
+/// them. This only affects *reading/listing* — new notes are always
+/// created as `.md` (`create_note_in`); an existing `.mdx`/`.txt` file kept
+/// its own extension through rename/move/copy (see `rename_note_at`),
+/// rather than being silently converted to `.md` the first time it's
+/// touched from inside shiki.
+const NOTE_EXTENSIONS: [&str; 3] = ["md", "mdx", "txt"];
+
+/// A notebook is a directory with its own git repo, containing notes with
+/// one of `NOTE_EXTENSIONS`' extensions (in practice, almost always `.md`).
 #[derive(Debug, Clone)]
 pub struct Notebook {
     pub name: String,
@@ -100,10 +115,11 @@ impl Notebook {
     /// as `nb`, and the caller (the Notes panel) walks one level at a time.
     /// Folders are sorted alphabetically; `.git` is never listed as a folder.
     ///
-    /// `.md` files that don't parse as a shiki note (no `---` frontmatter —
-    /// common in an imported/pre-existing repo, or one from `nb`) still show
-    /// up: `Note::from_file` synthesizes metadata for those rather than
-    /// failing, so nothing here needs to skip them.
+    /// A note file (any of `NOTE_EXTENSIONS`) that doesn't parse as a shiki
+    /// note (no `---` frontmatter — common in an imported/pre-existing
+    /// repo, one from `nb`, or a plain `.txt`/`.mdx` file from an Obsidian
+    /// vault) still shows up: `Note::from_file` synthesizes metadata for
+    /// those rather than failing, so nothing here needs to skip them.
     pub fn list_dir(&self, relative: &Path) -> Result<(Vec<String>, Vec<Note>)> {
         let dir = self.path.join(relative);
         if !dir.exists() {
@@ -125,7 +141,11 @@ impl Notebook {
                 if let Some(name) = path.file_name() {
                     folders.push(name.to_string_lossy().to_string());
                 }
-            } else if path.extension().is_some_and(|ext| ext == "md") {
+            } else if path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| NOTE_EXTENSIONS.contains(&ext))
+            {
                 notes.push(Note::from_file_in_notebook(&path, &self.name)?);
             }
         }
@@ -226,12 +246,17 @@ impl Notebook {
         Ok(())
     }
 
-    /// Renames the note at `path`, keeping it in the same folder.
+    /// Renames the note at `path`, keeping it in the same folder and the
+    /// same file extension — a `.txt`/`.mdx` note (see `NOTE_EXTENSIONS`)
+    /// renamed from inside shiki stays a `.txt`/`.mdx` file rather than
+    /// being silently converted to `.md`, the one extension shiki itself
+    /// ever creates new notes with.
     pub fn rename_note_at(&self, path: &Path, new_title: &str) -> Result<Note> {
         let mut note = Note::from_file_in_notebook(path, &self.name)?;
         let dir = path.parent().unwrap_or(&self.path);
-        let slug = unique_slug_excluding(dir, new_title, path);
-        let new_path = dir.join(format!("{slug}.md"));
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("md");
+        let slug = unique_slug_excluding(dir, new_title, path, ext);
+        let new_path = dir.join(format!("{slug}.{ext}"));
         note.frontmatter.title = new_title.to_string();
         note.path = new_path;
         note.save()?;
@@ -587,6 +612,42 @@ mod tests {
 
         let result = a.copy_note_to(&note.path, &b, Path::new(""));
         assert!(matches!(result, Err(Error::DestinationExists(_))));
+    }
+
+    #[test]
+    fn list_dir_includes_txt_and_mdx_files_alongside_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        let nb = test_notebook(tmp.path(), "vault");
+        nb.create_note("Shiki note", "body").unwrap();
+        std::fs::write(nb.path.join("plain.txt"), "just text").unwrap();
+        std::fs::write(nb.path.join("obsidian.mdx"), "# mdx content").unwrap();
+        std::fs::write(nb.path.join("ignored.png"), []).unwrap();
+
+        let (_, notes) = nb.list_dir(Path::new("")).unwrap();
+        let stems: Vec<String> = notes.iter().map(|n| n.file_stem()).collect();
+
+        assert!(stems.contains(&"shiki-note".to_string()));
+        assert!(stems.contains(&"plain".to_string()));
+        assert!(stems.contains(&"obsidian".to_string()));
+        assert_eq!(
+            notes.len(),
+            3,
+            "non-note extensions must be excluded: {stems:?}"
+        );
+    }
+
+    #[test]
+    fn rename_note_at_preserves_a_non_md_extension() {
+        let tmp = tempfile::tempdir().unwrap();
+        let nb = test_notebook(tmp.path(), "vault");
+        let path = nb.path.join("old-name.txt");
+        std::fs::write(&path, "content").unwrap();
+
+        let renamed = nb.rename_note_at(&path, "New Name").unwrap();
+
+        assert_eq!(renamed.path.extension().unwrap(), "txt");
+        assert!(!path.exists());
+        assert!(renamed.path.exists());
     }
 
     #[test]
