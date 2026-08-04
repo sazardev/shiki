@@ -1044,15 +1044,20 @@ impl Config {
 }
 
 impl Config {
-    /// Default path: `~/.config/shiki/config.toml` (respects `$XDG_CONFIG_HOME`).
+    /// Default path: `~/.config/shiki/config.toml` on Linux, or
+    /// `~/Library/Application Support/shiki/config.toml` on macOS — but always
+    /// `$XDG_CONFIG_HOME/shiki/config.toml` when that env var is set.
+    ///
+    /// `directories::ProjectDirs` only honors `$XDG_*` on Linux; on macOS/Windows
+    /// it ignores them and uses the platform convention. Contributors (and anyone
+    /// isolating a test install) set those vars on every OS, so we check them
+    /// ourselves first and only fall back to `ProjectDirs` when they're unset.
     pub fn default_path() -> Result<PathBuf> {
-        let dirs = directories::ProjectDirs::from("", "", "shiki").ok_or(Error::NoConfigDir)?;
-        Ok(dirs.config_dir().join("config.toml"))
+        Ok(config_dir()?.join("config.toml"))
     }
 
     pub fn default_data_dir() -> Result<PathBuf> {
-        let dirs = directories::ProjectDirs::from("", "", "shiki").ok_or(Error::NoConfigDir)?;
-        Ok(dirs.data_dir().to_path_buf())
+        data_dir()
     }
 
     pub fn default_templates_dir() -> Result<PathBuf> {
@@ -1278,9 +1283,99 @@ fn section_comment(line: &str) -> Option<&'static str> {
     })
 }
 
+/// Non-empty `$XDG_CONFIG_HOME` / `$XDG_DATA_HOME`, if set. Empty values are
+/// treated as unset — same spirit as the XDG Base Directory spec's "if unset
+/// or empty" wording for the defaults.
+fn xdg_home(var: &str) -> Option<PathBuf> {
+    match std::env::var_os(var) {
+        Some(v) if !v.is_empty() => Some(PathBuf::from(v)),
+        _ => None,
+    }
+}
+
+fn project_dirs() -> Result<directories::ProjectDirs> {
+    directories::ProjectDirs::from("", "", "shiki").ok_or(Error::NoConfigDir)
+}
+
+/// `$XDG_*/shiki` when an override is present, otherwise the `ProjectDirs`
+/// fallback. Pure so the precedence rule is unit-testable without touching
+/// process env (which races under `cargo test`'s parallel runner).
+fn resolve_dir(xdg: Option<PathBuf>, fallback: PathBuf) -> PathBuf {
+    match xdg {
+        Some(base) => base.join("shiki"),
+        None => fallback,
+    }
+}
+
+fn config_dir() -> Result<PathBuf> {
+    Ok(resolve_dir(
+        xdg_home("XDG_CONFIG_HOME"),
+        project_dirs()?.config_dir().to_path_buf(),
+    ))
+}
+
+fn data_dir() -> Result<PathBuf> {
+    Ok(resolve_dir(
+        xdg_home("XDG_DATA_HOME"),
+        project_dirs()?.data_dir().to_path_buf(),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// `default_path`/`default_data_dir` read process env; serialize those
+    /// tests so parallel workers don't clobber each other's overrides.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn resolve_dir_prefers_xdg_override_over_platform_fallback() {
+        assert_eq!(
+            resolve_dir(
+                Some(PathBuf::from("/tmp/shiki-test-config")),
+                PathBuf::from("/fallback/config")
+            ),
+            PathBuf::from("/tmp/shiki-test-config/shiki")
+        );
+        assert_eq!(
+            resolve_dir(None, PathBuf::from("/fallback/data")),
+            PathBuf::from("/fallback/data")
+        );
+    }
+
+    #[test]
+    fn default_path_and_data_dir_honor_xdg_env_vars() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        let prev_config = std::env::var_os("XDG_CONFIG_HOME");
+        let prev_data = std::env::var_os("XDG_DATA_HOME");
+        // SAFETY: held under ENV_LOCK; no other test in this module mutates
+        // these vars concurrently, and we restore them before releasing.
+        unsafe {
+            std::env::set_var("XDG_CONFIG_HOME", "/tmp/shiki-test-config");
+            std::env::set_var("XDG_DATA_HOME", "/tmp/shiki-test-data");
+        }
+
+        let path = Config::default_path().expect("config path");
+        let data = Config::default_data_dir().expect("data dir");
+
+        match prev_config {
+            Some(v) => unsafe { std::env::set_var("XDG_CONFIG_HOME", v) },
+            None => unsafe { std::env::remove_var("XDG_CONFIG_HOME") },
+        }
+        match prev_data {
+            Some(v) => unsafe { std::env::set_var("XDG_DATA_HOME", v) },
+            None => unsafe { std::env::remove_var("XDG_DATA_HOME") },
+        }
+
+        assert_eq!(
+            path,
+            PathBuf::from("/tmp/shiki-test-config/shiki/config.toml")
+        );
+        assert_eq!(data, PathBuf::from("/tmp/shiki-test-data/shiki"));
+    }
 
     /// Every field in every table must have a `#[serde(default)]` — a
     /// hand-edited `config.toml` missing just one key from an otherwise
