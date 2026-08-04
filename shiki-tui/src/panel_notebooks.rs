@@ -13,7 +13,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let fg = hex_to_color(&app.theme.fg);
 
     let items: Vec<ListItem> = if app.notebooks.is_empty() {
-        vec![ListItem::new("  press `A` to create one")
+        vec![ListItem::new("  press `a` to create one")
             .style(Style::default().fg(hex_to_color(&app.theme.muted)))]
     } else {
         app.notebooks
