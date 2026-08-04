@@ -297,6 +297,9 @@
           <tr><td><code>U</code></td><td>Check for updates — modal; checks GitHub Releases in the background (never blocks the UI), shows "update available" if there's a newer version, and Enter downloads, verifies (against GitHub's own per-asset checksum), installs, and automatically relaunches into it</td></tr>
           <tr><td><code>u</code></td><td>Undo the last delete — restores the most recently deleted note/folder (or whole batch, from a Visual-mode delete) from the trash (<code>~/.config/shiki/trash/</code>) back to exactly where it came from. A single level of undo, not a full history: only the <em>most recent</em> delete is restorable this way; an older one is still on disk in the trash, just no longer reachable from here. With nothing to undo, reports that instead of doing anything</td></tr>
           <tr><td><code>s</code></td><td>Settings — near-full-screen, paged by tab. See <a href="#settings-deep-dive">the Settings deep dive</a> below</td></tr>
+          <tr><td><code>p</code></td><td>Scratchpad — open an in-memory editor; <code>Ctrl+S</code> saves its contents through the new-note title/template flow, while <code>Esc</code> discards it</td></tr>
+          <tr><td><code>B</code></td><td>Links — the same modal as PREVIEW's <code>L</code> (outgoing wikilinks / backlinks / unlinked mentions for the selected note), reachable from any panel without focusing PREVIEW first</td></tr>
+          <tr><td><code>t</code></td><td>Tasks — every <code>- [ ]</code> checkbox task across every notebook in one flat list, pending-only by default, sorted by urgency (overdue → due today → future → undated); every row carries its own muted location (<code>notebook/folders…/note title</code>) so where a task lives is always visible, even mid-scroll. <code>Enter</code>/<code>space</code> toggles the task directly in its source file and updates the row in place; <code>l</code>/<code>o</code> jumps to the note; <code>a</code> also shows completed tasks. An optional <code>@due(YYYY-MM-DD)</code> tag renders the date next to the task: overdue in the theme's error color, due today in warning, future in muted. Relative specs — <code>@due(tomorrow)</code>, <code>@due(+3d)</code>, <code>@due(+2w)</code>, <code>@due(fri)</code> — are pinned to the real date the moment the note is saved. Also scriptable as <code>shiki tasks</code> (see CLI commands)</td></tr>
         </tbody>
       </table>
 
@@ -372,7 +375,7 @@
           <tr><td><code>i</code></td><td>Edit inline (or the OS favorite editor if <code>general.use_favorite_editor</code>)</td></tr>
           <tr><td><code>E</code></td><td>Edit externally ($EDITOR)</td></tr>
           <tr><td><code>/</code></td><td>Fuzzy-jump to a note by title anywhere in the current notebook (any folder depth)</td></tr>
-          <tr><td><code>t</code></td><td>New/open today's daily note</td></tr>
+          <tr><td><code>t</code></td><td>New/open today's daily note. On first creation each day, a "Due today" section is appended after the template with every pending task due today or overdue, across every notebook — plain bullets linking back to each task's source note. Reopening later never re-injects or duplicates it</td></tr>
           <tr><td><code>m</code></td><td>Move the selected note <em>or</em> folder — prompts for a <code>notebook/path/within/it</code> target, prefilled with the current one; edit the trailing segments to move within the same notebook (missing folders are created), or replace the first segment to move to a different (existing) notebook. In <code>v</code> select mode, moves every selected item at once</td></tr>
           <tr><td><code>o</code></td><td>Cycle sort order (filename / title A-Z / date newest-first)</td></tr>
           <tr><td><code>T</code></td><td>Tree view — every folder and note in the notebook, fully expanded, in one scrollable overview; <code>j</code>/<code>k</code> move, <code>enter</code>/<code>l</code> jumps straight to the selected note, <code>esc</code>/<code>q</code> closes</td></tr>
@@ -393,7 +396,7 @@
           <tr><td><code>i</code></td><td>Edit inline (or the OS favorite editor if <code>general.use_favorite_editor</code>)</td></tr>
           <tr><td><code>E</code></td><td>Edit externally ($EDITOR)</td></tr>
           <tr><td><code>H</code></td><td>Note history — every commit that changed this specific note, newest first, real git history (not a separate versioning system). <code>j</code>/<code>k</code>/<code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> move, <code>Enter</code> views a revision's full content (frontmatter included, since that's what's actually in the commit), <code>r</code> reverts to the highlighted (or currently-viewed) revision — behind a confirmation, since it overwrites the current content. The revert itself doesn't commit; it shows up as a normal pending change, picked up by <code>s</code>/<code>u</code>/<code>auto_sync</code> like any other edit. The footer shows the count while reading a note (<code>{n} changes</code>)</td></tr>
-          <tr><td><code>L</code></td><td>Links — the selected note's outgoing <code>[[wikilinks]]</code> (resolved against every note in the notebook, any folder depth) plus every other note that links back to it ("Outgoing"/"Backlinks" sections; a section with nothing in it is omitted). <code>j</code>/<code>k</code>/<code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> move, <code>Enter</code> jumps to the selected note (an unresolved outgoing link reports that instead of jumping), <code>Esc</code>/<code>q</code> closes</td></tr>
+          <tr><td><code>L</code></td><td>Links — the selected note's outgoing <code>[[wikilinks]]</code> (resolved against every note in the notebook, any folder depth), every other note that links back to it, and notes that <em>mention</em> this note's title in plain text without linking to it ("Outgoing"/"Backlinks"/"Mentions (unlinked)" sections; a section with nothing in it is omitted). <code>j</code>/<code>k</code>/<code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> move, <code>Enter</code> jumps to the selected note (an unresolved outgoing link reports that instead of jumping), <code>c</code> on a mention row <em>repairs</em> the missed link — it wraps that note's plain-text mention into a real <code>[[wikilink]]</code> (preserving its casing) and the row visibly migrates to Backlinks — and <code>Esc</code>/<code>q</code> closes. Also reachable globally via leader+<code>B</code></td></tr>
           <tr><td><code>Ctrl</code>+click</td><td>Click a rendered <code>[[wikilink]]</code> to jump straight to the note it resolves to — a plain click still enters edit mode everywhere, including on top of a wikilink</td></tr>
         </tbody>
       </table>
@@ -469,6 +472,11 @@ shiki list -n work        # list notes in "work"
 shiki show &lt;note&gt;         # show rendered content (ANSI)
 shiki edit &lt;note&gt;         # edit with $EDITOR
 shiki search &lt;query&gt;      # search and show results
+shiki tasks               # every pending checkbox task across notebooks, urgency-sorted
+shiki tasks --overdue --count  # just the number — made for waybar/polybar/tmux status modules
+shiki tasks --today --json     # machine-readable, with due/overdue/location per task
+shiki graph               # [[wikilink]] connection graph, force-directed, drawn in the terminal
+shiki graph -n work --json     # nodes/edges/orphans as JSON, for graphviz/d3/gephi
 shiki sync                # git commit+push default notebook
 shiki sync -n work        # git sync in "work"
 shiki config              # show config path
@@ -898,6 +906,11 @@ check_update = "U"
 drawer = "b"
 undo_delete = "u"
 settings = "s"
+scratchpad = "p"
+# Same links modal as [keybindings.preview]'s own binding, from any panel.
+links = "B"
+# Global tasks view — every checkbox task in every notebook.
+tasks_panel = "t"
 
 [keybindings.notebooks]
 new = "a"

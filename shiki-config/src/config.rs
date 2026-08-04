@@ -195,6 +195,18 @@ pub struct GlobalKeybindings {
     pub settings: String,
     #[serde(default = "default_scratchpad_key")]
     pub scratchpad: String,
+    /// Opens the links modal for the selected note (outgoing wikilinks,
+    /// backlinks, and unlinked mentions) from anywhere — the same modal
+    /// PREVIEW's own `links` binding opens, reachable without having to
+    /// focus PREVIEW first. Field-level default for the same
+    /// backward-compatibility reason as `logs`/`toggle_favorite_editor`.
+    #[serde(default = "default_global_links_key")]
+    pub links: String,
+    /// Opens the global tasks view: every `- [ ]` checkbox across every
+    /// notebook, toggleable in place. Field-level default for the same
+    /// backward-compatibility reason as `logs`/`toggle_favorite_editor`.
+    #[serde(default = "default_tasks_panel_key")]
+    pub tasks_panel: String,
 }
 
 impl Default for GlobalKeybindings {
@@ -210,8 +222,18 @@ impl Default for GlobalKeybindings {
             undo_delete: default_undo_delete_key(),
             settings: default_settings_key(),
             scratchpad: default_scratchpad_key(),
+            links: default_global_links_key(),
+            tasks_panel: default_tasks_panel_key(),
         }
     }
+}
+
+fn default_global_links_key() -> String {
+    "B".into()
+}
+
+fn default_tasks_panel_key() -> String {
+    "t".into()
 }
 
 fn default_logs_key() -> String {

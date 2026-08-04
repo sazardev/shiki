@@ -3,12 +3,14 @@ pub mod daily;
 pub mod doctor;
 pub mod edit;
 pub mod export;
+pub mod graph;
 pub mod list;
 pub mod new;
 pub mod notebook;
 pub mod search;
 pub mod show;
 pub mod sync;
+pub mod tasks;
 pub mod theme;
 
 use anyhow::{Context, Result};

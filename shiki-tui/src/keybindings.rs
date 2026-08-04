@@ -22,6 +22,9 @@ pub enum Action {
     /// config, with a key to jump straight to editing `config.toml` itself.
     ToggleSettings,
     Scratchpad,
+    /// Opens the global tasks view: every `- [ ]` checkbox across every
+    /// notebook, toggleable in place without opening the note.
+    ToggleTasks,
     // Notebooks-focus
     NewNotebook,
     RenameNotebook,
@@ -129,6 +132,10 @@ impl KeyMaps {
         bind(&mut global, &cfg.global.undo_delete, Action::UndoDelete);
         bind(&mut global, &cfg.global.settings, Action::ToggleSettings);
         bind(&mut global, &cfg.global.scratchpad, Action::Scratchpad);
+        // The same links modal PREVIEW's own binding opens — global so
+        // "what links here?" is answerable without focusing PREVIEW first.
+        bind(&mut global, &cfg.global.links, Action::ShowLinks);
+        bind(&mut global, &cfg.global.tasks_panel, Action::ToggleTasks);
 
         let mut notebooks = HashMap::new();
         bind(&mut notebooks, &cfg.notebooks.new, Action::NewNotebook);
@@ -359,7 +366,8 @@ pub fn action_label(action: Action) -> &'static str {
         Action::EditInline => "edit (insert mode)",
         Action::EditExternal => "edit externally ($EDITOR)",
         Action::ShowHistory => "note history (view/revert)",
-        Action::ShowLinks => "links (wikilinks + backlinks)",
+        Action::ShowLinks => "links (outgoing / backlinks / mentions)",
+        Action::ToggleTasks => "tasks (all notebooks)",
     }
 }
 
@@ -387,7 +395,7 @@ pub fn action_icon(action: Action) -> char {
         Action::SortNotes => crate::icons::COLUMNS,
         Action::ToggleTreeView => crate::icons::TREE,
         Action::ToggleDates | Action::ShowHistory => crate::icons::HISTORY,
-        Action::ToggleVisual => crate::icons::CHECK,
+        Action::ToggleVisual | Action::ToggleTasks => crate::icons::CHECK,
         Action::CopyEntries => crate::icons::CLIPBOARD,
         Action::ShowLinks => crate::icons::LINK,
         Action::UndoDelete => crate::icons::UNDO,

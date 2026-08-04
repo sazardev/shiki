@@ -1123,7 +1123,49 @@ impl App {
             KeyCode::Home => self.link_selected = 0,
             KeyCode::End => self.link_selected = self.link_selectable_count().saturating_sub(1),
             KeyCode::Enter | KeyCode::Char('l') | KeyCode::Right => self.jump_to_link_selection(),
+            KeyCode::Char('c') => self.link_selected_mention(),
             _ => {}
+        }
+    }
+    /// `c` on a "Mentions (unlinked)" row: turns that note's plain-text
+    /// mention into a real `[[wikilink]]` (`wikilinks::link_mention` — the
+    /// repair to the missed link the section exists to surface). The modal
+    /// is rebuilt afterwards, so the row visibly migrates from Mentions to
+    /// Backlinks. A no-op on any other row kind.
+    fn link_selected_mention(&mut self) {
+        let Some(row) = crate::links_panel::selected_row(&self.link_rows, self.link_selected)
+        else {
+            return;
+        };
+        let crate::links_panel::LinkRow::Mention { note } = &self.link_rows[row] else {
+            return;
+        };
+        let mention_path = note.path.clone();
+        let mention_title = note.frontmatter.title.clone();
+        let Some(target) = self.selected_note().cloned() else {
+            return;
+        };
+        match shiki_core::wikilinks::link_mention(&mention_path, &target.frontmatter.title) {
+            Ok(true) => {
+                if let Some(nb) = self.selected_notebook() {
+                    let name = nb.name.clone();
+                    self.note_changed(&name);
+                }
+                self.refresh_notes_preserve_selection();
+                self.set_status(format!(
+                    "linked [[{}]] in '{mention_title}'",
+                    target.frontmatter.title
+                ));
+                // Rebuild so the mention shows up under Backlinks now —
+                // open_links re-reads everything from disk fresh.
+                self.open_links();
+            }
+            Ok(false) => {
+                self.set_status(format!(
+                    "no linkable mention left in '{mention_title}' \u{2014} note changed on disk?"
+                ));
+            }
+            Err(e) => self.set_status(format!("couldn't link mention: {e}")),
         }
     }
     /// The deep link: an outgoing link jumps to its resolved note (a broken
@@ -1150,7 +1192,8 @@ impl App {
                 self.set_status(format!("'{text}' doesn't match any note"));
                 return;
             }
-            crate::links_panel::LinkRow::Backlink { note } => {
+            crate::links_panel::LinkRow::Backlink { note }
+            | crate::links_panel::LinkRow::Mention { note } => {
                 (note.path.clone(), note.frontmatter.title.clone())
             }
             crate::links_panel::LinkRow::Header(_) => {
@@ -1179,6 +1222,116 @@ impl App {
         self.set_status(format!("opened '{title}'"));
     }
 
+    /// Opens the global tasks view: every checkbox task across every
+    /// notebook (`NotebookStore::all_notes`, the same walk global search
+    /// does on open), pending-only by default. Built fresh every time it
+    /// opens, same as the tags/links modals.
+    fn open_tasks(&mut self) {
+        self.tasks_show_done = false;
+        self.task_selected = 0;
+        self.rebuild_task_rows();
+        if self.task_rows.is_empty() {
+            self.set_status("no pending tasks in any notebook".into());
+            return;
+        }
+        self.show_tasks = true;
+    }
+    fn rebuild_task_rows(&mut self) {
+        let pool = self.store.all_notes().unwrap_or_default();
+        self.task_rows = crate::panel_tasks::build(&pool, self.tasks_show_done);
+    }
+    fn task_selectable_count(&self) -> usize {
+        self.task_rows.len()
+    }
+    fn handle_tasks_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => self.show_tasks = false,
+            KeyCode::Char('j') | KeyCode::Down => {
+                if self.task_selected + 1 < self.task_selectable_count() {
+                    self.task_selected += 1;
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.task_selected = self.task_selected.saturating_sub(1);
+            }
+            KeyCode::PageDown => {
+                self.task_selected = (self.task_selected + PAGE_STEP as usize)
+                    .min(self.task_selectable_count().saturating_sub(1));
+            }
+            KeyCode::PageUp => {
+                self.task_selected = self.task_selected.saturating_sub(PAGE_STEP as usize);
+            }
+            KeyCode::Home => self.task_selected = 0,
+            KeyCode::End => self.task_selected = self.task_selectable_count().saturating_sub(1),
+            KeyCode::Enter | KeyCode::Char(' ') => self.toggle_selected_task(),
+            KeyCode::Char('l') | KeyCode::Right | KeyCode::Char('o') => self.jump_to_task_note(),
+            KeyCode::Char('a') => {
+                self.tasks_show_done = !self.tasks_show_done;
+                self.rebuild_task_rows();
+                self.task_selected = self
+                    .task_selected
+                    .min(self.task_selectable_count().saturating_sub(1));
+            }
+            _ => {}
+        }
+    }
+    /// Flips the selected task's checkbox in its source file and updates
+    /// the row in place — deliberately *not* a rebuild, so a task checked
+    /// off while the pending-only filter is active stays visible (checked,
+    /// struck through) and can be immediately un-toggled instead of
+    /// vanishing out from under the cursor.
+    fn toggle_selected_task(&mut self) {
+        let Some(row) = self.task_rows.get(self.task_selected) else {
+            return;
+        };
+        let notebook = row.notebook.clone();
+        let note_path = row.note_path.clone();
+        let task = &row.task;
+        match shiki_core::tasks::toggle(&note_path, &task.raw_line, task.occurrence) {
+            Ok(toggled) => {
+                let done = toggled.done;
+                let task = &mut self.task_rows[self.task_selected].task;
+                task.done = toggled.done;
+                task.raw_line = toggled.raw_line;
+                task.occurrence = toggled.occurrence;
+                // A toggle is a real note edit: refresh the panels/caches
+                // underneath the modal and count it toward auto_sync, the
+                // same as any other save.
+                self.refresh_notes_preserve_selection();
+                self.note_changed(&notebook);
+                self.set_status(format!(
+                    "task {}",
+                    if done { "completed" } else { "reopened" }
+                ));
+            }
+            Err(e) => self.set_status(format!("couldn't toggle task: {e}")),
+        }
+    }
+    /// Cross-notebook jump to the selected task's note — same shape as
+    /// `jump_to_global_hit`, which is the other flow that can land on a
+    /// note in a *different* notebook than the selected one.
+    fn jump_to_task_note(&mut self) {
+        let Some(row) = self.task_rows.get(self.task_selected) else {
+            return;
+        };
+        let notebook = row.notebook.clone();
+        let note_path = row.note_path.clone();
+        if let Some(nb_idx) = self.notebooks.iter().position(|n| n.name == notebook) {
+            self.selected_notebook = nb_idx;
+            let nb_path = self.notebooks[nb_idx].path.clone();
+            self.notes_path = relative_folder(&note_path, &nb_path);
+            self.reload_notes();
+            if let Some(idx) = self.notes.iter().position(|n| n.path == note_path) {
+                self.selected_note = self.folders.len() + idx;
+            }
+            self.focus = Focus::Preview;
+            if let Some(note) = self.selected_note() {
+                let title = note.frontmatter.title.clone();
+                self.set_status(format!("opened '{title}'"));
+            }
+        }
+        self.show_tasks = false;
+    }
     /// The tags modal has two levels: the tag list itself, and (after
     /// drilling into one) the notes that carry it — reset to level 1 every
     /// time it opens, so it never reopens showing a stale drill-down from
@@ -1821,6 +1974,7 @@ impl App {
             && !self.show_logs
             && !self.show_tree
             && !self.show_links
+            && !self.show_tasks
             && !self.show_history
             && !self.show_update
             && !self.show_settings
@@ -2078,11 +2232,20 @@ impl App {
             }
         };
         let today = chrono::Local::now().date_naive();
+        // Today's due/overdue tasks across *every* notebook, injected only
+        // if the daily is actually being created (an existing one opens
+        // untouched — create_or_open ignores the agenda then).
+        let agenda = self
+            .store
+            .all_notes()
+            .ok()
+            .and_then(|pool| shiki_core::tasks::agenda_section(&pool, today));
         match shiki_core::daily::create_or_open(
             &nb,
             today,
             &templates_dir,
             &self.config.general.daily_template,
+            agenda.as_deref(),
         ) {
             Ok(note) => {
                 // Daily notes always live at the notebook root — jump the
@@ -2418,6 +2581,14 @@ impl App {
         }
         if let (Some(editor), Some(mut note)) = (editor, self.selected_note().cloned()) {
             note.body = editor.contents();
+            // Pin relative due specs (`@due(+3d)`, `@due(mon)`) to real
+            // dates now — they're relative to the day they were written,
+            // so save time is the one moment they can be resolved
+            // unambiguously.
+            let today = chrono::Local::now().date_naive();
+            if let Some(normalized) = shiki_core::tasks::normalize_due_tags(&note.body, today) {
+                note.body = normalized;
+            }
             let _ = note.save();
             self.note_changed(&note.frontmatter.notebook);
         }
@@ -2466,6 +2637,7 @@ impl App {
             Action::UndoDelete => self.undo_delete(),
             Action::ToggleSettings => self.toggle_settings(),
             Action::Scratchpad => self.start_scratchpad(),
+            Action::ToggleTasks => self.open_tasks(),
 
             Action::NewNotebook => self.start_input(PendingInput::NewNotebook, String::new()),
             Action::RenameNotebook => self.start_rename_notebook(),
@@ -4164,6 +4336,10 @@ impl App {
         }
         if self.show_links {
             self.handle_links_key(key);
+            return;
+        }
+        if self.show_tasks {
+            self.handle_tasks_key(key);
             return;
         }
         if self.show_history {

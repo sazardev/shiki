@@ -22,6 +22,12 @@ pub enum LinkRow {
     Backlink {
         note: Note,
     },
+    /// A note that mentions the current note's title in plain text without
+    /// linking to it (`wikilinks::unlinked_mentions`) — always jumpable,
+    /// same as a backlink.
+    Mention {
+        note: Note,
+    },
 }
 
 /// Builds the rows for `current`: its own outgoing links first (in the
@@ -53,6 +59,16 @@ pub fn build(current: &Note, notes: &[Note]) -> Vec<LinkRow> {
     if !backlinks.is_empty() {
         rows.push(LinkRow::Header("Backlinks"));
         rows.extend(backlinks);
+    }
+
+    let mentions: Vec<LinkRow> = wikilinks::unlinked_mentions(current, notes)
+        .into_iter()
+        .cloned()
+        .map(|note| LinkRow::Mention { note })
+        .collect();
+    if !mentions.is_empty() {
+        rows.push(LinkRow::Header("Mentions (unlinked)"));
+        rows.extend(mentions);
     }
 
     rows
@@ -124,6 +140,24 @@ mod tests {
         // Index 1 -> the Backlink row at position 3 (after its own header).
         assert_eq!(selected_row(&rows, 1), Some(3));
         assert_eq!(selected_row(&rows, 2), None);
+    }
+
+    #[test]
+    fn unlinked_mentions_get_their_own_section_after_backlinks() {
+        let current = note("a/hub.md", "Hub", "");
+        let linker = note("a/linker.md", "Linker", "See [[Hub]].");
+        let mentioner = note("a/mentioner.md", "Mentioner", "the hub is central");
+        let notes = vec![current.clone(), linker, mentioner];
+
+        let rows = build(&current, &notes);
+
+        assert!(matches!(rows[0], LinkRow::Header("Backlinks")));
+        assert!(matches!(rows[1], LinkRow::Backlink { .. }));
+        assert!(matches!(rows[2], LinkRow::Header("Mentions (unlinked)")));
+        assert!(
+            matches!(&rows[3], LinkRow::Mention { note } if note.frontmatter.title == "Mentioner")
+        );
+        assert_eq!(selectable_count(&rows), 2);
     }
 
     #[test]

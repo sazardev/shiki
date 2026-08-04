@@ -6,6 +6,7 @@ pub mod note;
 pub mod notebook;
 pub mod search;
 pub mod tags;
+pub mod tasks;
 pub mod templates;
 pub mod trash;
 pub mod update;
@@ -43,6 +44,10 @@ pub enum Error {
     /// already there.
     #[error("already exists: {0}")]
     DestinationExists(String),
+    /// A task toggle whose target line no longer exists in the file — the
+    /// note changed on disk between building the task list and toggling.
+    #[error("task not found in {0} — the note changed since the list was built")]
+    TaskNotFound(String),
     /// A folder move/copy whose destination is the source itself, or nested
     /// inside it — copying a folder into its own subtree would otherwise
     /// recurse forever (the freshly created destination becomes one of the

@@ -206,6 +206,8 @@ search, tree view) using the same list/selection they already navigate with `j`/
 | `b` | Notebook drawer — left-side sidebar, every notebook's git status in color (dirty/ahead/behind); `j`/`k` or click a row to jump to it, `n`/click "New" to create a notebook, `i`/click "Import" to clone from a pasted URL, `Esc`/`b` again closes |
 | `e` | Toggle `general.use_favorite_editor` on/off and persist it immediately — no need to hand-edit config.toml. The footer always shows which mode is active: the resolved editor name (e.g. `nvim`) when on, `native` (the built-in inline editor) when off |
 | `p` | Scratchpad — open an in-memory editor; `Ctrl+S` saves its contents through the new-note title/template flow, while `Esc` discards it |
+| `B` | Links — the same modal as PREVIEW's `L` (outgoing wikilinks / backlinks / unlinked mentions for the selected note), reachable from any panel without focusing PREVIEW first |
+| `t` | Tasks — every `- [ ]` checkbox task across every notebook in one flat list, pending-only by default, sorted by urgency (overdue → due today → future → undated); every row carries its own muted location (`notebook/folders…/note title`) so where a task lives is always visible, even mid-scroll. `Enter`/`space` toggles the task directly in its source file (a normal note edit — flows through auto-sync like any other change) and updates the row in place so it can be immediately un-toggled; `l`/`o` jumps to the note; `a` also shows completed tasks. An optional `@due(YYYY-MM-DD)` tag anywhere in the task text renders the date next to it: overdue in the theme's error color, due today in warning, future in muted. Relative specs — `@due(tomorrow)`, `@due(+3d)`, `@due(+2w)`, `@due(fri)` — are pinned to the real date the moment the note is saved (inline or external editor), since they're relative to the day they were written. Also scriptable as `shiki tasks` (see CLI commands) |
 | `U` | Check for updates — modal; checks GitHub Releases in the background (never blocks the UI), shows "update available" if there's a newer version, and `Enter` downloads, verifies (against GitHub's own per-asset checksum), installs, and automatically relaunches into it |
 | `u` | Undo the last delete — restores the most recently deleted note/folder (or whole batch, from a Visual-mode delete) from the trash (`~/.config/shiki/trash/`) back to exactly where it came from. A single level of undo, not a full history: only the *most recent* delete is restorable this way; an older one is still on disk in the trash, just no longer reachable from here. With nothing to undo, reports that instead of doing anything |
 | `s` | Settings — near-full-screen, paged by tab (`←`/`→` switches GENERAL/THEME/GIT/EDITOR/NOTEBOOKS/SNIPPETS, `j`/`k` moves within one). Doesn't repeat the keybindings tables — `?` (which-key) already covers those live. Every tab is editable with `Enter`: GENERAL/GIT booleans (`use_favorite_editor`, `auto_commit`/`auto_push`/`sign_commits`/`auto_sync`) toggle in place and save immediately; every other GENERAL/GIT field opens a prompt prefilled with its current value; THEME's `name` opens the theme picker (live preview, same as leader+`c`) and `overrides` stays informational; EDITOR is six plain boolean toggles for the native note editor's UX (see `[editor]` below); NOTEBOOKS lists every notebook's actual git remote (redacted) and drills into one to edit its remote plus its `auto_push`/`auto_sync`/`auto_sync_every` overrides (booleans cycle inherit → true → false → inherit); SNIPPETS supports `a` (new snippet) and `d` (delete, with confirmation), and drilling into one edits its `label` and its full multi-line `body` through the same inline editor a note's own body uses. `i`/`E` still jump straight to editing `config.toml` itself for anything not covered above (inline or externally, same convention as editing a note); on save, the config is re-read, re-applied, and takes effect immediately (no restart) — an invalid edit is reported and neither written nor applied, keeping the previous config running. `h`/`Esc`/`Backspace` backs out of a drilled-into notebook/snippet a level; `Esc`/`q` at the top level closes |
@@ -243,7 +245,7 @@ sync attempt (manual or automatic) just tries the push again.
 | `i` | Edit inline (or the OS favorite editor if `general.use_favorite_editor`) |
 | `E` | Edit externally ($EDITOR) |
 | `/` | Fuzzy-jump to a note by title anywhere in the current notebook (any folder depth) |
-| `t` | New/open today's daily note |
+| `t` | New/open today's daily note. On first creation each day, a "## Due today" section is appended after the template with every pending task due today or overdue, across every notebook — plain bullets with a `[[wikilink]]` back to each task's source note (deliberately not checkbox copies, which would double-count in the tasks view). Reopening later never re-injects or duplicates it |
 | `m` | Move the selected note *or* folder — prompts for a `notebook/path/within/it` target, prefilled with the current one; edit the trailing segments to move within the same notebook (missing folders are created), or replace the first segment to move to a different (existing) notebook. In `v` select mode, moves every selected item at once |
 | `o` | Cycle sort order (filename / title A-Z / date newest-first) |
 | `T` | Tree view — every folder and note in the notebook, fully expanded, in one scrollable overview; `j`/`k` move, `enter`/`l` jumps straight to the selected note, `esc`/`q` closes |
@@ -258,7 +260,7 @@ sync attempt (manual or automatic) just tries the push again.
 | `i` | Edit inline (or the OS favorite editor if `general.use_favorite_editor`) |
 | `E` | Edit externally ($EDITOR) |
 | `H` | Note history — every commit that changed this specific note, newest first, real git history (not a separate versioning system). `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` views a revision's full content (frontmatter included, since that's what's actually in the commit), `r` reverts to the highlighted (or currently-viewed) revision — behind a confirmation, since it overwrites the current content. The revert itself doesn't commit; it shows up as a normal pending change, picked up by `s`/`u`/`auto_sync` like any other edit. The footer shows the count while reading a note (`{n} changes`) |
-| `L` | Links — the selected note's outgoing `[[wikilinks]]` (resolved against every note in the notebook, any folder depth) plus every other note that links back to it ("Outgoing"/"Backlinks" sections; a section with nothing in it is omitted). `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` jumps to the selected note (an unresolved outgoing link reports that instead of jumping), `Esc`/`q` closes |
+| `L` | Links — the selected note's outgoing `[[wikilinks]]` (resolved against every note in the notebook, any folder depth), every other note that links back to it, and notes that *mention* this note's title in plain text without linking to it ("Outgoing"/"Backlinks"/"Mentions (unlinked)" sections; a section with nothing in it is omitted). `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` jumps to the selected note (an unresolved outgoing link reports that instead of jumping), `c` on a mention row *repairs* the missed link — it wraps that note's plain-text mention into a real `[[wikilink]]` (preserving its casing) and the row visibly migrates to Backlinks — and `Esc`/`q` closes. Also reachable globally via leader+`B` |
 
 Mouse: a plain click over a note's rendered body jumps straight into the inline editor with the
 cursor on the clicked line — a mouse-only alternative to `i`/vim motions. Click-and-drag instead
@@ -342,6 +344,11 @@ shiki list -n work        # list notes in "work"
 shiki show <note>         # show rendered content (ANSI)
 shiki edit <note>         # edit with $EDITOR
 shiki search <query>      # search and show results
+shiki tasks               # every pending checkbox task across notebooks, urgency-sorted
+shiki tasks --overdue --count  # just the number — made for waybar/polybar/tmux status modules
+shiki tasks --today --json     # machine-readable, with due/overdue/location per task
+shiki graph               # [[wikilink]] connection graph, force-directed, drawn in the terminal
+shiki graph -n work --json     # nodes/edges/orphans as JSON, for graphviz/d3/gephi
 shiki sync                # git commit+push default notebook
 shiki sync -n work        # git sync in "work"
 shiki config              # show config path
@@ -498,6 +505,11 @@ check_update = "U"
 drawer = "b"
 undo_delete = "u"
 settings = "s"
+scratchpad = "p"
+# Same links modal as [keybindings.preview]'s own binding, from any panel.
+links = "B"
+# Global tasks view — every checkbox task in every notebook.
+tasks_panel = "t"
 
 [keybindings.notebooks]
 new = "a"

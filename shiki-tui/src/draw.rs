@@ -6,7 +6,7 @@ use crate::icons;
 use crate::render::{hex_to_color, panel_block};
 use crate::{
     layout, panel_drawer, panel_notebooks, panel_notes, panel_preview, panel_settings, panel_tags,
-    status_bar, which,
+    panel_tasks, status_bar, which,
 };
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
@@ -176,6 +176,10 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     if app.show_links {
         render_links(frame, frame.area(), app);
+    }
+
+    if app.show_tasks {
+        panel_tasks::render(frame, frame.area(), app);
     }
 
     if app.show_history {
@@ -487,11 +491,19 @@ fn render_links(frame: &mut Frame, frame_area: Rect, app: &App) {
                     Style::default().fg(fg),
                 )))
             }
+            // A mention is a *candidate* link, not an existing one — muted
+            // so it reads as weaker than a real backlink at a glance.
+            crate::links_panel::LinkRow::Mention { note } => {
+                ListItem::new(Line::from(Span::styled(
+                    format!("  {} {}", icons::SEARCH, note.frontmatter.title),
+                    Style::default().fg(muted),
+                )))
+            }
         })
         .collect();
     let highlight_symbol = format!("{} ", icons::ARROW);
     let title = format!(
-        " {}  Links  \u{2014}  enter jump \u{B7} esc/q close ",
+        " {}  Links  \u{2014}  enter jump \u{B7} c link mention \u{B7} esc/q close ",
         icons::LINK
     );
     let list = List::new(items)

@@ -615,6 +615,15 @@ pub struct App {
     /// Index into just the selectable rows of `link_rows` (section headers
     /// are display-only) — same shape as `tree_selected`.
     pub(crate) link_selected: usize,
+    pub show_tasks: bool,
+    pub(crate) task_rows: Vec<crate::panel_tasks::TaskRow>,
+    /// Index into just the selectable rows of `task_rows` (per-note headers
+    /// are display-only) — same shape as `link_selected`.
+    pub(crate) task_selected: usize,
+    /// Whether the tasks modal also shows already-done tasks (`a` inside
+    /// the modal flips it and rebuilds) — off on every open, same
+    /// reset-to-top convention as `toggle_tags`.
+    pub(crate) tasks_show_done: bool,
     /// True right after the leader key is pressed, waiting for the next key
     /// to resolve against the `global` scope.
     pub leader_pending: bool,
@@ -942,6 +951,10 @@ impl App {
             show_links: false,
             link_rows: Vec::new(),
             link_selected: 0,
+            show_tasks: false,
+            task_rows: Vec::new(),
+            task_selected: 0,
+            tasks_show_done: false,
             leader_pending: false,
             preview_scroll: 0,
             preview_selection: None,
@@ -2045,6 +2058,18 @@ pub fn run<B: Backend<Error = io::Error>>(
             } else {
                 let notebook_name = app.selected_notebook().map(|nb| nb.name.clone());
                 suspend_and_edit(terminal, &editor, &path)?;
+                // Same relative-`@due` pinning the inline editor's save
+                // does — an external edit lands on disk directly, so the
+                // file is re-read and rewritten only if something actually
+                // normalized.
+                if let Ok(contents) = std::fs::read_to_string(&path) {
+                    let today = chrono::Local::now().date_naive();
+                    if let Some(normalized) =
+                        shiki_core::tasks::normalize_due_tags(&contents, today)
+                    {
+                        let _ = std::fs::write(&path, normalized);
+                    }
+                }
                 app.refresh_notes_preserve_selection();
                 if let Some(notebook_name) = notebook_name {
                     app.note_changed(&notebook_name);

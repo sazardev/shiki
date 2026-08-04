@@ -91,6 +91,48 @@ enum Commands {
         #[arg(long, value_enum, default_value = "html")]
         format: commands::export::ExportFormat,
     },
+    /// Lists checkbox tasks (`- [ ]`) across notebooks — the TUI's tasks
+    /// view (leader+`t`), scriptable. `--count`/`--json` are made for
+    /// status bars: e.g. `shiki tasks --overdue --count` in a waybar/
+    /// polybar/tmux module.
+    Tasks {
+        /// Only tasks from this notebook (default: all notebooks).
+        #[arg(short = 'n', long)]
+        notebook: Option<String>,
+        /// Only overdue tasks (due before today). Combinable with
+        /// `--today` for "due today or earlier".
+        #[arg(long)]
+        overdue: bool,
+        /// Only tasks due exactly today.
+        #[arg(long)]
+        today: bool,
+        /// Include already-completed tasks too.
+        #[arg(long)]
+        all: bool,
+        /// Prints just the number of matching tasks — for status bars.
+        #[arg(long, conflicts_with = "json")]
+        count: bool,
+        /// Emits a JSON array instead of plain text — for scripting.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Renders the `[[wikilink]]` connection graph of your notes as a
+    /// force-directed layout right in the terminal — hubs (`◉`) pull their
+    /// linked notes around them, orphans (`○`) drift free and are listed
+    /// below.
+    Graph {
+        /// Only this notebook's graph (default: all notebooks — links
+        /// never cross notebooks, so each renders as its own cluster).
+        #[arg(short = 'n', long)]
+        notebook: Option<String>,
+        /// Canvas width in columns (default: the terminal's own width).
+        #[arg(long)]
+        width: Option<u16>,
+        /// Emits nodes/edges/orphans as JSON instead of drawing — for
+        /// piping into real graph tooling (graphviz, gephi, d3).
+        #[arg(long)]
+        json: bool,
+    },
     /// Shows the path to the config file
     Config,
     /// Checks the environment (config, data dir, git, editor, terminal, notebooks)
@@ -284,6 +326,29 @@ fn main() -> Result<()> {
             let notebook = ctx.notebook_name(notebook);
             commands::export::run(&ctx.store, &notebook, &out, format)
         }
+        Some(Commands::Tasks {
+            notebook,
+            overdue,
+            today,
+            all,
+            count,
+            json,
+        }) => commands::tasks::run(
+            &ctx.store,
+            notebook.as_deref(),
+            &commands::tasks::Filters {
+                overdue,
+                today,
+                all,
+            },
+            json,
+            count,
+        ),
+        Some(Commands::Graph {
+            notebook,
+            width,
+            json,
+        }) => commands::graph::run(&ctx.store, notebook.as_deref(), width, json),
         Some(Commands::Config) => commands::config::run(),
         Some(Commands::Doctor) => unreachable!("handled before Context::load() above"),
         Some(Commands::Notebook { action }) => match action {

@@ -8,6 +8,44 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ### Added
 
+- `shiki tasks` — the tasks view as a scriptable CLI command: pending tasks across every notebook,
+  urgency-sorted, with `--overdue`/`--today`/`--all`/`--notebook` filters, `--json` for scripting,
+  and `--count` (just the number) made for waybar/polybar/tmux status modules — e.g.
+  `shiki tasks --overdue --count` as a "2 overdue" bar widget.
+- `shiki graph` — the `[[wikilink]]` connection graph drawn right in the terminal: a deterministic
+  force-directed layout (Fruchterman–Reingold on a char canvas) where hubs (`◉`) pull their linked
+  notes around them, edges render as `╱╲─│` lines, and orphans (`○`, notes with no links in or
+  out) drift free and are listed below. `--notebook` scopes it, `--width` overrides the canvas,
+  `--json` emits nodes/edges/orphans for graphviz/d3/gephi, and graphs past 60 notes show the
+  most-connected ones rather than an unreadable hairball.
+- Daily notes now open with today's agenda: on first creation each day, a "## Due today" section
+  is appended after the template listing every pending task due today or overdue across every
+  notebook — plain bullets with a `[[wikilink]]` back to each task's source note (deliberately not
+  checkbox copies, which would double-count in the tasks view). Reopening an existing daily never
+  re-injects or duplicates it. Works in both the TUI (`t`) and `shiki daily`.
+- Relative due dates: `@due(tomorrow)`, `@due(+3d)`, `@due(+2w)`, `@due(fri)` (next such weekday)
+  are pinned to their resolved `@due(YYYY-MM-DD)` form the moment the note is saved — inline or
+  external editor — since a relative spec is relative to the day it was written. ISO dates and
+  unrecognized specs are left byte-for-byte untouched.
+- `c` in the links modal on a "Mentions (unlinked)" row repairs the missed link: the mentioning
+  note's plain-text mention is wrapped into a real `[[wikilink]]` in place (preserving its casing,
+  skipping text already inside links), and the row visibly migrates to Backlinks.
+
+- Global tasks view (leader+`t`): every `- [ ]` checkbox task across every notebook in one modal,
+  sorted by urgency (overdue first, then due today, then future, then undated), each row showing
+  its location (`notebook/folders…/note title`) muted alongside the task so it's never lost while
+  scrolling. `Enter`/`space` toggles a task directly in its source file (the edit flows through
+  the same git/auto-sync machinery as any other note change), `l`/`o` jumps to the note it lives
+  in, `a` also shows already-completed tasks. Tasks support an optional `@due(YYYY-MM-DD)` tag —
+  overdue dates render in the theme's error color, today's in warning, future ones muted.
+- `shiki doctor` now includes the new `links`/`tasks_panel` global keybindings in its collision
+  check — a config that customized `theme_picker = "t"` (colliding with the new tasks default)
+  gets flagged instead of one of the two actions silently not working.
+- Unlinked mentions in the links modal: notes that mention the current note's title in plain text
+  without actually `[[linking]]` to it get their own "Mentions (unlinked)" section under
+  Backlinks — candidate links you probably meant to make, jumpable like any backlink.
+- The links modal is now reachable globally via leader+`B` from any panel, not only through
+  PREVIEW's own `L` binding.
 - `shiki notebook delete <name> --yes` — the CLI had no way to delete a notebook at all, despite
   the TUI supporting it; `--yes` is required (mirrors the TUI's own confirm dialog) since this
   permanently removes the notebook's directory and every note in it.

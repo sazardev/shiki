@@ -305,6 +305,8 @@ fn check_keybinding_health(config: &Config, r: &mut Report) {
                 ("undo_delete", kb.global.undo_delete.as_str()),
                 ("settings", kb.global.settings.as_str()),
                 ("scratchpad", kb.global.scratchpad.as_str()),
+                ("links", kb.global.links.as_str()),
+                ("tasks_panel", kb.global.tasks_panel.as_str()),
             ],
         ),
         (

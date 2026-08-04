@@ -688,6 +688,105 @@ the links modal's (`leader+L`) existing jump handler specifically so this featur
 it — an unresolved link (no matching note) reports that in the status message rather than jumping
 anywhere or erroring.
 
+**The links modal has a third section, "Mentions (unlinked)" (`wikilinks::unlinked_mentions` +
+`LinkRow::Mention`), and is reachable globally via leader+`B`, not only PREVIEW's `L`.** A mention
+is a note whose body contains the current note's title as plain text (case-insensitive substring)
+without actually `[[linking]]` to it — notes that already link are excluded even if they *also*
+mention the title elsewhere, since they're backlinks, not missed links. The global binding is the
+same `Action::ShowLinks` bound in both the `global` and `preview` scope maps (two entries in
+which-key, one handler) — `open_links` already guards on "select a note first", so resolving it
+from any focus was free. Mentions render muted with a search icon, deliberately weaker-looking
+than a real backlink, because they're candidates, not facts.
+
+**The global tasks view (leader+`t`, `shiki-core/src/tasks.rs` + `shiki-tui/src/panel_tasks.rs` +
+`App::open_tasks`/`handle_tasks_key`) toggles checkboxes in the source file by *content address*,
+never by line index.** `tasks::extract(body)` is a pure function (unit-tested without I/O) finding
+`- [ ]`/`- [x]` lines plus an optional `@due(YYYY-MM-DD)` tag (malformed dates are just text, not
+errors); each `Task` carries its exact `raw_line` and its `occurrence` index among *identical*
+lines, and `tasks::toggle(path, raw_line, occurrence)` re-reads the file fresh and matches on
+those — a stored line number would be invalidated by any edit between building the list and
+toggling (the modal sits open indefinitely while background syncs/external edits can rewrite the
+file; a vanished line is a clear `Error::TaskNotFound`, not a flip of whatever line ended up at
+that index). Lines inside the leading `---` frontmatter block are excluded from occurrence
+counting on both sides, so YAML that happens to look like a checkbox can't shift the count.
+`toggle` returns `Toggled { done, raw_line, occurrence }` — the flipped line's *new* address, which
+the TUI writes back into the row so a second toggle of the same row matches the file's new content
+(the returned occurrence matters in the edge where the flip makes the line identical to a
+pre-existing twin). Toggling updates the row **in place**, deliberately not a rebuild: with the
+default pending-only filter a rebuild would make a just-checked task vanish out from under the
+cursor with no way to immediately un-toggle it. Each toggle is a real note edit and is routed
+through `refresh_notes_preserve_selection()` + `note_changed(notebook)` so panels/caches refresh
+and auto_sync counts it like any other save. `panel_tasks::TaskRow` is a **flat list, not the
+header-interspersed shape links/tree use** — it started as the `LinkRow`-style
+headers-plus-`selected_row`-mapping design, and was flattened after Omar asked for each task to
+say where it lives: a per-note header scrolls out of view while its tasks are still on screen, so
+every row carries its own muted `location` (`"{notebook}/{folders…}/{note title}"`, human title
+not file slug, matching the NOTES panel) instead. Rows are sorted by urgency —
+`sort_by_key(|r| (due.is_none(), due))`, dated-ascending first then undated in walk order (the
+`is_none` flip matters: `Option`'s derived ordering would otherwise float `None` *above* overdue) —
+built from the same `NotebookStore::all_notes` walk global search uses; the cross-notebook jump
+(`l`/`o`, `jump_to_task_note`) mirrors `jump_to_global_hit`. Due dates color by urgency (overdue →
+`theme.error`, today → `theme.warning`, else muted; a *done* task's date is always muted — no
+longer actionable). Note the default keys don't collide despite both being `t`: leader+`t` (tasks)
+resolves against the `global` map, NOTES-scope `t` (daily note) against the `notes` map. But a
+*user's own* config can collide — Omar's real config had `theme_picker = "t"` (a personal
+customization; the shipped default was always `"c"`), which silently lost to `tasks_panel`'s new
+default since `KeyMaps::from_config` binds into a plain `HashMap` where the last insert wins.
+**`shiki doctor`'s keybinding-collision check is a hardcoded field list
+(`doctor.rs`'s `scopes` array), not derived from the config struct — any new keybinding field must
+be added there by hand or collisions on it are invisible to doctor**, which is exactly how the
+`theme_picker`/`tasks_panel` clash went undetected until it was hit live (fixed: both `links` and
+`tasks_panel` are in the list now, and doctor flags that config with "are all bound to the same
+key — only one of them actually works").
+
+**`shiki tasks`/`shiki graph` (CLI) and the TUI tasks modal share their formatting through
+shiki-core, not by parallel implementations.** `tasks::location_of` is the single source of the
+`"{notebook}/{folders…}/{title}"` string both show (same extraction as `git_status_color` being
+shared by footer+drawer — two surfaces describing the same thing must go through one function).
+`shiki tasks --count` exists specifically for status bars (waybar/polybar/tmux) and prints *only*
+a number; `--json` includes a precomputed `overdue` bool per task so a bar script doesn't need to
+re-derive date math. `shiki graph` (`shiki-cli/src/commands/graph.rs`) renders
+`wikilinks::edges`/`orphans` via a **deterministic** Fruchterman–Reingold layout — seeded by a
+golden-angle spiral, no RNG, so the same notebook draws the same picture every run (a graph that
+reshuffles per invocation reads as noise). Y-distances are weighted 2× during force calculation to
+compensate for terminal cells being ~2:1 tall:wide, else clusters render vertically squashed.
+Edges draw first and only into `Cell::Empty`; node markers and labels always win. Graphs past
+`MAX_NODES` (60) keep only the most-connected notes and say so. Links never resolve across
+notebooks (title resolution is per-notebook by construction), so the all-notebooks graph is
+naturally disjoint clusters — don't "fix" that by resolving titles globally; two notebooks can
+legitimately have different notes with the same title.
+
+**Relative `@due` specs are pinned at save time, never at read time** —
+`tasks::parse_relative_due`/`normalize_due_tags` (`tomorrow`/`tom`, `+N`/`+Nd`/`+Nw`, weekday
+names meaning *next* such weekday, never today). A relative spec is relative to the day it was
+written, so read-time interpretation would silently shift the date every day the note stays open.
+Both save paths normalize: `save_and_exit_edit`'s note branch (body only) and the external-edit
+finalize in `run()` (re-reads the file, rewrites only if something actually normalized). `extract`
+itself stays ISO-only on purpose — a file edited outside shiki keeps its relative spec as plain
+text (due=None) until some shiki save path touches it, rather than shiki guessing a base date.
+ISO dates and unrecognized junk are left byte-for-byte untouched: normalization only resolves,
+never invents.
+
+**The daily note's "## Due today" agenda (`tasks::agenda_section`) is injected only on creation,
+and deliberately as plain bullets + `[[wikilinks]]`, not checkbox copies** — a `- [ ]` copy would
+be extracted as a second, independent task (double-counted in the tasks view, and checking the
+copy wouldn't complete the original). `daily::create_or_open` takes `agenda: Option<&str>` and
+ignores it entirely when the daily already exists, so reopening later in the day can't duplicate
+the section or clobber edits. Both callers (TUI `create_daily_note`, CLI `commands/daily.rs`)
+build it from `store.all_notes()` — the agenda spans every notebook, not just the daily's own.
+Known accepted wart: a cross-notebook task's `[[link]]` won't resolve from the daily's notebook
+(resolution is notebook-scoped); the bullet still names the note.
+
+**`c` in the links modal (`link_selected_mention` → `wikilinks::link_mention`) repairs a mention
+into a real link, editing the *mentioning* note's file in place.** `link_mention` wraps the first
+plain-text occurrence outside existing `[[...]]` spans (skipping frontmatter), preserving the
+mention's own casing — the resolver is case-insensitive so `[[proyecto shiki]]` still resolves to
+"Proyecto shiki". Byte offsets found on a lowercased copy are re-verified against the original
+before use (`find_unlinked`'s doc comment explains the exotic-codepoint shift risk). After a
+successful link the modal rebuilds via `open_links`, so the row visibly migrates from Mentions to
+Backlinks; `Ok(false)` ("nothing linkable left") is a status message, not an error — it means the
+file changed since the mention was detected.
+
 **The theme picker's `Enter` (and `shiki theme set`) only reset `config.theme.overrides` when the
 base theme name is actually *changing*, not on every confirm/set.** Both used to zero out
 `ThemeOverrides` unconditionally — even re-confirming the theme that was already active with no
