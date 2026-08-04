@@ -2,6 +2,12 @@
 //! `use_favorite_editor` config option — an alternative to always opening
 //! the built-in inline editor or a hardcoded `$EDITOR`.
 
+// Only used by `desktop_exec_command` below, which is Linux-only — a
+// pre-existing unconditional import here was unused (and thus a clippy
+// error under `-D warnings`) on every other target; caught once CI's
+// `fmt-and-clippy` job actually started running on macOS/Windows too,
+// instead of only ubuntu-latest.
+#[cfg(target_os = "linux")]
 use std::path::PathBuf;
 
 /// Resolves the editor to launch, in priority order:

@@ -511,12 +511,35 @@ fn check_unknown_config_keys(raw: &str, r: &mut Report) {
     let Ok(raw_value) = toml::from_str::<toml::Value>(raw) else {
         return; // already reported as invalid TOML by the caller
     };
-    let Ok(canonical) = toml::Value::try_from(Config::default()) else {
+    // `toml::Value::try_from` omits a struct field entirely when it's a
+    // `None`-valued `Option<T>` — which `Config::default()` alone would be
+    // for every one of these: `general.data_dir`, all 19
+    // `ThemeOverrides` slots, `NotebookGitOverride`'s `auto_push`/
+    // `auto_sync`/`auto_sync_every`/`path`, and `SnippetConfig.label`. A
+    // canonical shape built straight from `Config::default()` would then
+    // have *none* of those keys at all, so setting any single one of them
+    // — every one a real, documented feature — got flagged as "unrecognized"
+    // (caught in review before merge: a config with `theme.bg`,
+    // `notebooks.personal.auto_push`, or `snippets.todo.label` set falsely
+    // warned on all three). Fixed by explicitly populating every such field
+    // with `Some(_)` in the shapes below, so its key actually appears.
+    let mut canonical_config = Config::default();
+    canonical_config.general.data_dir = Some(String::new());
+    canonical_config.theme.overrides =
+        shiki_config::config::ThemeOverrides::from_theme(&shiki_config::Theme::terminal_default());
+    let Ok(canonical) = toml::Value::try_from(canonical_config) else {
         return;
     };
-    let notebook_shape = toml::Value::try_from(NotebookGitOverride::default()).ok();
+    let notebook_shape = toml::Value::try_from(NotebookGitOverride {
+        auto_push: Some(false),
+        auto_sync: Some(false),
+        auto_sync_every: Some(1),
+        path: Some(String::new()),
+        hidden: false,
+    })
+    .ok();
     let snippet_shape = toml::Value::try_from(SnippetConfig {
-        label: None,
+        label: Some(String::new()),
         body: String::new(),
     })
     .ok();
@@ -776,5 +799,69 @@ fn check_snippet_health(config: &Config, r: &mut Report) {
                 triggers.join("] / [snippets.")
             ),
         );
+    }
+}
+
+#[cfg(test)]
+mod check_unknown_config_keys_tests {
+    use super::*;
+
+    #[test]
+    fn does_not_flag_legitimate_optional_fields_as_unrecognized() {
+        // Every one of these is a real, `Option<T>`-typed field that's
+        // `None` in `Config::default()` — a naive canonical shape built
+        // straight from `Config::default()` (via `toml::Value::try_from`,
+        // which omits `None` fields entirely) flagged all of them as
+        // typos the first time this check was written, since setting any
+        // one of them meant its key simply didn't exist in the "known"
+        // shape to compare against.
+        let raw = r##"
+[general]
+default_notebook = "personal"
+data_dir = "/some/custom/path"
+
+[theme]
+name = "gruvbox-dark"
+bg = "#123456"
+
+[notebooks.personal]
+auto_push = true
+auto_sync_every = 5
+path = "/some/notebook/path"
+
+[snippets.todo]
+label = "Todo item"
+body = "- [ ] "
+"##;
+        let mut r = Report::new();
+        check_unknown_config_keys(raw, &mut r);
+        assert_eq!(
+            r.warn, 0,
+            "no legitimate field should be flagged as unrecognized"
+        );
+        assert_eq!(r.ok, 1);
+    }
+
+    #[test]
+    fn still_flags_a_real_typo() {
+        let raw = r#"
+[general]
+remeber_last_session = true
+"#;
+        let mut r = Report::new();
+        check_unknown_config_keys(raw, &mut r);
+        assert_eq!(r.warn, 1);
+        assert_eq!(r.ok, 0);
+    }
+
+    #[test]
+    fn flags_a_nested_notebook_override_typo() {
+        let raw = r#"
+[notebooks.work]
+auto_puush = true
+"#;
+        let mut r = Report::new();
+        check_unknown_config_keys(raw, &mut r);
+        assert_eq!(r.warn, 1);
     }
 }
