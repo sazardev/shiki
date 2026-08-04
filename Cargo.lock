@@ -2955,6 +2955,7 @@ dependencies = [
  "shiki-core",
  "shiki-tui",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber",
 ]

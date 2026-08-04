@@ -1,7 +1,7 @@
 mod commands;
 mod tui;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use clap::{Parser, Subcommand};
 use shiki_config::Config;
 use shiki_core::NotebookStore;
@@ -77,9 +77,23 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum NotebookAction {
-    Create { name: String },
+    Create {
+        name: String,
+    },
     List,
-    Rename { old: String, new: String },
+    Rename {
+        old: String,
+        new: String,
+    },
+    /// Permanently deletes a notebook and every note in it — irreversible,
+    /// so it requires `--yes` rather than deleting on the bare name alone
+    /// (the TUI's equivalent action is gated behind its own confirm
+    /// dialog; this is the CLI's version of that same guard).
+    Delete {
+        name: String,
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -109,12 +123,11 @@ impl Context {
         let config = Config::load_or_init(&config_path)?;
         let templates_dir = Config::default_templates_dir()?;
         shiki_core::templates::ensure_defaults(&templates_dir)?;
-        let data_dir = config
-            .general
-            .data_dir
-            .as_ref()
-            .map(PathBuf::from)
-            .unwrap_or_else(|| Config::default_data_dir().expect("valid data dir"));
+        let data_dir = match config.general.data_dir.as_ref() {
+            Some(dir) => PathBuf::from(dir),
+            None => Config::default_data_dir()
+                .context("could not determine a default data directory (no $HOME/$XDG_DATA_HOME?) — set general.data_dir in config.toml")?,
+        };
         let custom_paths = config.notebook_custom_paths();
         let store = NotebookStore::new_with_custom_paths(data_dir, custom_paths);
         Ok(Self { config, store })
@@ -122,6 +135,21 @@ impl Context {
 
     fn notebook_name(&self, override_name: Option<String>) -> String {
         override_name.unwrap_or_else(|| self.config.general.default_notebook.clone())
+    }
+
+    /// The editor command to actually launch — `general.use_favorite_editor`
+    /// (the TUI's `i` binding already resolves this way) means the CLI
+    /// should too, rather than always using the plain configured
+    /// `general.editor` regardless of that setting. Falls back to the
+    /// configured editor when favorite-editor detection finds nothing, same
+    /// as the TUI's own fallback.
+    fn resolve_editor(&self) -> String {
+        if self.config.general.use_favorite_editor {
+            if let Some(fav) = shiki_core::editor::detect_favorite_editor() {
+                return fav;
+            }
+        }
+        self.config.general.editor.clone()
     }
 }
 
@@ -145,7 +173,8 @@ fn main() -> Result<()> {
         None => tui::launch(ctx.config, ctx.store),
         Some(Commands::New { title, notebook }) => {
             let notebook = ctx.notebook_name(notebook);
-            commands::new::run(&ctx.store, &notebook, &title, &ctx.config.general.editor)
+            let editor = ctx.resolve_editor();
+            commands::new::run(&ctx.store, &notebook, &title, &editor)
         }
         Some(Commands::List { notebook }) => {
             let notebook = ctx.notebook_name(notebook);
@@ -153,7 +182,8 @@ fn main() -> Result<()> {
         }
         Some(Commands::Edit { note, notebook }) => {
             let notebook = ctx.notebook_name(notebook);
-            commands::edit::run(&ctx.store, &notebook, &note, &ctx.config.general.editor)
+            let editor = ctx.resolve_editor();
+            commands::edit::run(&ctx.store, &notebook, &note, &editor)
         }
         Some(Commands::Show { note, notebook }) => {
             let notebook = ctx.notebook_name(notebook);
@@ -166,16 +196,18 @@ fn main() -> Result<()> {
         Some(Commands::Daily { notebook }) => {
             let notebook = ctx.notebook_name(notebook);
             let templates_dir = Config::default_templates_dir()?;
+            let editor = ctx.resolve_editor();
             commands::daily::run(
                 &ctx.store,
                 &notebook,
                 &templates_dir,
-                &ctx.config.general.editor,
+                &editor,
+                &ctx.config.general.daily_template,
             )
         }
         Some(Commands::Sync { notebook }) => {
             let notebook = ctx.notebook_name(notebook);
-            commands::sync::run(&ctx.store, &notebook, &ctx.config.git)
+            commands::sync::run(&ctx.store, &notebook, &ctx.config)
         }
         Some(Commands::Config) => commands::config::run(),
         Some(Commands::Doctor) => unreachable!("handled before Context::load() above"),
@@ -184,6 +216,9 @@ fn main() -> Result<()> {
             NotebookAction::List => commands::notebook::list(&ctx.store),
             NotebookAction::Rename { old, new } => {
                 commands::notebook::rename(&ctx.store, &old, &new)
+            }
+            NotebookAction::Delete { name, yes } => {
+                commands::notebook::delete(&ctx.store, &name, yes)
             }
         },
         Some(Commands::Theme { action }) => match action {

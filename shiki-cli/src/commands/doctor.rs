@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use crossterm::event::KeyCode;
+use shiki_config::config::{NotebookGitOverride, SnippetConfig};
 use shiki_config::Config;
 use shiki_core::NotebookStore;
 use shiki_tui::keybindings::parse_key;
@@ -72,6 +73,7 @@ pub fn run() -> Result<()> {
     );
 
     let config_path = Config::default_path();
+    let mut raw_contents: Option<String> = None;
     let config = match &config_path {
         Ok(path) if !path.exists() => {
             r.warn(
@@ -87,6 +89,7 @@ pub fn run() -> Result<()> {
             Ok(contents) => match Config::parse(&contents) {
                 Ok(cfg) => {
                     r.pass("config", path.display());
+                    raw_contents = Some(contents);
                     Some(cfg)
                 }
                 Err(e) => {
@@ -122,8 +125,16 @@ pub fn run() -> Result<()> {
         r.fail("data dir", "could not determine default data directory");
         return Ok(());
     };
-    if data_dir.exists() {
+    if data_dir.is_dir() {
         r.pass("data dir", data_dir.display());
+    } else if data_dir.exists() {
+        r.fail(
+            "data dir",
+            format!(
+                "{} \u{2014} exists but is not a directory (notebook creation will fail)",
+                data_dir.display()
+            ),
+        );
     } else {
         r.warn(
             "data dir",
@@ -224,6 +235,21 @@ pub fn run() -> Result<()> {
                     notebooks.len()
                 ),
             );
+            check_notebook_path_collisions(&notebooks, &mut r);
+            let default_name = &config.general.default_notebook;
+            if notebooks.iter().any(|nb| &nb.name == default_name) {
+                r.pass("default_notebook", format!("\"{default_name}\" exists"));
+            } else {
+                r.warn(
+                    "default_notebook",
+                    format!(
+                        "\"{default_name}\" doesn't match any existing notebook \u{2014} commands \
+                         that fall back to it (no explicit -n/--notebook) will fail with \
+                         \"notebook not found\" until it's created or `general.default_notebook` \
+                         is updated"
+                    ),
+                );
+            }
         }
         Err(e) => r.fail("notebooks", e),
     }
@@ -231,6 +257,11 @@ pub fn run() -> Result<()> {
     check_keybinding_health(&config, &mut r);
     check_snippet_health(&config, &mut r);
     check_notebook_path_health(&config, &mut r);
+    check_theme_health(&config, &mut r);
+    if let Some(raw) = &raw_contents {
+        check_unknown_config_keys(raw, &mut r);
+    }
+    check_git_config_health(&config, &mut r);
 
     println!("\n{} ok, {} warning(s), {} failed", r.ok, r.warn, r.fail);
     if r.fail > 0 {
@@ -456,6 +487,255 @@ fn check_notebook_path_health(config: &Config, r: &mut Report) {
             names.join(", ")
         ),
     );
+}
+
+/// A typo'd `theme.name` or a malformed hex color override doesn't panic
+/// anywhere — `ThemeConfig::resolve()` falls back to `Theme::terminal_default()`
+/// for an unknown name, and `shiki-tui::render::hex_to_color` falls back to
+/// `Color::Reset` for a bad value — but neither ever tells the user their
+/// config value was actually ignored. This surfaces both at the one place a
+/// user checking "is my config okay" would look.
+/// `Config`'s `#[serde(default)]` fields mean a typo'd key/table anywhere in
+/// `config.toml` (`remeber_last_session`, `[keybinding.global]`) is silently
+/// ignored rather than rejected — there's no `deny_unknown_fields` here on
+/// purpose (that would turn any single typo into a hard failure of the
+/// *entire* config, including every field that parsed fine), but a typo
+/// still deserves a visible warning somewhere. This diffs the raw parsed
+/// TOML against a canonical shape built from `Config::default()` (plus a
+/// synthetic single-entry shape for the two dynamic tables,
+/// `[notebooks.<name>]`/`[snippets.<trigger>]`, whose own keys are
+/// user-chosen names, not part of the schema) — generic over whatever
+/// fields `Config`'s structs actually have, so it can't drift out of sync
+/// with them the way a hand-maintained list of "known field names" would.
+fn check_unknown_config_keys(raw: &str, r: &mut Report) {
+    let Ok(raw_value) = toml::from_str::<toml::Value>(raw) else {
+        return; // already reported as invalid TOML by the caller
+    };
+    let Ok(canonical) = toml::Value::try_from(Config::default()) else {
+        return;
+    };
+    let notebook_shape = toml::Value::try_from(NotebookGitOverride::default()).ok();
+    let snippet_shape = toml::Value::try_from(SnippetConfig {
+        label: None,
+        body: String::new(),
+    })
+    .ok();
+
+    let mut unknown = Vec::new();
+    collect_unknown_keys(
+        &raw_value,
+        &canonical,
+        "",
+        notebook_shape.as_ref(),
+        snippet_shape.as_ref(),
+        &mut unknown,
+    );
+
+    if unknown.is_empty() {
+        r.pass("config keys", "no unrecognized keys found");
+        return;
+    }
+    unknown.sort();
+    for key in unknown {
+        r.warn(
+            "config keys",
+            format!(
+                "`{key}` in config.toml doesn't match any known setting \u{2014} a typo, or \
+                 left over from a different shiki version? It's silently ignored either way"
+            ),
+        );
+    }
+}
+
+fn collect_unknown_keys(
+    raw: &toml::Value,
+    canonical: &toml::Value,
+    path: &str,
+    notebook_shape: Option<&toml::Value>,
+    snippet_shape: Option<&toml::Value>,
+    out: &mut Vec<String>,
+) {
+    let (Some(raw_table), Some(canon_table)) = (raw.as_table(), canonical.as_table()) else {
+        return;
+    };
+    for (key, raw_val) in raw_table {
+        let full_path = if path.is_empty() {
+            key.clone()
+        } else {
+            format!("{path}.{key}")
+        };
+        match canon_table.get(key) {
+            Some(canon_val) => {
+                collect_unknown_keys(
+                    raw_val,
+                    canon_val,
+                    &full_path,
+                    notebook_shape,
+                    snippet_shape,
+                    out,
+                );
+            }
+            None if path == "notebooks" => {
+                if let Some(shape) = notebook_shape {
+                    collect_unknown_keys(raw_val, shape, &full_path, None, None, out);
+                }
+            }
+            None if path == "snippets" => {
+                if let Some(shape) = snippet_shape {
+                    collect_unknown_keys(raw_val, shape, &full_path, None, None, out);
+                }
+            }
+            None => out.push(full_path),
+        }
+    }
+}
+
+fn check_theme_health(config: &Config, r: &mut Report) {
+    let name = &config.theme.name;
+    if name != "default" && shiki_config::themes::by_name(name).is_none() {
+        r.warn(
+            "theme",
+            format!(
+                "theme.name = \"{name}\" doesn't match any built-in theme \u{2014} falling back \
+                 to \"default\" (terminal colors). Run `shiki theme set <name>` to see valid names"
+            ),
+        );
+    } else {
+        r.pass("theme", format!("\"{name}\""));
+    }
+
+    let overrides: [(&str, &Option<String>); 19] = [
+        ("bg", &config.theme.overrides.bg),
+        ("fg", &config.theme.overrides.fg),
+        ("accent", &config.theme.overrides.accent),
+        ("selection", &config.theme.overrides.selection),
+        ("border", &config.theme.overrides.border),
+        ("statusbar", &config.theme.overrides.statusbar),
+        ("highlight", &config.theme.overrides.highlight),
+        ("error", &config.theme.overrides.error),
+        ("warning", &config.theme.overrides.warning),
+        ("success", &config.theme.overrides.success),
+        ("inactive", &config.theme.overrides.inactive),
+        ("scrollbar", &config.theme.overrides.scrollbar),
+        ("tab_active", &config.theme.overrides.tab_active),
+        ("tab_inactive", &config.theme.overrides.tab_inactive),
+        ("panel_title", &config.theme.overrides.panel_title),
+        ("cursor", &config.theme.overrides.cursor),
+        ("link", &config.theme.overrides.link),
+        ("tag", &config.theme.overrides.tag),
+        ("muted", &config.theme.overrides.muted),
+    ];
+    let mut bad: Vec<String> = Vec::new();
+    for (field, value) in overrides {
+        if let Some(v) = value {
+            if !is_valid_color_value(v) {
+                bad.push(format!("{field} = \"{v}\""));
+            }
+        }
+    }
+    if bad.is_empty() {
+        return;
+    }
+    r.warn(
+        "theme overrides",
+        format!(
+            "not a recognized color \u{2014} silently renders as the terminal's reset color \
+             instead: {}",
+            bad.join(", ")
+        ),
+    );
+}
+
+/// Same set of values `shiki-tui::render::hex_to_color` accepts: a known
+/// ANSI name, `"reset"`/empty, or a 6-digit hex string (with or without a
+/// leading `#`). Kept independent of `render::hex_to_color` itself (which
+/// lives in `shiki-tui` and has no "was this valid" return value, only a
+/// color to fall back to) rather than trying to reuse it here.
+fn is_valid_color_value(value: &str) -> bool {
+    match value.to_ascii_lowercase().as_str() {
+        "reset" | "" | "black" | "red" | "green" | "yellow" | "blue" | "magenta" | "cyan"
+        | "white" | "gray" | "grey" | "darkgray" | "darkgrey" => return true,
+        _ => {}
+    }
+    let hex = value.trim_start_matches('#');
+    hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// `[notebooks.<name>] path = "..."` is validated for being absolute
+/// (`Config::notebook_custom_paths`) but nothing checks whether two
+/// different notebook names end up pointing at the exact same directory —
+/// a copy-pasted override, or one notebook's custom path accidentally
+/// matching another's, silently makes both names share a single git repo
+/// (writes to one show up as the other). Compares canonicalized paths where
+/// possible so a `..`-relative detour or symlink doesn't hide a real
+/// collision, falling back to the raw path when canonicalization fails
+/// (e.g. the directory doesn't exist yet) rather than skipping the check.
+fn check_notebook_path_collisions(notebooks: &[shiki_core::Notebook], r: &mut Report) {
+    let mut by_path: HashMap<PathBuf, Vec<&str>> = HashMap::new();
+    for nb in notebooks {
+        let key = nb.path.canonicalize().unwrap_or_else(|_| nb.path.clone());
+        by_path.entry(key).or_default().push(&nb.name);
+    }
+    let mut collisions: Vec<Vec<&str>> = by_path
+        .into_values()
+        .filter(|names| names.len() > 1)
+        .collect();
+    for names in &mut collisions {
+        names.sort_unstable();
+    }
+    collisions.sort();
+    for names in collisions {
+        r.warn(
+            "notebook paths",
+            format!(
+                "{} all resolve to the same directory on disk \u{2014} they're silently \
+                 sharing one git repo",
+                names.join(", ")
+            ),
+        );
+    }
+}
+
+/// Two purely local `[git]` preconditions doctor can actually verify without
+/// touching the network:
+///
+/// 1. `remote_template` is meant to contain a `{notebook}` placeholder
+///    (`App::create_notebook_from_url`'s plain-name path substitutes it in) —
+///    a typo'd or missing placeholder means every new notebook silently gets
+///    assigned the exact same literal remote URL, which nobody would notice
+///    until a push collides.
+/// 2. `sign_commits = true` has no effect unless git itself already has a
+///    signing key configured (`user.signingkey`, or `gpg.format = ssh`'s
+///    `user.signingkey` pointing at an SSH key) — `commit_all`'s signing
+///    would otherwise fail on every single commit.
+fn check_git_config_health(config: &Config, r: &mut Report) {
+    let template = &config.git.remote_template;
+    if !template.is_empty() && !template.contains("{notebook}") {
+        r.warn(
+            "git.remote_template",
+            format!(
+                "\"{template}\" has no {{notebook}} placeholder \u{2014} every new plain-name \
+                 notebook would get assigned this exact same literal remote URL"
+            ),
+        );
+    }
+
+    if config.git.sign_commits {
+        let key_configured = std::process::Command::new("git")
+            .args(["config", "--get", "user.signingkey"])
+            .output()
+            .map(|out| out.status.success() && !out.stdout.is_empty())
+            .unwrap_or(false);
+        if key_configured {
+            r.pass("git sign_commits", "user.signingkey is configured");
+        } else {
+            r.warn(
+                "git sign_commits",
+                "git.sign_commits is on but `git config user.signingkey` is empty \u{2014} \
+                 every commit will fail to sign until it's set",
+            );
+        }
+    }
 }
 
 fn check_snippet_health(config: &Config, r: &mut Report) {

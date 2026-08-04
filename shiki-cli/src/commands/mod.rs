@@ -13,17 +13,45 @@ pub mod theme;
 use anyhow::{Context, Result};
 use shiki_core::{Note, NotebookStore};
 
-/// Resolves a note by slug or by (case-insensitive) title match within a notebook.
+/// Resolves a note by slug or by (case-insensitive) title match within a
+/// notebook — searched recursively across every folder, so two notes with
+/// the same title/slug in different folders both match `needle`. Errors
+/// with a clear disambiguation message (listing each match's folder) rather
+/// than silently returning whichever one the recursive walk happened to
+/// find first — a real ambiguity risk that root-only lookup never had
+/// before `all_notes_recursive` replaced it.
 pub fn find_note(store: &NotebookStore, notebook: &str, needle: &str) -> Result<Note> {
-    let nb = store
-        .get(notebook)
-        .with_context(|| format!("notebook '{notebook}' not found"))?;
+    let nb = store.get(notebook).with_context(|| {
+        format!("notebook '{notebook}' not found \u{2014} see `shiki notebook list`")
+    })?;
     let notes = nb.all_notes_recursive()?;
     let slug = shiki_core::note::Note::slugify(needle);
-    notes
+    let mut matches: Vec<Note> = notes
         .into_iter()
-        .find(|n| n.file_stem() == slug || n.frontmatter.title.eq_ignore_ascii_case(needle))
-        .with_context(|| format!("note '{needle}' not found in '{notebook}'"))
+        .filter(|n| n.file_stem() == slug || n.frontmatter.title.eq_ignore_ascii_case(needle))
+        .collect();
+    match matches.len() {
+        0 => anyhow::bail!("note '{needle}' not found in '{notebook}'"),
+        1 => Ok(matches.remove(0)),
+        _ => {
+            let mut locations: Vec<String> = matches
+                .iter()
+                .map(|n| {
+                    n.path
+                        .strip_prefix(&nb.path)
+                        .unwrap_or(&n.path)
+                        .display()
+                        .to_string()
+                })
+                .collect();
+            locations.sort();
+            anyhow::bail!(
+                "'{needle}' matches {} notes in '{notebook}' \u{2014} be more specific: {}",
+                matches.len(),
+                locations.join(", ")
+            )
+        }
+    }
 }
 
 /// Opens `path` with the configured external editor, waiting for it to finish.
