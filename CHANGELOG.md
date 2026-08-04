@@ -54,6 +54,9 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ### Fixed
 
+- The empty NOTEBOOKS panel's hint said `press \`A\` to create one`, but the actual default
+  keybinding for it is lowercase `a` (found by actually using the freshly-built app, not just
+  reading the diff).
 - A note's frontmatter parser used to truncate at the *first* line reading exactly `---` anywhere in
   the file — a YAML block scalar that legitimately contained such a line lost every field after it.
   It now requires that line to be the real closing delimiter.
