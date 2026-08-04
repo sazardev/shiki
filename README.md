@@ -110,7 +110,8 @@ the [website](https://sazardev.github.io/shiki/#themes).
 - **In-TUI self-update** (leader+`U`) — checks GitHub Releases for a newer version, and on
   confirmation downloads, verifies, installs, and relaunches into it automatically.
 - **`shiki doctor`** — an environment health check that works even with a broken config; also
-  flags duplicate/colliding keybindings and `/`-menu snippet triggers before they cause confusion.
+  flags duplicate/colliding keybindings, `/`-menu snippet triggers, unrecognized `config.toml` keys,
+  and colliding notebook paths before they cause confusion.
 - **CLI commands** alongside the TUI (`new`, `list`, `edit`, `show`, `search`, `daily`, `sync`,
   `notebook`, `theme`, `config`, `doctor`) for quick one-off operations without opening the UI.
 
