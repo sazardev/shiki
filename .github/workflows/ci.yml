@@ -14,27 +14,65 @@ permissions:
 
 jobs:
   fmt-and-clippy:
-    name: fmt + clippy (ubuntu-latest)
-    runs-on: ubuntu-latest
+    name: fmt + clippy (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all -- --check
+      # fmt is platform-independent — only worth running once, and clippy's
+      # own output would otherwise get needlessly duplicated 3x in the logs.
+      - if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt --all -- --check
+      # Matrixed rather than ubuntu-only: shiki-core/src/editor.rs has
+      # `#[cfg(target_os = "macos")]`/`#[cfg(target_os = "windows")]` blocks
+      # that an ubuntu-only clippy run would never actually lint.
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
-  build:
-    name: build + check (${{ matrix.os }})
+  audit:
+    name: cargo audit (dependency vulnerabilities)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Catches new RUSTSEC advisories on an ongoing basis — the git2 0.19
+      # -> 0.21 bump (see CHANGELOG/CLAUDE.md) was a one-time manual audit;
+      # nothing re-checked automatically for a *new* advisory landing after
+      # that, until this job. `cargo audit` auto-discovers `.cargo/audit.toml`
+      # (repo root, checked out by actions/checkout above) for an ignore
+      # list — see that file for how to allowlist a known, tracked,
+      # not-yet-fixable transitive advisory instead of this job blocking
+      # every merge indefinitely once one is found.
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
+
+  # A single job, not separate `build`/`test` jobs — `cargo test --workspace`
+  # already compiles every lib/bin target in the workspace (in test profile)
+  # on its way to running the tests, so a prior version of this file that
+  # ran `cargo check` + `cargo build` as a *second*, separate job was paying
+  # for close to the same compilation twice, on every push/PR, across all 3
+  # OSes. `cargo check` still runs first, as a fast fail-fast gate before
+  # paying for the slower full test build.
+  test:
+    name: test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace
-      - run: cargo build --workspace
+      - run: cargo test --workspace

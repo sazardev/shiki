@@ -26,12 +26,13 @@ env:
   BIN_NAME: shiki
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   resolve-tag:
     name: Resolve release tag
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
     steps:
@@ -58,6 +59,7 @@ jobs:
             target: aarch64-apple-darwin
             ext: tar.gz
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -107,6 +109,16 @@ jobs:
     name: Create GitHub Release
     needs: [build, resolve-tag]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The only job that needs write access to repo contents — creating a
+    # GitHub Release (`softprops/action-gh-release`) via the default
+    # `GITHUB_TOKEN`. Every other job either only reads (`build`,
+    # `resolve-tag`, `publish-crates`) or pushes with `RELEASE_TAG_PAT`
+    # instead of `GITHUB_TOKEN` (`update-packaging-manifests`,
+    # `update-screenshots` — see their own steps for why), so they don't
+    # need this permission at all.
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -140,6 +152,7 @@ jobs:
     name: Update AUR/Scoop/Homebrew manifests from release checksums
     needs: [release, resolve-tag]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
@@ -380,6 +393,7 @@ jobs:
     # instead of adding retry/rebase logic to paper over it.
     needs: [release, resolve-tag, update-packaging-manifests]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -484,6 +498,7 @@ jobs:
     name: Publish to crates.io
     needs: release
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 

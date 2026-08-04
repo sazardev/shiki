@@ -1,0 +1,18 @@
+# Config for `cargo audit` (.github/workflows/ci.yml's `audit` job).
+#
+# Without this file, a future RUSTSEC advisory against a dependency with no
+# upstream fix yet (e.g. one of the transitive advisories CLAUDE.md already
+# notes exist via syntect/ratatui) would hard-block every merge indefinitely,
+# with no configured way to say "known, tracked, not fixable from our own
+# Cargo.toml." Add the advisory ID here with a comment explaining why it's
+# safe to ignore for now, and a reminder to remove the entry once an upstream
+# fix actually lands.
+#
+# Example:
+# [advisories]
+# ignore = [
+#     "RUSTSEC-0000-0000", # unmaintained transitive dep via X, no direct usage of the affected API — tracked in issue #NNN
+# ]
+
+[advisories]
+ignore = []

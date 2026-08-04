@@ -29,6 +29,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -36,6 +37,17 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: actions/configure-pages@v6
+
+      # Stamps today's date into sitemap.xml's <lastmod> entries at deploy
+      # time — this site genuinely does change on every release (screenshots,
+      # version), so a hand-maintained static date would just go stale.
+      # Deliberately not committed back to main: it only rewrites the copy
+      # that gets packaged into this deploy's artifact.
+      - name: Stamp sitemap.xml lastmod
+        run: |
+          set -euo pipefail
+          today="$(date -u +%Y-%m-%d)"
+          sed -i "s#<lastmod>.*</lastmod>#<lastmod>${today}</lastmod>#g" docs/sitemap.xml
 
       - uses: actions/upload-pages-artifact@v3
         with:
