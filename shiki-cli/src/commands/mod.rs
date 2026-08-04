@@ -7,6 +7,7 @@ pub mod graph;
 pub mod list;
 pub mod new;
 pub mod notebook;
+pub mod publish;
 pub mod search;
 pub mod show;
 pub mod sync;

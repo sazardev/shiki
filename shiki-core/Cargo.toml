@@ -20,6 +20,5 @@ nucleo-matcher.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 self_update.workspace = true
-
-[dev-dependencies]
 tempfile.workspace = true
+pulldown-cmark.workspace = true

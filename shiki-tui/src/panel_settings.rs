@@ -18,16 +18,18 @@ pub enum SettingsSection {
     Theme,
     Git,
     Editor,
+    Export,
     Notebooks,
     Snippets,
 }
 
 impl SettingsSection {
-    pub const ALL: [SettingsSection; 6] = [
+    pub const ALL: [SettingsSection; 7] = [
         SettingsSection::General,
         SettingsSection::Theme,
         SettingsSection::Git,
         SettingsSection::Editor,
+        SettingsSection::Export,
         SettingsSection::Notebooks,
         SettingsSection::Snippets,
     ];
@@ -38,6 +40,7 @@ impl SettingsSection {
             SettingsSection::Theme => "THEME",
             SettingsSection::Git => "GIT",
             SettingsSection::Editor => "EDITOR",
+            SettingsSection::Export => "EXPORT",
             SettingsSection::Notebooks => "NOTEBOOKS",
             SettingsSection::Snippets => "SNIPPETS",
         }
@@ -147,6 +150,43 @@ impl EditorField {
         EditorField::LineNumbers,
         EditorField::MultiCursor,
     ];
+}
+
+/// go-pretty-pdf's 17 built-in themes, in the order its own README lists
+/// them — `handle_export_field_enter` cycles `pdf_theme` through this exact
+/// list (wrapping), rather than a free-text prompt: a typo'd theme name
+/// would only ever surface as an opaque `pretty-pdf` error at publish time,
+/// so constraining input to the known-valid set up front is the safer
+/// default.
+pub const PDF_THEMES: [&str; 17] = [
+    "default",
+    "minimal",
+    "modern",
+    "classic",
+    "corporate",
+    "dark",
+    "academic",
+    "editorial",
+    "sepia",
+    "terminal",
+    "blueprint",
+    "ivy",
+    "government",
+    "resume",
+    "legal",
+    "latex",
+    "gruvbox",
+];
+
+/// EXPORT's rows — a single cyclable field (see `PDF_THEMES`), same flat
+/// shape as GIT/EDITOR's boolean toggles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportField {
+    PdfTheme,
+}
+
+impl ExportField {
+    pub const ALL: [ExportField; 1] = [ExportField::PdfTheme];
 }
 
 /// One editable row within a drilled-into notebook (NOTEBOOKS section, level
@@ -301,6 +341,10 @@ fn editor_rows(app: &App) -> Vec<Line<'static>> {
     ]
 }
 
+fn export_rows(app: &App) -> Vec<Line<'static>> {
+    vec![row_line(app, "pdf_theme", app.config.export.pdf_theme.clone())]
+}
+
 /// NOTEBOOKS level 1 — one row per real notebook, showing its git remote
 /// (redacted) rather than the per-notebook sync-policy overrides this used
 /// to show instead; `notebook_field_rows` (level 2) covers those.
@@ -428,6 +472,7 @@ pub fn build(app: &App) -> Vec<Line<'static>> {
         SettingsSection::Theme => theme_rows(app),
         SettingsSection::Git => git_rows(app),
         SettingsSection::Editor => editor_rows(app),
+        SettingsSection::Export => export_rows(app),
         SettingsSection::Notebooks => match &app.settings_notebook_drill {
             Some(name) => notebook_field_rows(app, name),
             None => notebook_list_rows(app),

@@ -99,3 +99,48 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_stateful_widget(list, area, &mut state);
     render_scrollbar(frame, area, total, app.selected_note, &app.theme);
 }
+
+/// Maps a click's `(column, row)` to a combined folders++notes index (the
+/// same indexing `App::selected_note`/`selected_folder` already use — a
+/// folder is `idx < folder_count`, a note is `idx - folder_count`), or
+/// `None` if it missed. Same plain-coordinates shape as
+/// `panel_drawer::drawer_hit_at`/`panel_notebooks::notebooks_hit_at`.
+pub fn notes_hit_at(total: usize, area: Rect, column: u16, row: u16) -> Option<usize> {
+    if column < area.x || column >= area.x + area.width {
+        return None;
+    }
+    let list_top = area.y + 1;
+    let list_bottom = area.y + area.height.saturating_sub(1);
+    if row < list_top || row >= list_bottom {
+        return None;
+    }
+    let index = (row - list_top) as usize;
+    (index < total).then_some(index)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn area() -> Rect {
+        Rect::new(0, 0, 40, 20)
+    }
+
+    #[test]
+    fn clicking_a_row_hits_its_index() {
+        assert_eq!(notes_hit_at(5, area(), 5, 1), Some(0));
+        assert_eq!(notes_hit_at(5, area(), 5, 5), Some(4));
+    }
+
+    #[test]
+    fn clicking_past_the_last_row_misses() {
+        assert_eq!(notes_hit_at(5, area(), 5, 6), None);
+    }
+
+    #[test]
+    fn clicking_the_border_or_outside_the_area_misses() {
+        assert_eq!(notes_hit_at(5, area(), 5, 0), None);
+        assert_eq!(notes_hit_at(5, area(), 5, 19), None);
+        assert_eq!(notes_hit_at(5, area(), 45, 1), None);
+    }
+}

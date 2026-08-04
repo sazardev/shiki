@@ -19,6 +19,11 @@ pub(crate) enum GitOpKind {
     Pull { notebook: String },
     /// Pull for every notebook that has a remote — manual `P`.
     PullAll,
+    /// Render one notebook to PDF (`shiki_core::publish`) — leader+`P`.
+    /// Unlike `Sync`/`Pull`, a publish never changes note content or git
+    /// status, so `apply_git_op_result`'s arm for this is a no-op beyond the
+    /// status message itself.
+    Publish,
 }
 
 impl App {
@@ -321,6 +326,57 @@ impl App {
         });
     }
 
+    /// leader+`P` — renders the selected notebook to a themed PDF via
+    /// `pretty-pdf` (downloaded/cached automatically on first use, see
+    /// `shiki_core::publish::ensure_binary`) and opens the result. Reuses
+    /// `spawn_git_op`'s single-job-at-a-time guard and footer spinner rather
+    /// than inventing a second "something's running" indicator — a publish
+    /// and a sync are both "one background job at a time" from the user's
+    /// point of view. Output always goes to `{data_dir}/exports/{notebook}.pdf`,
+    /// deliberately not inside the notebook's own (git-tracked) directory,
+    /// so the rendered PDF never shows up as a stray untracked file for
+    /// auto-sync to pick up.
+    pub(crate) fn publish_notebook(&mut self) {
+        let Some(nb) = self.selected_notebook().cloned() else {
+            self.set_status("no notebook selected".into());
+            return;
+        };
+        let mut notes = match nb.all_notes_recursive() {
+            Ok(notes) => notes,
+            Err(e) => {
+                self.set_status(format!("publish error: {e}"));
+                return;
+            }
+        };
+        notes.sort_by(|a, b| {
+            a.frontmatter
+                .date
+                .cmp(&b.frontmatter.date)
+                .then_with(|| a.frontmatter.title.cmp(&b.frontmatter.title))
+        });
+        let theme = self.config.export.pdf_theme.clone();
+        let cache_dir = self.store.root.join("bin");
+        let out = self.store.root.join("exports").join(format!("{}.pdf", nb.name));
+        let nb_name = nb.name.clone();
+        self.spawn_git_op(nb_name.clone(), move || {
+            let message = match shiki_core::publish::publish(&notes, &theme, &cache_dir, &out) {
+                Ok(()) => {
+                    // Fire-and-forget, same as the footer's Buy Me a Coffee
+                    // link — a failed open (headless SSH, no GUI) is still a
+                    // successful publish, just one the user has to find the
+                    // file for themselves via the path in this message.
+                    let _ = shiki_core::browser::open_url(&out.to_string_lossy());
+                    format!("published '{nb_name}' to {}", out.display())
+                }
+                Err(e) => format!("publish error ('{nb_name}'): {e}"),
+            };
+            GitOpResult {
+                kind: GitOpKind::Publish,
+                message,
+            }
+        });
+    }
+
     /// Spawns `op` on a background thread and sends its result back over
     /// `sync_rx`, so the caller (any of the git actions above) never blocks
     /// the render loop on a network call — same `std::thread` + `mpsc`
@@ -404,6 +460,9 @@ impl App {
             // `refresh_notes_preserve_selection` re-lists from disk the same
             // way but keeps the same note selected (by slug) instead.
             GitOpKind::PullAll => self.refresh_notes_preserve_selection(),
+            // Nothing to refresh — publishing never touches note content or
+            // git status, the status message set above is the whole result.
+            GitOpKind::Publish => {}
         }
         if self.show_drawer {
             self.refresh_drawer_statuses();

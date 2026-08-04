@@ -207,6 +207,18 @@ pub struct GlobalKeybindings {
     /// backward-compatibility reason as `logs`/`toggle_favorite_editor`.
     #[serde(default = "default_tasks_panel_key")]
     pub tasks_panel: String,
+    /// Renders the selected notebook to a themed PDF via `pretty-pdf`
+    /// (fetched/cached automatically on first use if not already on
+    /// `$PATH`), then opens it. Field-level default for the same
+    /// backward-compatibility reason as `logs`/`toggle_favorite_editor`.
+    #[serde(default = "default_publish_key")]
+    pub publish: String,
+    /// Exports the selected notebook to a single HTML or Markdown bundle —
+    /// the same rendering `shiki export` (CLI) uses. Field-level default
+    /// for the same backward-compatibility reason as `logs`/
+    /// `toggle_favorite_editor`.
+    #[serde(default = "default_export_key")]
+    pub export: String,
 }
 
 impl Default for GlobalKeybindings {
@@ -224,8 +236,18 @@ impl Default for GlobalKeybindings {
             scratchpad: default_scratchpad_key(),
             links: default_global_links_key(),
             tasks_panel: default_tasks_panel_key(),
+            publish: default_publish_key(),
+            export: default_export_key(),
         }
     }
+}
+
+fn default_publish_key() -> String {
+    "P".into()
+}
+
+fn default_export_key() -> String {
+    "x".into()
 }
 
 fn default_global_links_key() -> String {
@@ -845,6 +867,35 @@ impl Default for EditorConfig {
     }
 }
 
+/// PDF export (`shiki publish`, leader+`P`) settings — a concrete-default
+/// table like `GitConfig`, not `NotebookGitOverride`'s all-`Option` "unset
+/// means inherit" shape: there's one real global default theme, nothing to
+/// inherit from.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportConfig {
+    /// One of go-pretty-pdf's 17 built-in theme names (`default`, `minimal`,
+    /// `modern`, `classic`, `corporate`, `dark`, `academic`, `editorial`,
+    /// `sepia`, `terminal`, `blueprint`, `ivy`, `government`, `resume`,
+    /// `legal`, `latex`, `gruvbox`) — not validated here, same as
+    /// `theme.name` isn't validated against the theme registry either; an
+    /// unrecognized name only ever surfaces as a `pretty-pdf` error at
+    /// publish time.
+    #[serde(default = "default_pdf_theme")]
+    pub pdf_theme: String,
+}
+
+impl Default for ExportConfig {
+    fn default() -> Self {
+        Self {
+            pdf_theme: default_pdf_theme(),
+        }
+    }
+}
+
+fn default_pdf_theme() -> String {
+    "default".into()
+}
+
 /// Per-notebook override of the `[git]` sync policy — a notebook connected
 /// to a private work repo might want `auto_push`, while a scratch notebook
 /// with no remote at all shouldn't be forced into the same policy. Any
@@ -941,6 +992,8 @@ pub struct Config {
     pub git: GitConfig,
     #[serde(default)]
     pub editor: EditorConfig,
+    #[serde(default)]
+    pub export: ExportConfig,
     /// Per-notebook overrides of `[git]`, keyed by notebook name — e.g.
     /// `[notebooks.work]` with `auto_push = true`. See `NotebookGitOverride`.
     #[serde(default)]
@@ -1188,6 +1241,15 @@ fn section_comment(line: &str) -> Option<&'static str> {
 # - multi_cursor: Alt+Click adds a cursor, Ctrl+D adds the next occurrence
 #   of the current word/selection."
         }
+        "[export]" => {
+            "\
+# PDF export (`shiki publish`, leader+`P`) — pdf_theme picks one of
+# go-pretty-pdf's 17 built-in themes: default, minimal, modern, classic,
+# corporate, dark, academic, editorial, sepia, terminal, blueprint, ivy,
+# government, resume, legal, latex, gruvbox. The `pretty-pdf` binary this
+# feature shells out to is fetched automatically on first use if it isn't
+# already on $PATH — see `shiki doctor`."
+        }
         "[notebooks]" => {
             "\
 # Optional per-notebook overrides of [git] above, e.g.:
@@ -1239,6 +1301,7 @@ mod tests {
             "[theme]\nname = \"nord\"\n",
             "[git]\nauto_push = true\n",
             "[editor]\nline_numbers = true\n",
+            "[export]\npdf_theme = \"dark\"\n",
         ] {
             Config::parse(partial).unwrap_or_else(|e| panic!("{partial:?} failed to parse: {e}"));
         }
@@ -1332,7 +1395,14 @@ mod tests {
     fn commented_default_toml_comments_every_known_section() {
         let commented = commented_default_toml();
         let lines: Vec<&str> = commented.lines().collect();
-        for section in ["[general]", "[keybindings]", "[theme]", "[git]", "[editor]"] {
+        for section in [
+            "[general]",
+            "[keybindings]",
+            "[theme]",
+            "[git]",
+            "[editor]",
+            "[export]",
+        ] {
             let idx = lines
                 .iter()
                 .position(|l| *l == section)

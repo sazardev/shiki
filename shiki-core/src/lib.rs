@@ -1,9 +1,12 @@
 pub mod browser;
 pub mod daily;
 pub mod editor;
+pub mod export;
 pub mod git;
 pub mod note;
 pub mod notebook;
+pub mod process;
+pub mod publish;
 pub mod search;
 pub mod tags;
 pub mod tasks;
@@ -39,6 +42,8 @@ pub enum Error {
     InvalidName(String),
     #[error("update error: {0}")]
     Update(String),
+    #[error("publish error: {0}")]
+    Publish(String),
     /// A move/copy target that already has something at that path — moves
     /// and copies error here rather than silently overwriting whatever's
     /// already there.

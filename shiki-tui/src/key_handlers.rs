@@ -13,7 +13,10 @@ use crate::icons;
 use crate::input::InputBox;
 use crate::keybindings::{Action, WhichKeyRow};
 use crate::render::{hex_to_color, panel_block};
-use crate::{confirm, layout, panel_drawer, panel_preview, slash_menu, status_bar};
+use crate::{
+    confirm, layout, panel_drawer, panel_notebooks, panel_notes, panel_preview, slash_menu,
+    status_bar,
+};
 
 impl App {
     fn open_theme_picker(&mut self) {
@@ -215,6 +218,7 @@ impl App {
                 SettingsSection::Theme => self.handle_theme_field_enter(),
                 SettingsSection::Git => self.handle_git_field_enter(),
                 SettingsSection::Editor => self.handle_editor_field_enter(),
+                SettingsSection::Export => self.handle_export_field_enter(),
                 SettingsSection::Notebooks => {
                     let names = crate::panel_settings::sorted_notebook_names(self);
                     if let Some(name) = names.get(self.settings_selected) {
@@ -440,6 +444,22 @@ impl App {
         };
         self.save_config();
         self.set_status(format!("{label} -> {new_val}"));
+    }
+    /// EXPORT's only field — cycles `pdf_theme` through `PDF_THEMES`
+    /// (wrapping) and saves immediately, same "advance in place, no prompt"
+    /// shape as `toggle_git_bool`/`toggle_editor_bool`, just over a fixed
+    /// string list instead of a bool.
+    fn handle_export_field_enter(&mut self) {
+        use crate::panel_settings::PDF_THEMES;
+        let current = self.config.export.pdf_theme.as_str();
+        let next_index = PDF_THEMES
+            .iter()
+            .position(|t| *t == current)
+            .map(|i| (i + 1) % PDF_THEMES.len())
+            .unwrap_or(0);
+        self.config.export.pdf_theme = PDF_THEMES[next_index].to_string();
+        self.save_config();
+        self.set_status(format!("pdf_theme -> {}", self.config.export.pdf_theme));
     }
     /// SNIPPETS level 1's `a` — prompts for a brand-new trigger; the
     /// snippet itself (empty label/body) is created once that's confirmed
@@ -1685,6 +1705,37 @@ impl App {
             return;
         }
 
+        // Clicking a row in NOTEBOOKS or NOTES selects it and does exactly
+        // what Right/Enter/`l` would do from there (`navigate_forward`) —
+        // for NOTEBOOKS that's moving focus into NOTES; for a NOTES folder,
+        // descending into it; for a NOTES note, moving focus into PREVIEW.
+        // Restricted to `Mode::Normal` (Visual's click semantics — extend
+        // the range? jump the anchor? — aren't designed yet, so this
+        // deliberately doesn't touch it) and gated by `no_modal_open()` so a
+        // click reaching the layout underneath an open popup can't be
+        // misread as a panel click.
+        if self.mode == Mode::Normal && self.no_modal_open() {
+            let areas = layout::split(self.last_frame_area, self.focus);
+            if let Some(index) =
+                panel_notebooks::notebooks_hit_at(self.notebooks.len(), areas.notebooks, column, row)
+            {
+                self.focus = Focus::Notebooks;
+                self.selected_notebook = index;
+                self.notes_path.clear();
+                self.reload_notes();
+                self.navigate_forward();
+                return;
+            }
+            let total_notes = self.folders.len() + self.notes.len();
+            if let Some(index) = panel_notes::notes_hit_at(total_notes, areas.notes, column, row) {
+                self.focus = Focus::Notes;
+                self.selected_note = index;
+                self.preview_scroll = 0;
+                self.navigate_forward();
+                return;
+            }
+        }
+
         if self.can_start_preview_selection() {
             let preview = layout::split(self.last_frame_area, self.focus).preview;
             let row_count = self.note_preview_lines().map(|l| l.len()).unwrap_or(0);
@@ -2219,6 +2270,26 @@ impl App {
             .unwrap_or_default();
         self.start_input(PendingInput::SetRemote, prefill);
     }
+    /// leader+`x` — exports the selected notebook to a single HTML or
+    /// Markdown bundle via `shiki_core::export` (the same rendering
+    /// `shiki export` uses). Prefilled with an `.html` path under
+    /// `{data_dir}/exports/`, same location `publish_notebook` writes PDFs
+    /// to, so exported files don't land inside the git-tracked notebook
+    /// directory either.
+    fn start_export_notebook(&mut self) {
+        let Some(nb) = self.selected_notebook() else {
+            self.set_status("no notebook selected".into());
+            return;
+        };
+        let prefill = self
+            .store
+            .root
+            .join("exports")
+            .join(format!("{}.html", nb.name))
+            .to_string_lossy()
+            .into_owned();
+        self.start_input(PendingInput::ExportNotebook, prefill);
+    }
     fn create_daily_note(&mut self) {
         let Some(nb) = self.selected_notebook().cloned() else {
             self.set_status("no notebook selected".into());
@@ -2638,6 +2709,8 @@ impl App {
             Action::ToggleSettings => self.toggle_settings(),
             Action::Scratchpad => self.start_scratchpad(),
             Action::ToggleTasks => self.open_tasks(),
+            Action::PublishNotebook => self.publish_notebook(),
+            Action::ExportNotebook => self.start_export_notebook(),
 
             Action::NewNotebook => self.start_input(PendingInput::NewNotebook, String::new()),
             Action::RenameNotebook => self.start_rename_notebook(),
@@ -2879,6 +2952,42 @@ impl App {
                             self.set_status(format!("remote set to '{redacted}'"));
                         }
                         Err(e) => self.set_status(format!("could not set remote: {e}")),
+                    }
+                }
+            }
+            Some(PendingInput::ExportNotebook) => {
+                if value.is_empty() {
+                    self.set_status("export cancelled (empty path)".into());
+                } else if let Some(nb) = self.selected_notebook().cloned() {
+                    let format = if value.ends_with(".md") || value.ends_with(".markdown") {
+                        shiki_core::export::Format::Md
+                    } else {
+                        shiki_core::export::Format::Html
+                    };
+                    match nb.all_notes_recursive() {
+                        Ok(mut notes) => {
+                            notes.sort_by(|a, b| {
+                                a.frontmatter
+                                    .date
+                                    .cmp(&b.frontmatter.date)
+                                    .then_with(|| a.frontmatter.title.cmp(&b.frontmatter.title))
+                            });
+                            let content = shiki_core::export::render(&nb.name, &notes, format);
+                            let path = std::path::Path::new(&value);
+                            let write_result = path
+                                .parent()
+                                .map(std::fs::create_dir_all)
+                                .transpose()
+                                .and_then(|_| std::fs::write(path, content));
+                            match write_result {
+                                Ok(()) => self.set_status(format!(
+                                    "exported {} notes to {value}",
+                                    notes.len()
+                                )),
+                                Err(e) => self.set_status(format!("export error: {e}")),
+                            }
+                        }
+                        Err(e) => self.set_status(format!("export error: {e}")),
                     }
                 }
             }

@@ -91,6 +91,21 @@ enum Commands {
         #[arg(long, value_enum, default_value = "html")]
         format: commands::export::ExportFormat,
     },
+    /// Renders every note in a notebook to a themed PDF via `pretty-pdf`
+    /// (go-pretty-pdf) — fetched automatically on first use if it isn't
+    /// already on `$PATH`, no manual install step required.
+    Publish {
+        #[arg(short = 'n', long)]
+        notebook: Option<String>,
+        /// Output PDF path — defaults to `{data_dir}/exports/{notebook}.pdf`
+        /// so it doesn't land inside the git-tracked notebook directory.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// One of go-pretty-pdf's 17 built-in themes — defaults to
+        /// `export.pdf_theme` in config.toml.
+        #[arg(long)]
+        theme: Option<String>,
+    },
     /// Lists checkbox tasks (`- [ ]`) across notebooks — the TUI's tasks
     /// view (leader+`t`), scriptable. `--count`/`--json` are made for
     /// status bars: e.g. `shiki tasks --overdue --count` in a waybar/
@@ -325,6 +340,17 @@ fn main() -> Result<()> {
         }) => {
             let notebook = ctx.notebook_name(notebook);
             commands::export::run(&ctx.store, &notebook, &out, format)
+        }
+        Some(Commands::Publish {
+            notebook,
+            out,
+            theme,
+        }) => {
+            let notebook = ctx.notebook_name(notebook);
+            let theme = theme.unwrap_or_else(|| ctx.config.export.pdf_theme.clone());
+            let out = out.unwrap_or(ctx.store.root.join("exports").join(format!("{notebook}.pdf")));
+            let cache_dir = ctx.store.root.join("bin");
+            commands::publish::run(&ctx.store, &notebook, &out, &theme, &cache_dir)
         }
         Some(Commands::Tasks {
             notebook,

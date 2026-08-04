@@ -11,6 +11,7 @@ use anyhow::Result;
 use crossterm::event::KeyCode;
 use shiki_config::config::{NotebookGitOverride, SnippetConfig};
 use shiki_config::Config;
+use shiki_core::process::on_path;
 use shiki_core::NotebookStore;
 use shiki_tui::keybindings::parse_key;
 
@@ -53,16 +54,6 @@ impl Report {
             println!("{symbol} {label}: {detail}");
         }
     }
-}
-
-/// Whether `bin` exists somewhere on `$PATH` — a plain lookup, deliberately
-/// not executing it (a `--version` probe could hang or have side effects for
-/// an arbitrary user-configured editor command).
-fn on_path(bin: &str) -> bool {
-    let Some(path_var) = std::env::var_os("PATH") else {
-        return false;
-    };
-    std::env::split_paths(&path_var).any(|dir| dir.join(bin).is_file())
 }
 
 pub fn run() -> Result<()> {
@@ -169,6 +160,33 @@ pub fn run() -> Result<()> {
         r.warn(
             "gh (GitHub CLI)",
             "not found \u{2014} HTTPS auth to private remotes relies on your system git credential store instead",
+        );
+    }
+
+    // `pretty-pdf` (go-pretty-pdf, used by `shiki publish`) is fetched
+    // automatically the first time it's needed if it's missing from both
+    // `$PATH` and shiki's own cache — that's an expected, self-healing
+    // state, not a misconfiguration, so this is always a `pass`, never
+    // warn/fail.
+    let pretty_pdf_cached = data_dir
+        .join("bin")
+        .join(if cfg!(windows) {
+            "pretty-pdf.exe"
+        } else {
+            "pretty-pdf"
+        })
+        .is_file();
+    if on_path("pretty-pdf") {
+        r.pass("pretty-pdf (shiki publish)", "found on PATH");
+    } else if pretty_pdf_cached {
+        r.pass(
+            "pretty-pdf (shiki publish)",
+            format!("cached at {}", data_dir.join("bin").display()),
+        );
+    } else {
+        r.pass(
+            "pretty-pdf (shiki publish)",
+            "not yet downloaded \u{2014} fetched automatically on first `shiki publish`",
         );
     }
 
@@ -307,6 +325,8 @@ fn check_keybinding_health(config: &Config, r: &mut Report) {
                 ("scratchpad", kb.global.scratchpad.as_str()),
                 ("links", kb.global.links.as_str()),
                 ("tasks_panel", kb.global.tasks_panel.as_str()),
+                ("publish", kb.global.publish.as_str()),
+                ("export", kb.global.export.as_str()),
             ],
         ),
         (

@@ -164,6 +164,12 @@ pub(crate) enum PendingInput {
     /// the two this is comes from `pending_batch`'s `BatchOp`, not a
     /// separate variant here.
     MoveOrCopy,
+    /// Export path for the selected notebook — `shiki_core::export`, shared
+    /// with the `shiki export` CLI command. Format is inferred from the
+    /// typed extension (`.md`/`.markdown` -> Markdown, anything else,
+    /// including the prefilled `.html`, -> HTML) rather than a separate
+    /// format-picker step, so one prompt is enough.
+    ExportNotebook,
 }
 
 impl PendingInput {
@@ -187,6 +193,7 @@ impl PendingInput {
             PendingInput::SettingsSnippetTrigger => " New snippet trigger ",
             PendingInput::SettingsSnippetLabel => " Snippet label ",
             PendingInput::MoveOrCopy => " Move/copy to ",
+            PendingInput::ExportNotebook => " Export path (.html or .md) ",
         }
     }
 
@@ -202,6 +209,9 @@ impl PendingInput {
                  to clone it instead — make sure you're logged in first if it's private. A path \
                  (/abs, ~/docs, ./relative) adopts that existing directory instead.",
             ),
+            PendingInput::ExportNotebook => {
+                Some("Format is inferred from the extension — .md/.markdown for Markdown, anything else for HTML.")
+            }
             _ => None,
         }
     }

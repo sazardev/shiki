@@ -25,6 +25,12 @@ pub enum Action {
     /// Opens the global tasks view: every `- [ ]` checkbox across every
     /// notebook, toggleable in place without opening the note.
     ToggleTasks,
+    /// Renders the selected notebook to a themed PDF via `pretty-pdf`
+    /// (go-pretty-pdf), then opens it.
+    PublishNotebook,
+    /// Exports the selected notebook to a single HTML or Markdown bundle —
+    /// the same rendering `shiki export` (CLI) uses.
+    ExportNotebook,
     // Notebooks-focus
     NewNotebook,
     RenameNotebook,
@@ -136,6 +142,8 @@ impl KeyMaps {
         // "what links here?" is answerable without focusing PREVIEW first.
         bind(&mut global, &cfg.global.links, Action::ShowLinks);
         bind(&mut global, &cfg.global.tasks_panel, Action::ToggleTasks);
+        bind(&mut global, &cfg.global.publish, Action::PublishNotebook);
+        bind(&mut global, &cfg.global.export, Action::ExportNotebook);
 
         let mut notebooks = HashMap::new();
         bind(&mut notebooks, &cfg.notebooks.new, Action::NewNotebook);
@@ -368,6 +376,8 @@ pub fn action_label(action: Action) -> &'static str {
         Action::ShowHistory => "note history (view/revert)",
         Action::ShowLinks => "links (outgoing / backlinks / mentions)",
         Action::ToggleTasks => "tasks (all notebooks)",
+        Action::PublishNotebook => "publish notebook to PDF",
+        Action::ExportNotebook => "export notebook to HTML/Markdown",
     }
 }
 
@@ -401,5 +411,7 @@ pub fn action_icon(action: Action) -> char {
         Action::UndoDelete => crate::icons::UNDO,
         Action::ToggleSettings => crate::icons::GEAR,
         Action::Scratchpad => crate::icons::PENCIL,
+        Action::PublishNotebook => crate::icons::PDF,
+        Action::ExportNotebook => crate::icons::NOTE,
     }
 }
