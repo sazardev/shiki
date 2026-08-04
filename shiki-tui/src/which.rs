@@ -6,7 +6,7 @@ use ratatui::Frame;
 
 use crate::app::App;
 use crate::icons;
-use crate::keybindings::{action_icon, action_label, describe_key};
+use crate::keybindings::describe_key;
 use crate::render::{hex_to_color, panel_block};
 
 /// Near-full-screen popup listing every keybinding, grouped by scope
@@ -50,7 +50,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     // header lines are interspersed — `ListState::select` needs a row
     // index, not an entry index.
     let mut selected_row = 0usize;
-    for (i, (scope, key, action)) in entries.iter().enumerate() {
+    for (i, row) in entries.iter().enumerate() {
+        let scope = row.scope();
         if last_scope != Some(scope) {
             items.push(ListItem::new(Line::from(Span::styled(
                 format!("── {scope} ──"),
@@ -63,14 +64,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         }
         items.push(ListItem::new(Line::from(vec![
             Span::styled(
-                format!("{key:>8} "),
+                format!("{:>8} ", row.key()),
                 Style::default().fg(accent).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                format!("{} ", action_icon(*action)),
-                Style::default().fg(accent),
-            ),
-            Span::styled(action_label(*action), Style::default().fg(fg)),
+            Span::styled(format!("{} ", row.icon()), Style::default().fg(accent)),
+            Span::styled(row.label().to_string(), Style::default().fg(fg)),
         ])));
     }
 

@@ -3,7 +3,6 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{List, ListItem, ListState};
 use ratatui::Frame;
-use shiki_core::TagIndex;
 
 use crate::app::App;
 use crate::icons;
@@ -20,7 +19,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let (title, items, selected): (String, Vec<ListItem>, usize) = match &app.tags_viewing {
         None => {
-            let tags = TagIndex::build(&app.notes);
+            let tags = app.tag_index();
             let items = tags
                 .tags()
                 .map(|tag| {

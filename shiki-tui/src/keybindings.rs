@@ -233,6 +233,83 @@ impl KeyMaps {
         out.sort_by(|a, b| a.0.cmp(b.0).then_with(|| a.1.cmp(&b.1)));
         out
     }
+
+    /// Core navigation/quit rows for the which-key popup — `hjkl`/arrows/
+    /// `Tab`/`Enter`/`?`/quit are hardcoded in `handle_normal_key` (they
+    /// behave identically in every scope, so they were never given `Action`
+    /// entries of their own), which meant `entries()` — and therefore the
+    /// one built-in help screen — omitted the most-used keys in the app
+    /// entirely. These aren't real `Action`s (nothing to dispatch — `Enter`
+    /// on one of these rows in the which-key modal is a no-op, see
+    /// `WhichKeyRow`), just documentation of keys that already work.
+    pub fn nav_rows(&self) -> Vec<(&'static str, String, &'static str)> {
+        vec![
+            ("NAVIGATION", "j / ↓".into(), "move down"),
+            ("NAVIGATION", "k / ↑".into(), "move up"),
+            ("NAVIGATION", "PageDown".into(), "move down a page"),
+            ("NAVIGATION", "PageUp".into(), "move up a page"),
+            ("NAVIGATION", "Home".into(), "jump to the top"),
+            ("NAVIGATION", "End".into(), "jump to the bottom"),
+            (
+                "NAVIGATION",
+                "l / → / enter".into(),
+                "open (a folder, or the next panel)",
+            ),
+            (
+                "NAVIGATION",
+                "h / ←".into(),
+                "back (up a folder, or the previous panel)",
+            ),
+            ("NAVIGATION", "Tab".into(), "switch panel"),
+            ("NAVIGATION", "?".into(), "this help / command palette"),
+            ("NAVIGATION", describe_key(self.quit), "quit shiki"),
+        ]
+    }
+}
+
+/// A row in the which-key popup: either a real, dispatchable `Action`, or a
+/// purely informational hardcoded navigation key (see `KeyMaps::nav_rows`)
+/// that `Enter` can't act on since there's no `Action` behind it.
+#[derive(Debug, Clone)]
+pub enum WhichKeyRow {
+    Bound {
+        scope: &'static str,
+        key: String,
+        action: Action,
+    },
+    Nav {
+        scope: &'static str,
+        key: String,
+        label: &'static str,
+    },
+}
+
+impl WhichKeyRow {
+    pub fn scope(&self) -> &'static str {
+        match self {
+            WhichKeyRow::Bound { scope, .. } | WhichKeyRow::Nav { scope, .. } => scope,
+        }
+    }
+
+    pub fn key(&self) -> &str {
+        match self {
+            WhichKeyRow::Bound { key, .. } | WhichKeyRow::Nav { key, .. } => key,
+        }
+    }
+
+    pub fn label(&self) -> &str {
+        match self {
+            WhichKeyRow::Bound { action, .. } => action_label(*action),
+            WhichKeyRow::Nav { label, .. } => label,
+        }
+    }
+
+    pub fn icon(&self) -> char {
+        match self {
+            WhichKeyRow::Bound { action, .. } => action_icon(*action),
+            WhichKeyRow::Nav { .. } => crate::icons::ARROW,
+        }
+    }
 }
 
 pub fn describe_key(code: KeyCode) -> String {

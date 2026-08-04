@@ -66,6 +66,7 @@ impl App {
         self.preview_scroll = 0;
         self.folder_preview_cache = None;
         self.note_preview_cache = None;
+        self.tag_index_cache = None;
         self.refresh_git_status();
     }
 
@@ -93,6 +94,7 @@ impl App {
         // every caller of this function). The colors-in-the-key check alone
         // wouldn't catch that, since neither the path nor the theme changed.
         self.note_preview_cache = None;
+        self.tag_index_cache = None;
         self.refresh_git_status();
     }
 
@@ -383,10 +385,25 @@ impl App {
             }
             GitOpKind::Pull { notebook } => {
                 if self.selected_notebook().map(|n| n.name.as_str()) == Some(notebook.as_str()) {
-                    self.reload_notes();
+                    // Same fix as `PullAll` below: re-list from disk without
+                    // resetting the selection/scroll the user may have since
+                    // moved to a different note/folder *within this same
+                    // notebook* while the pull was in flight.
+                    self.refresh_notes_preserve_selection();
                 }
             }
-            GitOpKind::PullAll => self.reload_notes(),
+            // Unlike `Sync`/`Pull`, this doesn't know which specific
+            // notebook(s) actually changed (just an aggregate ok/failed
+            // count) — so it can't skip refreshing outright the way those
+            // two do when the background op wasn't about the currently
+            // selected notebook. But it still shouldn't *reset* the
+            // selection: `reload_notes` always jumps back to index 0 and
+            // clears scroll position, which used to fire unconditionally
+            // here even when the user had since navigated to a different
+            // note/folder entirely while the pull was in flight.
+            // `refresh_notes_preserve_selection` re-lists from disk the same
+            // way but keeps the same note selected (by slug) instead.
+            GitOpKind::PullAll => self.refresh_notes_preserve_selection(),
         }
         if self.show_drawer {
             self.refresh_drawer_statuses();

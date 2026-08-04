@@ -11,7 +11,7 @@ use crate::app::{
 use crate::editor::InlineEditor;
 use crate::icons;
 use crate::input::InputBox;
-use crate::keybindings::{action_label, Action};
+use crate::keybindings::{Action, WhichKeyRow};
 use crate::render::{hex_to_color, panel_block};
 use crate::{confirm, layout, panel_drawer, panel_preview, slash_menu, status_bar};
 
@@ -738,8 +738,15 @@ impl App {
     }
 
     /// Only reachable once the check reported an available version — starts
-    /// the real download+verify+install on a background thread.
+    /// the real download+verify+install on a background thread, pinned to
+    /// the exact version the confirm dialog showed (`UpdateState::Available`'s
+    /// own string) rather than re-resolving "latest" a second time — a new
+    /// release landing in the gap between the check and this confirmation
+    /// must not silently install a different version than what was shown.
     fn start_update_install(&mut self) {
+        let Some(UpdateState::Available(target_version)) = self.update_state.clone() else {
+            return;
+        };
         self.update_state = Some(UpdateState::Downloading);
         // Captured now, before the replace happens — see the field doc on
         // `relaunch_exe_path` for why this can't just be re-queried later.
@@ -747,7 +754,8 @@ impl App {
         let (tx, rx) = std::sync::mpsc::channel();
         let current = env!("CARGO_PKG_VERSION").to_string();
         std::thread::spawn(move || {
-            let result = shiki_core::update::install_latest(&current).map_err(|e| e.to_string());
+            let result = shiki_core::update::install_version(&current, &target_version)
+                .map_err(|e| e.to_string());
             let _ = tx.send(UpdateMsg::InstallResult(result));
         });
         self.update_rx = Some(rx);
@@ -832,16 +840,25 @@ impl App {
     /// Every keybinding entry whose key, action label, or scope name
     /// contains the current query (case-insensitive) — all of them if the
     /// query is empty. Backs both rendering and `Enter`'s execute-in-place.
-    pub fn which_key_filtered_entries(&self) -> Vec<(&'static str, String, Action)> {
+    pub fn which_key_filtered_entries(&self) -> Vec<WhichKeyRow> {
         let query = self.which_key_input.value.to_lowercase();
-        self.keymaps
+        let bound = self
+            .keymaps
             .entries()
             .into_iter()
-            .filter(|(scope, key, action)| {
+            .map(|(scope, key, action)| WhichKeyRow::Bound { scope, key, action });
+        let nav = self
+            .keymaps
+            .nav_rows()
+            .into_iter()
+            .map(|(scope, key, label)| WhichKeyRow::Nav { scope, key, label });
+        bound
+            .chain(nav)
+            .filter(|row| {
                 query.is_empty()
-                    || key.to_lowercase().contains(&query)
-                    || action_label(*action).to_lowercase().contains(&query)
-                    || scope.to_lowercase().contains(&query)
+                    || row.key().to_lowercase().contains(&query)
+                    || row.label().to_lowercase().contains(&query)
+                    || row.scope().to_lowercase().contains(&query)
             })
             .collect()
     }
@@ -856,7 +873,10 @@ impl App {
                 let action = self
                     .which_key_filtered_entries()
                     .get(self.which_key_selected)
-                    .map(|(_, _, action)| *action);
+                    .and_then(|row| match row {
+                        WhichKeyRow::Bound { action, .. } => Some(*action),
+                        WhichKeyRow::Nav { .. } => None,
+                    });
                 if let Some(action) = action {
                     self.show_which_key = false;
                     self.handle_action(action);
@@ -2058,7 +2078,12 @@ impl App {
             }
         };
         let today = chrono::Local::now().date_naive();
-        match shiki_core::daily::create_or_open(&nb, today, &templates_dir) {
+        match shiki_core::daily::create_or_open(
+            &nb,
+            today,
+            &templates_dir,
+            &self.config.general.daily_template,
+        ) {
             Ok(note) => {
                 // Daily notes always live at the notebook root — jump the
                 // breadcrumb back there so the new note is visible.
@@ -3453,6 +3478,16 @@ impl App {
     /// `]]` — same "delete the exact range that was being typed, then
     /// insert the resolved text" shape as `apply_slash_command`.
     fn apply_wikilink_selection(&mut self, title: &str) {
+        // The typed "[[query" itself gets replayed across every secondary
+        // cursor (the generic per-keystroke path in `replay_keystroke`
+        // handles that fine), but applying the actual selection below only
+        // ever edits the primary cursor's `textarea` — a secondary cursor
+        // would be left with its own unconsumed literal "[[query" text and
+        // a now-stale `(row, col)` once the primary's edit shifts things
+        // out from under it. Collapsing to a single cursor first is the
+        // same "not a meaningful multi-cursor state" call already made for
+        // Ctrl+A/select-all above.
+        self.editor_secondary_cursors.clear();
         let Some(editor) = &mut self.editor else {
             return;
         };
@@ -3974,6 +4009,13 @@ impl App {
     /// A `{{cursor}}` marker in the body is resolved to an absolute
     /// `CursorMove::Jump` afterward instead of being inserted literally.
     fn apply_slash_command(&mut self, cmd: &slash_menu::SlashCommand) {
+        // Same reasoning as `apply_wikilink_selection`: this only edits the
+        // primary cursor's `textarea`, and a snippet body can be multi-line
+        // — leaving secondary cursors in place after this would desync
+        // their row/col against the rows the primary's insertion just
+        // shifted, on top of each one still holding its own unconsumed
+        // literal "/command" text.
+        self.editor_secondary_cursors.clear();
         let title = self
             .selected_note()
             .map(|n| n.frontmatter.title.clone())
@@ -4064,6 +4106,16 @@ impl App {
                     // accidental-notebook-deletion footgun.
                     if is_notebook_git_action(action) {
                         self.handle_action(action);
+                    } else {
+                        // Notebook new/rename/delete deliberately isn't
+                        // included in the fallback above (see the comment
+                        // there) — but silently doing nothing at all reads
+                        // as a dead key, indistinguishable from one that's
+                        // just unbound in this scope. Say so instead.
+                        self.set_status(
+                            "no action bound here — switch to NOTEBOOKS to manage notebooks"
+                                .to_string(),
+                        );
                     }
                 }
             }

@@ -13,7 +13,9 @@ use shiki_config::Theme;
 /// on before this was pulled out into a shared helper: dirty is more
 /// urgent than "just needs a push/pull", and clean is the good case.
 pub fn git_status_color(theme: &Theme, gs: &shiki_core::git::GitStatus) -> Color {
-    if gs.dirty_count > 0 {
+    if gs.status_error.is_some() {
+        hex_to_color(&theme.error)
+    } else if gs.dirty_count > 0 {
         hex_to_color(&theme.warning)
     } else if gs.ahead > 0 || gs.behind > 0 {
         hex_to_color(&theme.accent)
@@ -27,6 +29,13 @@ pub fn git_status_color(theme: &Theme, gs: &shiki_core::git::GitStatus) -> Color
 /// and the notebook drawer so the same notebook never shows different
 /// numbers in two places because one of them drifted from the other.
 pub fn git_status_suffix(gs: &shiki_core::git::GitStatus) -> String {
+    if gs.status_error.is_some() {
+        // The status check itself failed (locked index, permission issue,
+        // corrupted repo) — showing "+0" here would silently read as
+        // "clean", which is exactly the wrong signal when the real state
+        // is genuinely unknown.
+        return " status?".to_string();
+    }
     let mut extras = String::new();
     if gs.dirty_count > 0 {
         extras.push_str(&format!(" +{}", gs.dirty_count));

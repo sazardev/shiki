@@ -708,6 +708,14 @@ pub struct App {
     /// `note_preview_source_line`, which click-to-edit uses to jump into
     /// `Mode::Edit` at the right raw source line.
     pub(crate) note_preview_cache: Option<NotePreviewCache>,
+    /// Cache for the tags modal's `TagIndex::build(&self.notes)` — rebuilt
+    /// (`refresh_tag_index_cache`) only when the modal is open and the cache
+    /// is empty; `reload_notes`/`refresh_notes_preserve_selection` clear it
+    /// to `None` whenever `self.notes` actually changes underneath it, the
+    /// same invalidation trigger `note_preview_cache`/`folder_preview_cache`
+    /// already use. `None` whenever the modal is closed, so it doesn't hold
+    /// a stale index in memory for no reason.
+    pub(crate) tag_index_cache: Option<shiki_core::TagIndex>,
     pub show_update: bool,
     pub update_state: Option<UpdateState>,
     /// Set while a background thread is checking/installing, so `run()`'s
@@ -744,11 +752,15 @@ pub struct App {
     /// something's running; `None` means idle.
     pub sync_in_flight: Option<String>,
     pub(crate) sync_rx: Option<std::sync::mpsc::Receiver<crate::sync::GitOpResult>>,
-    /// Advanced once per `run()` iteration while `sync_in_flight` (or the
-    /// self-updater's own in-flight state) is set — indexes into a small
-    /// Braille frame set for the footer's spinner. Not reset when idle:
-    /// picking back up from wherever it left off is fine, nobody's
-    /// watching for an exact starting frame.
+    /// Advanced once per `run()` iteration while `sync_in_flight` is set —
+    /// indexes into a small Braille frame set for the footer's spinner. Not
+    /// reset when idle: picking back up from wherever it left off is fine,
+    /// nobody's watching for an exact starting frame. The self-updater's own
+    /// in-flight state (`update_state: Checking`/`Downloading`) does *not*
+    /// advance this today — nothing in the update-check UI renders a
+    /// spinner glyph from it yet. If one is ever wired in there, extend the
+    /// gating in `run()` (`if app.sync_in_flight.is_some() { ... }`) to
+    /// cover that case too rather than assuming this field already does.
     pub spinner_frame: usize,
 }
 
@@ -961,6 +973,7 @@ impl App {
             history_count_cache: None,
             folder_preview_cache: None,
             note_preview_cache: None,
+            tag_index_cache: None,
             show_update: false,
             update_state: None,
             update_rx: None,
@@ -1545,6 +1558,16 @@ impl App {
         self.keymaps = KeyMaps::from_config(&new_config.keybindings);
         self.favorite_editor = shiki_core::editor::detect_favorite_editor();
         self.config = new_config;
+        // Both caches key on the theme's colors too, so a reload that
+        // doesn't actually change the theme would still hit correctly even
+        // without this — but that's an accident of the cache key, not a
+        // documented exemption, and a future cache keyed differently would
+        // silently break on a config reload. Clear both unconditionally,
+        // same as every other place that can change what PREVIEW should
+        // show underneath an unchanged path (`reload_notes`/
+        // `refresh_notes_preserve_selection`).
+        self.folder_preview_cache = None;
+        self.note_preview_cache = None;
     }
 
     /// Resolves the selected note's path relative to its notebook's root —
@@ -1689,6 +1712,44 @@ impl App {
         self.note_preview_cache = Some((path, colors, width, lines, sources));
     }
 
+    /// Keeps the tags modal's `TagIndex` up to date without rebuilding it on
+    /// every draw tick while the modal is open — same "compute once, not per
+    /// draw" discipline as `refresh_history_cache`/`refresh_folder_preview_cache`/
+    /// `refresh_note_preview_cache`. A no-op while the modal is closed
+    /// (`tag_index_cache` stays `None`, cleared by `reload_notes`/
+    /// `refresh_notes_preserve_selection` whenever the underlying note list
+    /// changes); rebuilt exactly once per "modal opened or notes changed"
+    /// event, not per keystroke while browsing it.
+    fn refresh_tag_index_cache(&mut self) {
+        if !self.show_tags {
+            self.tag_index_cache = None;
+            return;
+        }
+        if self.tag_index_cache.is_some() {
+            return;
+        }
+        self.tag_index_cache = Some(TagIndex::build(&self.notes));
+    }
+
+    /// The tags modal's tag index — always up to date by the time this is
+    /// called, since `refresh_tag_index_cache` runs once per `run()`
+    /// iteration before drawing, same spot as the other caches. Returns a
+    /// borrowed reference rather than a clone: `panel_tags::render` and
+    /// `draw()` both call this on every single draw tick while the modal is
+    /// open, and cloning the whole `TagIndex` (a `BTreeMap<String,
+    /// Vec<PathBuf>>`) on every one of those calls would silently reintroduce
+    /// the exact per-draw-tick cost the cache exists to avoid, just one
+    /// indirection later. The `unwrap_or_else` fallback (a shared empty
+    /// index, not a rebuild) only matters if this is ever called before
+    /// `refresh_tag_index_cache` has run at all — it never legitimately is,
+    /// since both callers are gated on `show_tags`.
+    pub(crate) fn tag_index(&self) -> &TagIndex {
+        static EMPTY: std::sync::OnceLock<TagIndex> = std::sync::OnceLock::new();
+        self.tag_index_cache
+            .as_ref()
+            .unwrap_or_else(|| EMPTY.get_or_init(TagIndex::default))
+    }
+
     /// The cached, pre-wrapped formatted lines for whichever note is
     /// currently selected, for the PREVIEW panel — `None` if no note is
     /// selected or the cache hasn't caught up yet (the very next draw tick
@@ -1752,7 +1813,7 @@ impl App {
     /// a `BTreeMap`, so this order is stable across redraws without storing
     /// the list on `App` itself.
     pub(crate) fn current_tags(&self) -> Vec<String> {
-        TagIndex::build(&self.notes).tags().cloned().collect()
+        self.tag_index().tags().cloned().collect()
     }
 
     /// Notes in the current directory carrying `tag` — every match is
@@ -1954,6 +2015,7 @@ pub fn run<B: Backend<Error = io::Error>>(
         app.refresh_history_cache();
         app.refresh_folder_preview_cache();
         app.refresh_note_preview_cache();
+        app.refresh_tag_index_cache();
         app.expire_status_message();
         app.poll_update_channel();
         app.poll_sync_channel();

@@ -14,7 +14,6 @@ use ratatui::text::Line;
 use ratatui::text::Span;
 use ratatui::widgets::{Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
-use shiki_core::TagIndex;
 
 pub fn draw(frame: &mut Frame, app: &App) {
     let background = ratatui::widgets::Block::default()
@@ -136,7 +135,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     if app.show_tags {
         let rows = match &app.tags_viewing {
-            None => TagIndex::build(&app.notes).len(),
+            None => app.tag_index().len(),
             Some(tag) => app
                 .notes
                 .iter()
