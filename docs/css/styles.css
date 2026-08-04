@@ -346,6 +346,26 @@ code, .code {
   color: var(--accent);
 }
 
+/* Hidden on desktop — only shown (see the 900px media query below) once
+   `.topbar nav` itself collapses, as the only remaining way to reach it. */
+.nav-toggle {
+  display: none;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.nav-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ==========================================================================
    Buttons / pills
    ========================================================================== */
@@ -723,6 +743,54 @@ code, .code {
 }
 
 /* ==========================================================================
+   Reference tables (documentation.html's keybinding/config/CLI tables) —
+   `.ref-table` had no rule here at all before, so long cells (a keybinding's
+   description column especially) forced the whole page to scroll
+   horizontally instead of just the table, unlike every other wide-content
+   block on the site (`.install-card pre` above, `.code-block`). `display:
+   block` + `overflow-x: auto` on the table itself needs no wrapper element
+   in the markup — same "scroll the element itself" trick `.install-card
+   pre` already uses.
+   ========================================================================== */
+
+.ref-table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 0.9rem;
+}
+
+.ref-table th,
+.ref-table td {
+  padding: 8px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.ref-table td:last-child {
+  white-space: normal;
+}
+
+.ref-table th {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ref-table td code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.85em;
+}
+
+/* ==========================================================================
    Contributors
    ========================================================================== */
 
@@ -913,10 +981,17 @@ code, .code {
   margin-top: 0;
 }
 
-/* No dedicated narrow-viewport rule for .version-popover: `.topbar nav`
-   (which contains the whole chip+popover) is already `display: none` below
-   900px (see Responsive below), so the popover can never actually be open
-   at any width where it would need one. */
+/* No dedicated narrow-viewport rule for .version-popover: it's positioned
+   relative to `.version-chip-wrap` (`position: relative`, stretched to the
+   mobile nav's full width by the flex-column `.topbar nav` below 900px —
+   see Responsive), so `right: 0` above still lands it within the viewport
+   once the hamburger menu is opened. It used to be true that `.topbar nav`
+   was unconditionally `display: none` below 900px, making the popover
+   unreachable at that width entirely — that stopped being the case once
+   the mobile nav got a working toggle (`#nav-toggle`/`.nav-open` in
+   main.js/styles.css); closing that menu (link click or Escape) also
+   closes this popover via `initNavToggle`, so it can't reappear
+   already-open next time the menu is opened. */
 
 /* ==========================================================================
    Footer
@@ -960,7 +1035,34 @@ footer.site-footer small {
   .hero h1 {
     font-size: 2.2rem;
   }
+  .nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
   .topbar nav {
     display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    gap: 0;
+    padding: 8px 24px 16px;
+    background: var(--statusbar);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar nav.nav-open {
+    display: flex;
+  }
+  .topbar nav a {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar nav a:last-of-type {
+    border-bottom: none;
+  }
+  .topbar nav .version-chip-wrap {
+    padding: 10px 0;
   }
 }

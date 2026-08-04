@@ -38,6 +38,21 @@
 
 .doc-page section {
   padding: 56px 0;
+  /* `.topbar` (sticky, ~58px) plus `.doc-toc` (sticky, ~44px) below it cover
+     roughly the first 100px of the viewport — without this, a TOC link
+     click or a doc-search jump (`js/documentation.js`'s `flashTarget`) lands
+     the target flush against the top of the scroll container, i.e. hidden
+     underneath both bars. `scroll-behavior: smooth` (styles.css) plus this
+     is what actually keeps the target heading visible after the jump. */
+  scroll-margin-top: 120px;
+}
+
+.doc-page h3[id] {
+  /* Deep-links inside a section (doc-search results, or a future in-page
+     anchor to a specific `<h3 id>` rather than its parent `<section>`)
+     need the same clearance the section-level scroll-margin-top above
+     already gives whole sections. */
+  scroll-margin-top: 120px;
 }
 
 .doc-page h2 {

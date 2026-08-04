@@ -73,6 +73,20 @@ function applyTheme(themeId) {
   // exact filename stem scripts/screenshots.sh writes (e.g.
   // "wide-01-notebooks" or "stacked-overview") — no prefix assumed here,
   // since the wide/stacked/single tiers don't share one naming pattern.
+  //
+  // The HTML deliberately gives these `<img>` tags a tiny transparent
+  // data-URI placeholder as `src` (a real image URL is invalid markup
+  // without one) instead of a real screenshot path — this function is the
+  // only thing that ever points them at an actual screenshot. A hardcoded
+  // `src="…/gruvbox-dark/…"` used to sit in the markup as a "default," but
+  // the browser starts fetching that the moment it parses the tag, well
+  // before this script has a chance to read the saved theme from
+  // `localStorage` — for any visitor whose saved theme wasn't
+  // gruvbox-dark, that meant downloading both the wrong theme's image
+  // *and* the right one, plus a visible flash between them. The data-URI
+  // placeholder costs no network request at all (it's inline base64), so
+  // this function's own fetch of the correct theme's image is the only one
+  // that ever happens.
   document.querySelectorAll("img[data-shot]").forEach((img) => {
     img.src = `assets/screenshots/gallery/${theme.id}/${img.dataset.shot}.png`;
   });
@@ -283,7 +297,7 @@ function initVersionPopover() {
   const button = document.getElementById("version-pill");
   const popover = document.getElementById("version-popover");
   const content = document.getElementById("version-popover-content");
-  if (!wrap || !button || !popover || !content) return; // shared script — not every page/state has all four
+  if (!wrap || !button || !popover || !content) return null; // shared script — not every page/state has all four
 
   let loaded = false;
 
@@ -323,6 +337,14 @@ function initVersionPopover() {
       button.focus();
     }
   });
+
+  // Exposed so `initNavToggle` can close this popover when the mobile nav
+  // itself closes — otherwise `popover.hidden` only goes visually true via
+  // the ancestor `<nav>` getting `display: none`, while this closure's own
+  // `hidden`/`aria-expanded` state stays stale at "open", reappearing
+  // already-open next time the hamburger opens and reporting a mismatched
+  // expanded state to screen readers in the meantime.
+  return { close };
 }
 
 // ---------------------------------------------------------------------------
@@ -363,12 +385,24 @@ function detectPlatformKey() {
   return null;
 }
 
+// A hung (not failed) request otherwise never resolves or rejects — the
+// existing try/catch only guards against a fetch that actually errors out or
+// a non-ok status, neither of which fires for a connection that just sits
+// open. 8s is generous for a single small JSON response.
+const FETCH_TIMEOUT_MS = 8000;
+
+function fetchWithTimeout(url, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 async function loadLatestRelease() {
   const downloadBtn = document.getElementById("download-btn");
   const pill = document.getElementById("version-pill");
 
   try {
-    const res = await fetch(LATEST_RELEASE_URL);
+    const res = await fetchWithTimeout(LATEST_RELEASE_URL);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const tag = data.tag_name; // e.g. "v0.8.1"
@@ -443,6 +477,16 @@ async function loadContributors() {
       fetchGithubJson("https://api.github.com/repos/sazardev/shiki/pulls?state=all&per_page=100"),
       fetchGithubJson("https://api.github.com/repos/sazardev/shiki/issues?state=all&per_page=100"),
     ]);
+
+    // A rate-limited or otherwise-erroring GitHub API call can still come
+    // back as a 200 with a JSON *object* (e.g. `{ message: "API rate limit
+    // exceeded" }`) instead of the array these endpoints normally return —
+    // `fetchGithubJson` only checks `res.ok`, not the shape of the body.
+    // Without this, the `for...of` loops below would throw on a non-iterable
+    // and skip the `catch` block's friendlier fallback message entirely.
+    if (![contributors, pulls, issues].every(Array.isArray)) {
+      throw new Error("unexpected (non-array) response shape from GitHub API");
+    }
 
     const people = new Map(); // login -> { avatar_url, html_url, commits, prs, issues }
 
@@ -548,6 +592,74 @@ function initCopyButtons() {
   });
 }
 
+function initNavToggle(versionPopover) {
+  const toggle = document.getElementById("nav-toggle");
+  const nav = document.getElementById("site-nav");
+  if (!toggle || !nav) return;
+
+  // Every link/button actually reachable while the panel is open — used
+  // both to move focus into the panel on open and to trap Tab/Shift+Tab
+  // inside it while it's open, so keyboard focus can't silently wander
+  // into the hero content sitting hidden underneath the still-open panel.
+  const focusable = () =>
+    Array.from(nav.querySelectorAll("a, button")).filter(
+      (el) => !el.hidden && el.offsetParent !== null
+    );
+
+  const setOpen = (open) => {
+    nav.classList.toggle("nav-open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.textContent = open ? "✕" : "☰";
+    // The version popover lives inside `nav` — closing the mobile menu
+    // only hides it visually (via the ancestor's `display: none`) unless
+    // its own state is closed too, so do that explicitly rather than
+    // leaving it internally "open" for next time.
+    if (!open && versionPopover) versionPopover.close();
+    if (open) {
+      focusable()[0]?.focus();
+    } else if (nav.contains(document.activeElement)) {
+      // Closing while focus was still inside the panel (Escape, or a link
+      // navigating away) — return it to the control that opened the panel
+      // instead of leaving it on a now-hidden element.
+      toggle.focus();
+    }
+  };
+
+  toggle.addEventListener("click", () => {
+    setOpen(!nav.classList.contains("nav-open"));
+  });
+
+  // Picking a link closes the menu instead of leaving it open over the
+  // section it just navigated to — otherwise the very next scroll shows a
+  // half-screen nav panel obscuring the content it was just used to reach.
+  nav.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", () => setOpen(false));
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (!nav.classList.contains("nav-open")) return;
+    if (e.key === "Escape") {
+      setOpen(false);
+      return;
+    }
+    // Focus trap: Tab past the last item (or Shift+Tab past the first)
+    // wraps within the panel instead of escaping into the hero content
+    // that's still in the DOM (just visually covered) behind it.
+    if (e.key !== "Tab") return;
+    const items = focusable();
+    if (items.length === 0) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   buildSwatches();
   initTheme();
@@ -555,5 +667,6 @@ document.addEventListener("DOMContentLoaded", () => {
   loadLatestRelease();
   loadContributors();
   initCopyButtons();
-  initVersionPopover();
+  const versionPopover = initVersionPopover();
+  initNavToggle(versionPopover);
 });

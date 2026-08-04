@@ -42,7 +42,8 @@
 
   <header class="topbar">
     <div class="brand"><a href="index.html" style="color:inherit;text-decoration:none;">shiki (私記)</a><span class="cursor"></span></div>
-    <nav>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
+    <nav id="site-nav">
       <a href="index.html#themes">Themes</a>
       <a href="index.html#features">Features</a>
       <a href="index.html#install">Install</a>
@@ -123,7 +124,7 @@
 
       <h3>2. The three panels</h3>
       <figure class="doc-shot-card">
-        <img data-shot="wide-01-notebooks" width="1260" height="760" src="assets/screenshots/gallery/gruvbox-dark/wide-01-notebooks.png" alt="shiki's three panels: Notebooks on the left, Notes in the middle, Preview on the right" />
+        <img data-shot="wide-01-notebooks" width="1260" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="shiki's three panels: Notebooks on the left, Notes in the middle, Preview on the right" />
         <figcaption>NOTEBOOKS (left) → NOTES (middle) → PREVIEW (right). This is the whole app.</figcaption>
       </figure>
       <p style="max-width:70ch;">
@@ -194,15 +195,15 @@
       </p>
       <div class="doc-shot-grid">
         <figure class="doc-shot-card">
-          <img data-shot="wide-03-preview" width="1260" height="760" src="assets/screenshots/gallery/gruvbox-dark/wide-03-preview.png" alt="Wide terminal: all three panels visible, Preview focused and expanded" />
+          <img data-shot="wide-03-preview" width="1260" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="Wide terminal: all three panels visible, Preview focused and expanded" />
           <figcaption><strong>Wide</strong> (≥70 columns) — all three panels, the focused one gets the most space.</figcaption>
         </figure>
         <figure class="doc-shot-card">
-          <img data-shot="stacked-overview" width="540" height="760" src="assets/screenshots/gallery/gruvbox-dark/stacked-overview.png" alt="Narrow terminal: panels stacked vertically instead of side by side" />
+          <img data-shot="stacked-overview" width="540" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="Narrow terminal: panels stacked vertically instead of side by side" />
           <figcaption><strong>Narrow but tall, or square</strong> (46–70 columns) — same panels, stacked top-to-bottom.</figcaption>
         </figure>
         <figure class="doc-shot-card">
-          <img data-shot="single-overview" width="360" height="228" src="assets/screenshots/gallery/gruvbox-dark/single-overview.png" alt="Very small terminal: only one panel shown at a time, full screen" />
+          <img data-shot="single-overview" width="360" height="228" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="Very small terminal: only one panel shown at a time, full screen" />
           <figcaption><strong>Very small</strong> (&lt;46 columns or &lt;14 rows) — one panel at a time, full screen.</figcaption>
         </figure>
       </div>
@@ -260,7 +261,7 @@
         straight from your own config, so it can never show you a binding that doesn't really work.
       </p>
       <figure class="doc-shot-card">
-        <img data-shot="wide-04-which-key" width="1260" height="760" src="assets/screenshots/gallery/gruvbox-dark/wide-04-which-key.png" alt="The which-key modal: a searchable, full-screen list of every active keybinding" />
+        <img data-shot="wide-04-which-key" width="1260" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="The which-key modal: a searchable, full-screen list of every active keybinding" />
         <figcaption><code>?</code> — every binding, searchable. Type to filter, Enter runs it directly.</figcaption>
       </figure>
 
@@ -381,7 +382,7 @@
         </tbody>
       </table>
       <figure class="doc-shot-card">
-        <img data-shot="wide-10-tree-view" width="1260" height="760" src="assets/screenshots/gallery/gruvbox-dark/wide-10-tree-view.png" alt="Tree view: every folder and note in the notebook shown as one expanded list" />
+        <img data-shot="wide-10-tree-view" width="1260" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="Tree view: every folder and note in the notebook shown as one expanded list" />
         <figcaption><code>T</code> in NOTES — the whole notebook's structure at a glance.</figcaption>
       </figure>
 
@@ -397,7 +398,7 @@
         </tbody>
       </table>
       <figure class="doc-shot-card">
-        <img data-shot="wide-11-history" width="1260" height="760" src="assets/screenshots/gallery/gruvbox-dark/wide-11-history.png" alt="Note history modal: every git commit that touched this note, newest first" />
+        <img data-shot="wide-11-history" width="1260" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="Note history modal: every git commit that touched this note, newest first" />
         <figcaption><code>H</code> in PREVIEW — real git history for one note, browsable and revertible.</figcaption>
       </figure>
 
@@ -416,7 +417,7 @@
         then saves and exits, as usual).
       </p>
       <figure class="doc-shot-card">
-        <img data-shot="wide-15-slash-menu" width="1260" height="760" src="assets/screenshots/gallery/gruvbox-dark/wide-15-slash-menu.png" alt="The /-menu open inside the inline editor, listing every quick-insert block" />
+        <img data-shot="wide-15-slash-menu" width="1260" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="The /-menu open inside the inline editor, listing every quick-insert block" />
         <figcaption>Type <code>/</code> at the start of a line — every built-in block, filterable, plus anything you've added yourself.</figcaption>
       </figure>
       <p>
@@ -474,6 +475,7 @@ shiki config              # show config path
 shiki notebook create &lt;name&gt;
 shiki notebook list
 shiki notebook rename &lt;old&gt; &lt;new&gt;
+shiki notebook delete &lt;name&gt; --yes  # permanently deletes the notebook and every note in it
 shiki theme list          # list built-in themes, marking the active one
 shiki theme set &lt;name&gt;    # switch theme (persisted to config.toml)
 shiki theme create [--from &lt;name&gt;]  # scaffold all 19 color overrides from a real palette
@@ -624,7 +626,7 @@ Content in **markdown**.
         that slot.
       </p>
       <figure class="doc-shot-card">
-        <img data-shot="wide-05-theme-picker" width="1260" height="760" src="assets/screenshots/gallery/gruvbox-dark/wide-05-theme-picker.png" alt="The theme picker modal with a live preview while browsing" />
+        <img data-shot="wide-05-theme-picker" width="1260" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="The theme picker modal with a live preview while browsing" />
         <figcaption><code>leader</code> then <code>c</code> — browse with live preview, Enter to keep it, Esc to cancel back to whatever was active before.</figcaption>
       </figure>
     </div>
@@ -772,7 +774,7 @@ multi_cursor = false</pre>
         straight to the note it resolves to.
       </p>
       <figure class="doc-shot-card">
-        <img data-shot="wide-21-wikilink-autocomplete" width="1260" height="760" src="assets/screenshots/gallery/gruvbox-dark/wide-21-wikilink-autocomplete.png" alt="The [[wikilink]] autocomplete menu open mid-edit, showing fuzzy-matched note candidates with folder breadcrumbs" />
+        <img data-shot="wide-21-wikilink-autocomplete" width="1260" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="The [[wikilink]] autocomplete menu open mid-edit, showing fuzzy-matched note candidates with folder breadcrumbs" />
         <figcaption>Typing <code>[[</code> opens a fuzzy note picker — same engine as <code>/</code> and global search.</figcaption>
       </figure>
 
@@ -801,7 +803,7 @@ auto_push = true
 path = "/Users/me/obsidian-vaults/alcateia"
 auto_sync = true</pre>
       <figure class="doc-shot-card">
-        <img data-shot="wide-13-drawer" width="1260" height="760" src="assets/screenshots/gallery/gruvbox-dark/wide-13-drawer.png" alt="The notebook drawer showing every notebook's git status" />
+        <img data-shot="wide-13-drawer" width="1260" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="The notebook drawer showing every notebook's git status" />
         <figcaption><code>leader</code> then <code>b</code> — every notebook's sync status at a glance, color-coded.</figcaption>
       </figure>
 
@@ -836,7 +838,7 @@ body = "# [{{title}}] {{cursor}}"</pre>
 
       <h3 id="settings-deep-dive">The Settings screen — editing all of the above without touching the file</h3>
       <figure class="doc-shot-card">
-        <img data-shot="wide-14-settings" width="1260" height="760" src="assets/screenshots/gallery/gruvbox-dark/wide-14-settings.png" alt="The Settings screen, GENERAL tab, showing editable config fields" />
+        <img data-shot="wide-14-settings" width="1260" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="The Settings screen, GENERAL tab, showing editable config fields" />
         <figcaption><code>leader</code> then <code>s</code> — every option above, editable in place.</figcaption>
       </figure>
       <p style="max-width:70ch;">

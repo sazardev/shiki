@@ -72,7 +72,8 @@
 
   <header class="topbar">
     <div class="brand">shiki (私記)<span class="cursor"></span></div>
-    <nav>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
+    <nav id="site-nav">
       <a href="#themes">Themes</a>
       <a href="#features">Features</a>
       <a href="#install">Install</a>
@@ -122,7 +123,14 @@
             <span class="term-dot green"></span>
             <span class="term-title">shiki — demo</span>
           </div>
-          <img id="hero-screenshot" src="assets/demo.gif" alt="Animated demo of shiki: browsing notebooks and nested folders, global and in-notebook fuzzy search, tags, multi-select batch delete, creating and moving folders, writing a full note, a git commit, and live theme switching" />
+          <picture>
+            <!-- A GIF can't be paused, so a visitor with the OS-level
+                 "reduce motion" preference set gets a static frame instead
+                 of a forced looping animation — `<source media>` is
+                 evaluated before the `<img>` fallback, no JS needed. -->
+            <source srcset="assets/screenshots/gruvbox-dark.png" media="(prefers-reduced-motion: reduce)" />
+            <img id="hero-screenshot" src="assets/demo.gif" alt="Animated demo of shiki: browsing notebooks and nested folders, global and in-notebook fuzzy search, tags, multi-select batch delete, creating and moving folders, writing a full note, a git commit, and live theme switching" />
+          </picture>
         </div>
       </div>
     </div>
@@ -283,8 +291,11 @@ scoop install shiki</pre>
         </div>
         <div class="install-card">
           <h3>Prebuilt binary</h3>
-          <pre>Download from the <a href="https://github.com/sazardev/shiki/releases/latest">latest release</a>,
-extract, and put it on your $PATH.</pre>
+          <p class="theme-note">
+            Grab the archive for your OS from the
+            <a href="https://github.com/sazardev/shiki/releases/latest">latest release</a>,
+            extract it, and put the binary on your <code>$PATH</code>.
+          </p>
         </div>
       </div>
       <p class="muted" style="margin-top: 24px; font-size: 0.9rem;">
