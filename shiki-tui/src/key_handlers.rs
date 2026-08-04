@@ -1716,9 +1716,12 @@ impl App {
         // misread as a panel click.
         if self.mode == Mode::Normal && self.no_modal_open() {
             let areas = layout::split(self.last_frame_area, self.focus);
-            if let Some(index) =
-                panel_notebooks::notebooks_hit_at(self.notebooks.len(), areas.notebooks, column, row)
-            {
+            if let Some(index) = panel_notebooks::notebooks_hit_at(
+                self.notebooks.len(),
+                areas.notebooks,
+                column,
+                row,
+            ) {
                 self.focus = Focus::Notebooks;
                 self.selected_notebook = index;
                 self.notes_path.clear();

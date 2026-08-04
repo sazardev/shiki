@@ -88,7 +88,9 @@ pub fn ensure_binary(cache_dir: &Path) -> Result<PathBuf> {
         // compare against.
         .current_version("0.0.0");
     let updater = builder.build().map_err(|e| Error::Publish(e.to_string()))?;
-    updater.update().map_err(|e| Error::Publish(e.to_string()))?;
+    updater
+        .update()
+        .map_err(|e| Error::Publish(e.to_string()))?;
     Ok(cached)
 }
 

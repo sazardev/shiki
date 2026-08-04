@@ -342,7 +342,11 @@ fn editor_rows(app: &App) -> Vec<Line<'static>> {
 }
 
 fn export_rows(app: &App) -> Vec<Line<'static>> {
-    vec![row_line(app, "pdf_theme", app.config.export.pdf_theme.clone())]
+    vec![row_line(
+        app,
+        "pdf_theme",
+        app.config.export.pdf_theme.clone(),
+    )]
 }
 
 /// NOTEBOOKS level 1 — one row per real notebook, showing its git remote

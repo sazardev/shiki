@@ -356,7 +356,11 @@ impl App {
         });
         let theme = self.config.export.pdf_theme.clone();
         let cache_dir = self.store.root.join("bin");
-        let out = self.store.root.join("exports").join(format!("{}.pdf", nb.name));
+        let out = self
+            .store
+            .root
+            .join("exports")
+            .join(format!("{}.pdf", nb.name));
         let nb_name = nb.name.clone();
         self.spawn_git_op(nb_name.clone(), move || {
             let message = match shiki_core::publish::publish(&notes, &theme, &cache_dir, &out) {
