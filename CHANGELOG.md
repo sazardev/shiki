@@ -116,6 +116,12 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ### Fixed
 
+- On macOS, `NotebookStore::list()` could pick up the `templates` directory as if it were a real
+  notebook. `directories::ProjectDirs` resolves `config_dir()` and `data_dir()` to the exact same
+  path on macOS (unlike Linux/Windows), so `default_templates_dir()`'s plain, non-git `templates/`
+  folder ended up sitting directly inside the data dir alongside real notebooks. Auto-discovered
+  subdirectories of the data dir now require a `.git` directory to count as a notebook — a real
+  distinction, not a heuristic, since every notebook is git-initialized immediately on creation.
 - The empty NOTEBOOKS panel's hint said `press \`A\` to create one`, but the actual default
   keybinding for it is lowercase `a` (found by actually using the freshly-built app, not just
   reading the diff).

@@ -444,12 +444,22 @@ impl NotebookStore {
             }
         }
 
-        // 2. Subdirectories under the root data dir
+        // 2. Subdirectories under the root data dir that are actually git repos.
+        //
+        // A notebook is *always* git-managed from creation (`NotebookStore::create`
+        // calls `git::init_repo` immediately), so requiring a `.git` directory here
+        // is a real, load-bearing distinction, not a heuristic: it's what actually
+        // separates a notebook from an incidental sibling directory. This matters in
+        // practice on macOS, where `directories::ProjectDirs` resolves `config_dir()`
+        // and `data_dir()` to the exact same path — `default_templates_dir()` (a
+        // plain, non-git `templates/` folder living in the config dir) then ends up
+        // sitting directly inside the data dir too, and used to get listed as a
+        // notebook purely as a side effect of that OS-specific path collision.
         if self.root.exists() {
             for entry in std::fs::read_dir(&self.root)? {
                 let entry = entry?;
                 let path = entry.path();
-                if !path.is_dir() {
+                if !path.is_dir() || !path.join(".git").is_dir() {
                     continue;
                 }
                 let name = path
@@ -794,5 +804,32 @@ mod tests {
 
         assert_eq!(renamed.path, root.join("work2"));
         assert!(root.join("work2").is_dir());
+    }
+
+    #[test]
+    fn list_only_picks_up_real_notebooks_not_plain_sibling_directories() {
+        // Reproduces the macOS bug from issue #43: `directories::ProjectDirs`
+        // resolves `config_dir()` and `data_dir()` to the same path there, so
+        // the (plain, non-git) templates directory ends up sitting directly
+        // inside the data dir alongside real notebooks.
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("data-dir");
+        let store = NotebookStore::new(root.clone());
+        store.create("personal").unwrap();
+        std::fs::create_dir_all(root.join("templates")).unwrap();
+
+        let names: Vec<String> = store.list().unwrap().into_iter().map(|n| n.name).collect();
+
+        assert_eq!(names, vec!["personal".to_string()]);
+    }
+
+    #[test]
+    fn list_ignores_a_directory_whose_git_repo_was_never_initialized() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("data-dir");
+        std::fs::create_dir_all(root.join("not-a-notebook")).unwrap();
+        let store = NotebookStore::new(root);
+
+        assert!(store.list().unwrap().is_empty());
     }
 }
