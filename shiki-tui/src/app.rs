@@ -401,6 +401,12 @@ pub struct App {
     /// Index into the *filtered* notes list, only meaningful while
     /// `tags_viewing.is_some()`.
     pub tags_notes_selected: usize,
+    pub show_outline: bool,
+    /// Snapshotted the instant the outline opens (`open_outline`) — from
+    /// the selected note's saved body normally, or the live editor buffer
+    /// when opened via `Ctrl+O` mid-edit, so unsaved headings show up too.
+    pub outline_headings: Vec<shiki_core::headings::Heading>,
+    pub outline_selected: usize,
     pub status_message: Option<String>,
     /// When `status_message` was last set — the footer only shows it for
     /// `STATUS_MESSAGE_TIMEOUT`, after which `expire_status_message` (called
@@ -423,6 +429,13 @@ pub struct App {
     pub drawer_statuses: Vec<(String, shiki_core::git::GitStatus)>,
     pub show_drawer: bool,
     pub drawer_selected: usize,
+    /// Session-only toggle (`leader z`, `Action::ToggleZenMode`) — forces
+    /// `layout::split` into its `single()` full-screen-focused-panel tier
+    /// regardless of terminal size, hiding NOTEBOOKS/NOTES for
+    /// distraction-free writing. Not persisted to `config.toml`, same as
+    /// `show_drawer`/`show_settings`: it's a per-session view state, not a
+    /// user preference.
+    pub zen_mode: bool,
     pub input: InputBox,
     pub confirm: Option<confirm::ConfirmDialog>,
     pub editor: Option<InlineEditor<'static>>,
@@ -905,6 +918,9 @@ impl App {
             tags_selected: 0,
             tags_viewing: None,
             tags_notes_selected: 0,
+            show_outline: false,
+            outline_headings: Vec::new(),
+            outline_selected: 0,
             status_message: None,
             status_message_set_at: None,
             git_status,
@@ -912,6 +928,7 @@ impl App {
             drawer_statuses: Vec::new(),
             show_drawer: false,
             drawer_selected: 0,
+            zen_mode: false,
             input: InputBox::default(),
             confirm: None,
             editor: None,
@@ -1475,7 +1492,7 @@ impl App {
                     .selected_note()
                     .map(|n| n.body.lines().count() as u16)
                     .unwrap_or(0);
-                let content_height = layout::split(self.last_frame_area, self.focus)
+                let content_height = layout::split(self.last_frame_area, self.focus, self.zen_mode)
                     .preview
                     .height
                     .saturating_sub(2);
@@ -1712,7 +1729,7 @@ impl App {
             hex_to_color(&self.theme.link),
             hex_to_color(&self.theme.bg),
         ];
-        let width = layout::split(self.last_frame_area, self.focus)
+        let width = layout::split(self.last_frame_area, self.focus, self.zen_mode)
             .preview
             .width
             .saturating_sub(2);

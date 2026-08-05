@@ -66,6 +66,18 @@ pub struct InlineEditor<'a> {
     cursor_screen_row: Cell<u16>,
 }
 
+/// Bundles `InlineEditor::render`'s style/state parameters (everything
+/// besides `&self`/`frame`/`area`) into one value — keeps the function's
+/// own parameter count under clippy's `too_many_arguments` threshold, which
+/// `typewriter_scroll` pushed past once it was added as a plain 8th param.
+pub(crate) struct RenderOptions<'a> {
+    pub line_numbers: bool,
+    pub gutter_style: Style,
+    pub secondary_cursor_style: Style,
+    pub secondary_cursors: &'a [crate::multicursor::CursorState],
+    pub typewriter_scroll: bool,
+}
+
 impl<'a> InlineEditor<'a> {
     pub fn from_contents(contents: &str) -> Self {
         let lines: Vec<String> = if contents.is_empty() {
@@ -181,15 +193,7 @@ impl<'a> InlineEditor<'a> {
     /// Renders the buffer word-wrapped to `area`'s width, instead of
     /// `ratatui-textarea`'s own unwrapped-with-horizontal-scroll rendering —
     /// see the struct doc comment for why this exists at all.
-    pub(crate) fn render(
-        &self,
-        frame: &mut Frame,
-        area: Rect,
-        line_numbers: bool,
-        gutter_style: Style,
-        secondary_cursor_style: Style,
-        secondary_cursors: &[crate::multicursor::CursorState],
-    ) {
+    pub(crate) fn render(&self, frame: &mut Frame, area: Rect, opts: RenderOptions) {
         if let Some(block) = self.textarea.block() {
             frame.render_widget(block.clone(), area);
         }
@@ -197,7 +201,7 @@ impl<'a> InlineEditor<'a> {
         if inner.width == 0 || inner.height == 0 {
             return;
         }
-        let gutter = self.gutter_width(line_numbers);
+        let gutter = self.gutter_width(opts.line_numbers);
         let width = (inner.width as usize)
             .saturating_sub(gutter as usize)
             .max(1);
@@ -237,11 +241,19 @@ impl<'a> InlineEditor<'a> {
         let cursor_visual_row = visual_offset_of + cursor_local_row;
         let total_visual_rows: usize = wraps.iter().map(Vec::len).sum();
 
-        let mut scroll_top = next_scroll_top(
-            self.scroll_top.get(),
-            cursor_visual_row as u16,
-            height as u16,
-        );
+        // `typewriter_scroll` (`config.editor.typewriter_scroll`): keep the
+        // cursor's row vertically centered instead of only scrolling once
+        // it reaches the viewport's edge — a real re-centering every
+        // keystroke, not a threshold like `next_scroll_top`'s default.
+        let mut scroll_top = if opts.typewriter_scroll {
+            (cursor_visual_row as u16).saturating_sub(height as u16 / 2)
+        } else {
+            next_scroll_top(
+                self.scroll_top.get(),
+                cursor_visual_row as u16,
+                height as u16,
+            )
+        };
         let max_scroll = total_visual_rows.saturating_sub(height) as u16;
         scroll_top = scroll_top.min(max_scroll);
         self.scroll_top.set(scroll_top);
@@ -258,7 +270,7 @@ impl<'a> InlineEditor<'a> {
             // shiki never calls `set_selection_style`, so this is the same
             // value `TextArea::default()` already uses internally.
             select: Style::default().bg(Color::LightBlue),
-            secondary_cursor: secondary_cursor_style,
+            secondary_cursor: opts.secondary_cursor_style,
         };
         let selection = self.textarea.selection_range();
 
@@ -276,7 +288,7 @@ impl<'a> InlineEditor<'a> {
                         cursor_col,
                         is_cursor_segment: row == cursor_row && local_idx == cursor_local_row,
                         selection,
-                        secondary: secondary_cursors,
+                        secondary: opts.secondary_cursors,
                     };
                     let mut line = build_segment_line(chars, seg, &ctx, &styles);
                     if gutter > 0 {
@@ -285,7 +297,8 @@ impl<'a> InlineEditor<'a> {
                         } else {
                             " ".repeat(gutter as usize)
                         };
-                        line.spans.insert(0, Span::styled(prefix, gutter_style));
+                        line.spans
+                            .insert(0, Span::styled(prefix, opts.gutter_style));
                     }
                     rendered.push(line);
                 }
@@ -762,7 +775,17 @@ mod tests {
             .expect("test backend");
         terminal
             .draw(|frame| {
-                editor.render(frame, area, false, Style::default(), Style::default(), &[])
+                editor.render(
+                    frame,
+                    area,
+                    RenderOptions {
+                        line_numbers: false,
+                        gutter_style: Style::default(),
+                        secondary_cursor_style: Style::default(),
+                        secondary_cursors: &[],
+                        typewriter_scroll: false,
+                    },
+                )
             })
             .unwrap();
 
@@ -786,7 +809,19 @@ mod tests {
         let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(20, 5))
             .expect("test backend");
         terminal
-            .draw(|frame| editor.render(frame, area, true, Style::default(), Style::default(), &[]))
+            .draw(|frame| {
+                editor.render(
+                    frame,
+                    area,
+                    RenderOptions {
+                        line_numbers: true,
+                        gutter_style: Style::default(),
+                        secondary_cursor_style: Style::default(),
+                        secondary_cursors: &[],
+                        typewriter_scroll: false,
+                    },
+                )
+            })
             .unwrap();
         // Gutter for a 1-line file is "1 " (2 columns) — a click landing
         // in the gutter itself clamps to column 0 of the actual text.

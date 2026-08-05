@@ -35,7 +35,12 @@ const STACK_WIDTH: u16 = 70;
 const SINGLE_WIDTH: u16 = 46;
 const SINGLE_HEIGHT: u16 = 14;
 
-pub fn split(area: Rect, focus: Focus) -> Areas {
+/// `zen_mode` forces the same full-screen-focused-panel `single()` tier
+/// `columned`/`stacked` only fall into on a genuinely small terminal —
+/// `App::zen_mode` (`leader z`) opts into it regardless of actual terminal
+/// size, to hide NOTEBOOKS/NOTES for distraction-free writing. No new
+/// layout math: it's the exact same tier a small terminal already gets.
+pub fn split(area: Rect, focus: Focus, zen_mode: bool) -> Areas {
     // No outer margin and no gap between constraints: panels go edge-to-edge
     // with the terminal and with each other, so the only "padding" visible
     // anywhere is each panel's own border.
@@ -48,7 +53,7 @@ pub fn split(area: Rect, focus: Focus) -> Areas {
     let main = rows[0];
     let status_bar = rows[1];
 
-    if main.width < SINGLE_WIDTH || main.height < SINGLE_HEIGHT {
+    if zen_mode || main.width < SINGLE_WIDTH || main.height < SINGLE_HEIGHT {
         return single(main, status_bar, focus);
     }
     if main.width < STACK_WIDTH {

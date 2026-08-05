@@ -3,6 +3,7 @@ pub mod daily;
 pub mod editor;
 pub mod export;
 pub mod git;
+pub mod headings;
 pub mod note;
 pub mod notebook;
 pub mod process;

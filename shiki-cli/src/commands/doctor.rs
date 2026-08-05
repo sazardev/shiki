@@ -327,6 +327,7 @@ fn check_keybinding_health(config: &Config, r: &mut Report) {
                 ("tasks_panel", kb.global.tasks_panel.as_str()),
                 ("publish", kb.global.publish.as_str()),
                 ("export", kb.global.export.as_str()),
+                ("zen_mode", kb.global.zen_mode.as_str()),
             ],
         ),
         (
@@ -368,6 +369,7 @@ fn check_keybinding_health(config: &Config, r: &mut Report) {
                 ("edit_external", kb.preview.edit_external.as_str()),
                 ("history", kb.preview.history.as_str()),
                 ("links", kb.preview.links.as_str()),
+                ("outline", kb.preview.outline.as_str()),
             ],
         ),
     ];

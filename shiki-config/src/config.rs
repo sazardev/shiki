@@ -219,6 +219,12 @@ pub struct GlobalKeybindings {
     /// `toggle_favorite_editor`.
     #[serde(default = "default_export_key")]
     pub export: String,
+    /// Forces the full-screen single-panel layout regardless of terminal
+    /// size, hiding NOTEBOOKS/NOTES for distraction-free writing. Field-
+    /// level default for the same backward-compatibility reason as
+    /// `logs`/`toggle_favorite_editor`.
+    #[serde(default = "default_zen_mode_key")]
+    pub zen_mode: String,
 }
 
 impl Default for GlobalKeybindings {
@@ -238,8 +244,13 @@ impl Default for GlobalKeybindings {
             tasks_panel: default_tasks_panel_key(),
             publish: default_publish_key(),
             export: default_export_key(),
+            zen_mode: default_zen_mode_key(),
         }
     }
+}
+
+fn default_zen_mode_key() -> String {
+    "z".into()
 }
 
 fn default_publish_key() -> String {
@@ -525,6 +536,12 @@ pub struct PreviewKeybindings {
     /// backward-compatibility reasoning as `history`.
     #[serde(default = "default_links_key")]
     pub links: String,
+    /// Opens the outline modal — every heading in the selected note, jump
+    /// straight to one. Also reachable as `Ctrl+O` inside `Mode::Edit`
+    /// itself. Same field-level-default backward-compatibility reasoning
+    /// as `history`.
+    #[serde(default = "default_outline_key")]
+    pub outline: String,
 }
 
 impl Default for PreviewKeybindings {
@@ -534,8 +551,13 @@ impl Default for PreviewKeybindings {
             edit_external: default_preview_edit_external_key(),
             history: default_history_key(),
             links: default_links_key(),
+            outline: default_outline_key(),
         }
     }
+}
+
+fn default_outline_key() -> String {
+    "o".into()
 }
 
 fn default_preview_edit_inline_key() -> String {
@@ -852,6 +874,46 @@ pub struct EditorConfig {
     /// something the library supports natively.
     #[serde(default)]
     pub multi_cursor: bool,
+    /// Enter on a `- item`/`- [ ] task`/`1. item` line continues the same
+    /// prefix on the next line (checkboxes always reset to `[ ]`, never copy
+    /// `[x]`); Enter on an *empty* list item exits the list instead of
+    /// continuing it, and Backspace right after an empty prefix removes it
+    /// in one step. Defaults to `true`: purely additive list-editing
+    /// convenience, doesn't touch any existing binding.
+    #[serde(default = "default_true")]
+    pub auto_list_continue: bool,
+    /// Ctrl+B wraps the selection in `**bold**` (or inserts an empty pair
+    /// with the cursor in the middle if nothing's selected); Ctrl+Alt+I does
+    /// the same for `_italic_` (not Ctrl+I — that collides with Tab at the
+    /// terminal level in most emulators). Defaults to `true`: purely
+    /// additive, doesn't touch any existing binding.
+    #[serde(default = "default_true")]
+    pub format_shortcuts: bool,
+    /// Typing `(`, `` ` ``, or `"` wraps the current selection in the
+    /// matching pair, or inserts an empty pair with the cursor in the
+    /// middle if nothing's selected. Deliberately excludes `[` so it can't
+    /// interfere with `[[wikilink]]` autocomplete, which depends on the
+    /// user typing two real `[` characters in a row. Defaults to `true`.
+    #[serde(default = "default_true")]
+    pub auto_pair_brackets: bool,
+    /// Pasting a bare URL over an active selection wraps it as
+    /// `[selected text](url)` instead of replacing the selection with the
+    /// raw URL. Defaults to `true`: only triggers when the pasted text is
+    /// itself a URL, otherwise paste behaves exactly as before.
+    #[serde(default = "default_true")]
+    pub paste_url_as_link: bool,
+    /// Tab, when the text immediately before the cursor matches a
+    /// configured snippet trigger, replaces that trigger text with the
+    /// snippet's body instead of inserting a literal tab. Falls through to
+    /// normal Tab behavior when there's no match. Defaults to `true`.
+    #[serde(default = "default_true")]
+    pub snippet_expand_tab: bool,
+    /// Keeps the cursor's line vertically centered in the editor viewport
+    /// while typing, instead of only scrolling once the cursor reaches the
+    /// edge. Off by default: it's a visible change to how scrolling feels,
+    /// not a pure addition, so it needs an explicit opt-in.
+    #[serde(default)]
+    pub typewriter_scroll: bool,
 }
 
 impl Default for EditorConfig {
@@ -863,6 +925,12 @@ impl Default for EditorConfig {
             select_all_ctrl_a: false,
             line_numbers: false,
             multi_cursor: false,
+            auto_list_continue: true,
+            format_shortcuts: true,
+            auto_pair_brackets: true,
+            paste_url_as_link: true,
+            snippet_expand_tab: true,
+            typewriter_scroll: false,
         }
     }
 }
@@ -1244,7 +1312,20 @@ fn section_comment(line: &str) -> Option<&'static str> {
 #   start of the line.
 # - line_numbers: shows a line-number gutter.
 # - multi_cursor: Alt+Click adds a cursor, Ctrl+D adds the next occurrence
-#   of the current word/selection."
+#   of the current word/selection.
+# - auto_list_continue: Enter on a list/checkbox line continues it on the
+#   next line; Enter on an empty item exits the list; Backspace removes an
+#   empty item's prefix in one step. Defaults to true.
+# - format_shortcuts: Ctrl+B / Ctrl+Alt+I wrap the selection in bold/italic.
+#   Defaults to true.
+# - auto_pair_brackets: typing ( ` \" wraps the selection or inserts an
+#   empty pair. Defaults to true.
+# - paste_url_as_link: pasting a bare URL over a selection wraps it as a
+#   markdown link. Defaults to true.
+# - snippet_expand_tab: Tab expands a matching snippet trigger instead of
+#   inserting a literal tab. Defaults to true.
+# - typewriter_scroll: keeps the cursor's line vertically centered while
+#   typing. Defaults to false."
         }
         "[export]" => {
             "\

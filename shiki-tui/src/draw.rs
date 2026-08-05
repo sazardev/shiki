@@ -5,8 +5,8 @@ use crate::app::{
 use crate::icons;
 use crate::render::{hex_to_color, panel_block};
 use crate::{
-    layout, panel_drawer, panel_notebooks, panel_notes, panel_preview, panel_settings, panel_tags,
-    panel_tasks, status_bar, which,
+    layout, panel_drawer, panel_notebooks, panel_notes, panel_outline, panel_preview,
+    panel_settings, panel_tags, panel_tasks, status_bar, which,
 };
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
@@ -20,7 +20,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .style(ratatui::style::Style::default().bg(hex_to_color(&app.theme.bg)));
     frame.render_widget(background, frame.area());
 
-    let areas = layout::split(frame.area(), app.focus);
+    let areas = layout::split(frame.area(), app.focus, app.zen_mode);
     panel_notebooks::render(frame, areas.notebooks, app);
     panel_notes::render(frame, areas.notes, app);
     if app.mode == Mode::Edit {
@@ -33,10 +33,13 @@ pub fn draw(frame: &mut Frame, app: &App) {
             editor.render(
                 frame,
                 areas.preview,
-                app.config.editor.line_numbers,
-                gutter_style,
-                secondary_cursor_style,
-                &app.editor_secondary_cursors,
+                crate::editor::RenderOptions {
+                    line_numbers: app.config.editor.line_numbers,
+                    gutter_style,
+                    secondary_cursor_style,
+                    secondary_cursors: &app.editor_secondary_cursors,
+                    typewriter_scroll: app.config.editor.typewriter_scroll,
+                },
             );
             if app.show_slash_menu {
                 render_slash_menu(frame, areas.preview, editor, app);
@@ -146,6 +149,13 @@ pub fn draw(frame: &mut Frame, app: &App) {
         let popup_area = centered_rect(frame.area(), 40, (rows as u16 + 2).max(3));
         frame.render_widget(Clear, popup_area);
         panel_tags::render(frame, popup_area, app);
+    }
+
+    if app.show_outline {
+        let rows = app.outline_headings.len().max(1);
+        let popup_area = centered_rect(frame.area(), 50, (rows as u16 + 2).max(3));
+        frame.render_widget(Clear, popup_area);
+        panel_outline::render(frame, popup_area, app);
     }
 
     if app.show_drawer {

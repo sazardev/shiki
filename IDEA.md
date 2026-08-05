@@ -211,7 +211,8 @@ search, tree view) using the same list/selection they already navigate with `j`/
 | `P` | Publish the selected notebook to a themed PDF via `pretty-pdf` (external binary, auto-fetched on first use — see CLI commands), written to `{data_dir}/exports/{notebook}.pdf`, then opened. Same rendering `shiki publish` uses; the theme comes from `export.pdf_theme`, cyclable in Settings → EXPORT |
 | `U` | Check for updates — modal; checks GitHub Releases in the background (never blocks the UI), shows "update available" if there's a newer version, and `Enter` downloads, verifies (against GitHub's own per-asset checksum), installs, and automatically relaunches into it |
 | `u` | Undo the last delete — restores the most recently deleted note/folder (or whole batch, from a Visual-mode delete) from the trash (`~/.config/shiki/trash/`) back to exactly where it came from. A single level of undo, not a full history: only the *most recent* delete is restorable this way; an older one is still on disk in the trash, just no longer reachable from here. With nothing to undo, reports that instead of doing anything |
-| `s` | Settings — near-full-screen, paged by tab (`←`/`→` switches GENERAL/THEME/GIT/EDITOR/EXPORT/NOTEBOOKS/SNIPPETS, `j`/`k` moves within one). Doesn't repeat the keybindings tables — `?` (which-key) already covers those live. Every tab is editable with `Enter`: GENERAL/GIT booleans (`use_favorite_editor`, `auto_commit`/`auto_push`/`sign_commits`/`auto_sync`) toggle in place and save immediately; every other GENERAL/GIT field opens a prompt prefilled with its current value; THEME's `name` opens the theme picker (live preview, same as leader+`c`) and `overrides` stays informational; EDITOR is six plain boolean toggles for the native note editor's UX (see `[editor]` below); EXPORT is one field, `pdf_theme`, cycling through `pretty-pdf`'s 17 built-in themes (the default `shiki publish`/leader+`P` fall back to); NOTEBOOKS lists every notebook's actual git remote (redacted) and drills into one to edit its remote plus its `auto_push`/`auto_sync`/`auto_sync_every` overrides (booleans cycle inherit → true → false → inherit); SNIPPETS supports `a` (new snippet) and `d` (delete, with confirmation), and drilling into one edits its `label` and its full multi-line `body` through the same inline editor a note's own body uses. `i`/`E` still jump straight to editing `config.toml` itself for anything not covered above (inline or externally, same convention as editing a note); on save, the config is re-read, re-applied, and takes effect immediately (no restart) — an invalid edit is reported and neither written nor applied, keeping the previous config running. `h`/`Esc`/`Backspace` backs out of a drilled-into notebook/snippet a level; `Esc`/`q` at the top level closes |
+| `s` | Settings — near-full-screen, paged by tab (`←`/`→` switches GENERAL/THEME/GIT/EDITOR/EXPORT/NOTEBOOKS/SNIPPETS, `j`/`k` moves within one). Doesn't repeat the keybindings tables — `?` (which-key) already covers those live. Every tab is editable with `Enter`: GENERAL/GIT booleans (`use_favorite_editor`, `auto_commit`/`auto_push`/`sign_commits`/`auto_sync`) toggle in place and save immediately; every other GENERAL/GIT field opens a prompt prefilled with its current value; THEME's `name` opens the theme picker (live preview, same as leader+`c`) and `overrides` stays informational; EDITOR is twelve plain boolean toggles for the native note editor's UX (see `[editor]` below); EXPORT is one field, `pdf_theme`, cycling through `pretty-pdf`'s 17 built-in themes (the default `shiki publish`/leader+`P` fall back to); NOTEBOOKS lists every notebook's actual git remote (redacted) and drills into one to edit its remote plus its `auto_push`/`auto_sync`/`auto_sync_every` overrides (booleans cycle inherit → true → false → inherit); SNIPPETS supports `a` (new snippet) and `d` (delete, with confirmation), and drilling into one edits its `label` and its full multi-line `body` through the same inline editor a note's own body uses. `i`/`E` still jump straight to editing `config.toml` itself for anything not covered above (inline or externally, same convention as editing a note); on save, the config is re-read, re-applied, and takes effect immediately (no restart) — an invalid edit is reported and neither written nor applied, keeping the previous config running. `h`/`Esc`/`Backspace` backs out of a drilled-into notebook/snippet a level; `Esc`/`q` at the top level closes |
+| `z` | Zen mode — forces the full-screen single-panel layout (the same one a very small terminal already falls into) regardless of actual terminal size, hiding NOTEBOOKS/NOTES so only the focused panel shows. A true toggle, same `leader z` both enters and exits it; purely a view state, not persisted to `config.toml` |
 
 #### `[keybindings.notebooks]` — active while NOTEBOOKS is focused
 
@@ -262,6 +263,7 @@ sync attempt (manual or automatic) just tries the push again.
 | `E` | Edit externally ($EDITOR) |
 | `H` | Note history — every commit that changed this specific note, newest first, real git history (not a separate versioning system). `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` views a revision's full content (frontmatter included, since that's what's actually in the commit), `r` reverts to the highlighted (or currently-viewed) revision — behind a confirmation, since it overwrites the current content. The revert itself doesn't commit; it shows up as a normal pending change, picked up by `s`/`u`/`auto_sync` like any other edit. The footer shows the count while reading a note (`{n} changes`) |
 | `L` | Links — the selected note's outgoing `[[wikilinks]]` (resolved against every note in the notebook, any folder depth), every other note that links back to it, and notes that *mention* this note's title in plain text without linking to it ("Outgoing"/"Backlinks"/"Mentions (unlinked)" sections; a section with nothing in it is omitted). `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` jumps to the selected note (an unresolved outgoing link reports that instead of jumping), `c` on a mention row *repairs* the missed link — it wraps that note's plain-text mention into a real `[[wikilink]]` (preserving its casing) and the row visibly migrates to Backlinks — and `Esc`/`q` closes. Also reachable globally via leader+`B` |
+| `o` | Outline — every `#`..`######` heading in the selected note, indented by level. `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` scrolls PREVIEW to that heading, `Esc`/`q` closes. Also reachable as `Ctrl+O` from inside `Mode::Edit` itself — there, `Enter` moves the editor's own cursor to the heading instead of scrolling PREVIEW, and the headings come from the live, possibly-unsaved buffer rather than the note's last-saved body |
 
 Mouse: a plain click over a note's rendered body jumps straight into the inline editor with the
 cursor on the clicked line — a mouse-only alternative to `i`/vim motions. Click-and-drag instead
@@ -317,6 +319,25 @@ The rest of the editor's mouse/keyboard UX is opt-in via `[editor]` (Settings' E
   saves and exits, as usual). Secondary cursors render as a solid accent-colored block (bold,
   distinct from the primary's plain reverse-video) — a terminal can only blink one real caret, so
   this is the compensating visual signal rather than an attempt to actually blink more than one.
+- `auto_list_continue` (on by default): `Enter` on a `- item`/`- [ ] task`/`1. item` line carries
+  the same prefix onto the next line (checkboxes always reset to `[ ]`, never copy `[x]`); `Enter`
+  on an already-empty list item exits the list instead of continuing it, and `Backspace` right
+  after an empty prefix removes it in one step instead of one character at a time.
+- `format_shortcuts` (on by default): `Ctrl+B` wraps the current selection in `**bold**`;
+  `Ctrl+Alt+I` does the same for `_italic_` (not `Ctrl+I` — that's indistinguishable from `Tab` at
+  the terminal level in most emulators). With nothing selected, either inserts an empty pair with
+  the cursor left in the middle.
+- `auto_pair_brackets` (on by default): typing `(`, `` ` ``, or `"` wraps the current selection in
+  the matching pair, or inserts an empty pair with the cursor in the middle. Deliberately excludes
+  `[` so it can't interfere with `[[wikilink]]` autocomplete below, which depends on the user
+  typing two real `[` characters in a row.
+- `paste_url_as_link` (on by default): pasting a bare URL over an active selection wraps it as
+  `[selected text](url)` instead of replacing the selection with the raw URL.
+- `snippet_expand_tab` (on by default): `Tab`, when the text immediately before the cursor matches
+  a configured snippet trigger, replaces that trigger text with the snippet's body instead of
+  inserting a literal tab.
+- `typewriter_scroll` (off by default): keeps the cursor's line vertically centered in the editor
+  viewport while typing, instead of only scrolling once the cursor reaches the edge.
 
 `[[wikilink]]` autocomplete is always on too, not gated by `[editor]`: typing `[[` opens an
 Obsidian-style fuzzy note picker (same fuzzy matching as `/` and global search), showing each
@@ -540,6 +561,8 @@ scratchpad = "p"
 links = "B"
 # Global tasks view — every checkbox task in every notebook.
 tasks_panel = "t"
+# Full-screen single-panel layout, hiding NOTEBOOKS/NOTES — a true toggle.
+zen_mode = "z"
 
 [keybindings.notebooks]
 new = "a"
@@ -572,6 +595,7 @@ edit_inline = "i"
 edit_external = "E"
 history = "H"
 links = "L"
+outline = "o"
 
 [theme]
 name = "gruvbox-dark"
@@ -618,6 +642,12 @@ os_clipboard = false     # Ctrl+C/X/V use the real OS clipboard (falls back to O
 select_all_ctrl_a = false  # Ctrl+A selects everything instead of "start of line"
 line_numbers = false     # shows a line-number gutter
 multi_cursor = false     # Alt+Click adds a cursor, Ctrl+D adds the next occurrence
+auto_list_continue = true  # Enter continues a list/checkbox line; empty item exits it
+format_shortcuts = true    # Ctrl+B / Ctrl+Alt+I wrap the selection in bold/italic
+auto_pair_brackets = true  # typing ( ` " wraps the selection or inserts an empty pair
+paste_url_as_link = true   # pasting a URL over a selection wraps it as a markdown link
+snippet_expand_tab = true  # Tab expands a matching snippet trigger
+typewriter_scroll = false  # keeps the cursor's line vertically centered while typing
 
 # PDF export (`shiki publish`, leader+`P`) — pdf_theme picks one of
 # go-pretty-pdf's 17 built-in themes: default, minimal, modern, classic,

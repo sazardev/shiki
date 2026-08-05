@@ -139,16 +139,28 @@ pub enum EditorField {
     SelectAllCtrlA,
     LineNumbers,
     MultiCursor,
+    AutoListContinue,
+    FormatShortcuts,
+    AutoPairBrackets,
+    PasteUrlAsLink,
+    SnippetExpandTab,
+    TypewriterScroll,
 }
 
 impl EditorField {
-    pub const ALL: [EditorField; 6] = [
+    pub const ALL: [EditorField; 12] = [
         EditorField::MouseSelection,
         EditorField::FindReplace,
         EditorField::OsClipboard,
         EditorField::SelectAllCtrlA,
         EditorField::LineNumbers,
         EditorField::MultiCursor,
+        EditorField::AutoListContinue,
+        EditorField::FormatShortcuts,
+        EditorField::AutoPairBrackets,
+        EditorField::PasteUrlAsLink,
+        EditorField::SnippetExpandTab,
+        EditorField::TypewriterScroll,
     ];
 }
 
@@ -338,6 +350,36 @@ fn editor_rows(app: &App) -> Vec<Line<'static>> {
         ),
         row_line(app, "line_numbers", cfg.editor.line_numbers.to_string()),
         row_line(app, "multi_cursor", cfg.editor.multi_cursor.to_string()),
+        row_line(
+            app,
+            "auto_list_continue",
+            cfg.editor.auto_list_continue.to_string(),
+        ),
+        row_line(
+            app,
+            "format_shortcuts",
+            cfg.editor.format_shortcuts.to_string(),
+        ),
+        row_line(
+            app,
+            "auto_pair_brackets",
+            cfg.editor.auto_pair_brackets.to_string(),
+        ),
+        row_line(
+            app,
+            "paste_url_as_link",
+            cfg.editor.paste_url_as_link.to_string(),
+        ),
+        row_line(
+            app,
+            "snippet_expand_tab",
+            cfg.editor.snippet_expand_tab.to_string(),
+        ),
+        row_line(
+            app,
+            "typewriter_scroll",
+            cfg.editor.typewriter_scroll.to_string(),
+        ),
     ]
 }
 

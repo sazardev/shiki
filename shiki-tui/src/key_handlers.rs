@@ -95,6 +95,17 @@ impl App {
             self.refresh_drawer_statuses();
         }
     }
+    /// A true toggle like `toggle_drawer` above, not one-directional — the
+    /// same `leader z` both enters and exits zen mode. Purely a layout
+    /// flag (`layout::split` reads it); nothing about focus, selection, or
+    /// which notes are loaded changes when it flips.
+    fn toggle_zen_mode(&mut self) {
+        self.zen_mode = !self.zen_mode;
+        self.set_status(format!(
+            "zen mode: {}",
+            if self.zen_mode { "on" } else { "off" }
+        ));
+    }
     fn handle_drawer_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => self.show_drawer = false,
@@ -440,6 +451,30 @@ impl App {
             EditorField::MultiCursor => {
                 self.config.editor.multi_cursor = !self.config.editor.multi_cursor;
                 ("multi_cursor", self.config.editor.multi_cursor)
+            }
+            EditorField::AutoListContinue => {
+                self.config.editor.auto_list_continue = !self.config.editor.auto_list_continue;
+                ("auto_list_continue", self.config.editor.auto_list_continue)
+            }
+            EditorField::FormatShortcuts => {
+                self.config.editor.format_shortcuts = !self.config.editor.format_shortcuts;
+                ("format_shortcuts", self.config.editor.format_shortcuts)
+            }
+            EditorField::AutoPairBrackets => {
+                self.config.editor.auto_pair_brackets = !self.config.editor.auto_pair_brackets;
+                ("auto_pair_brackets", self.config.editor.auto_pair_brackets)
+            }
+            EditorField::PasteUrlAsLink => {
+                self.config.editor.paste_url_as_link = !self.config.editor.paste_url_as_link;
+                ("paste_url_as_link", self.config.editor.paste_url_as_link)
+            }
+            EditorField::SnippetExpandTab => {
+                self.config.editor.snippet_expand_tab = !self.config.editor.snippet_expand_tab;
+                ("snippet_expand_tab", self.config.editor.snippet_expand_tab)
+            }
+            EditorField::TypewriterScroll => {
+                self.config.editor.typewriter_scroll = !self.config.editor.typewriter_scroll;
+                ("typewriter_scroll", self.config.editor.typewriter_scroll)
             }
         };
         self.save_config();
@@ -921,6 +956,82 @@ impl App {
             KeyCode::Char(c) => {
                 self.which_key_input.push(c);
                 self.which_key_selected = 0;
+            }
+            _ => {}
+        }
+    }
+    /// Loads the selected note's headings and opens the outline modal.
+    /// While actively editing (`Mode::Edit`, reached via `Ctrl+O`), reads
+    /// the *live* editor buffer instead of the last-saved body, so a
+    /// heading typed but not yet saved still shows up.
+    fn open_outline(&mut self) {
+        let body = if self.mode == Mode::Edit {
+            match &self.editor {
+                Some(editor) => editor.textarea.lines().join("\n"),
+                None => {
+                    self.set_status("no note selected".into());
+                    return;
+                }
+            }
+        } else {
+            match self.selected_note() {
+                Some(note) => note.body.clone(),
+                None => {
+                    self.set_status("no note selected".into());
+                    return;
+                }
+            }
+        };
+        self.outline_headings = shiki_core::headings::extract(&body);
+        self.outline_selected = 0;
+        self.show_outline = true;
+        if self.outline_headings.is_empty() {
+            self.set_status("no headings in this note".into());
+        }
+    }
+    /// `Enter` jumps to the selected heading: inside `Mode::Edit`, moves
+    /// the editor's cursor there directly; otherwise (opened from
+    /// PREVIEW), scrolls the preview panel to that source line. Either way
+    /// the modal closes.
+    fn handle_outline_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => self.show_outline = false,
+            KeyCode::Enter => {
+                if let Some(heading) = self.outline_headings.get(self.outline_selected).cloned() {
+                    if self.mode == Mode::Edit {
+                        if let Some(editor) = &mut self.editor {
+                            editor.textarea.cancel_selection();
+                            editor
+                                .textarea
+                                .move_cursor(ratatui_textarea::CursorMove::Jump(
+                                    heading.line as u16,
+                                    0,
+                                ));
+                        }
+                    } else {
+                        self.preview_scroll = heading.line as u16;
+                    }
+                }
+                self.show_outline = false;
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                if self.outline_selected + 1 < self.outline_headings.len() {
+                    self.outline_selected += 1;
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.outline_selected = self.outline_selected.saturating_sub(1);
+            }
+            KeyCode::PageDown => {
+                self.outline_selected = (self.outline_selected + PAGE_STEP as usize)
+                    .min(self.outline_headings.len().saturating_sub(1));
+            }
+            KeyCode::PageUp => {
+                self.outline_selected = self.outline_selected.saturating_sub(PAGE_STEP as usize);
+            }
+            KeyCode::Home => self.outline_selected = 0,
+            KeyCode::End => {
+                self.outline_selected = self.outline_headings.len().saturating_sub(1);
             }
             _ => {}
         }
@@ -1613,9 +1724,9 @@ impl App {
             && !self.show_slash_menu
             && !self.show_wikilink_menu
         {
-            if let Some(editor) = &mut self.editor {
-                editor.textarea.insert_str(&text);
-                self.editor_undo_groups.push(1);
+            let edits = self.insert_pasted_text(&text);
+            if edits > 0 {
+                self.editor_undo_groups.push(edits);
                 self.editor_redo_groups.clear();
             }
             return;
@@ -1643,7 +1754,7 @@ impl App {
         if !self.can_start_preview_selection() {
             return false;
         }
-        let preview = layout::split(self.last_frame_area, self.focus).preview;
+        let preview = layout::split(self.last_frame_area, self.focus, self.zen_mode).preview;
         let content_left = preview.x + 1;
         if column < content_left {
             return false;
@@ -1715,7 +1826,7 @@ impl App {
         // click reaching the layout underneath an open popup can't be
         // misread as a panel click.
         if self.mode == Mode::Normal && self.no_modal_open() {
-            let areas = layout::split(self.last_frame_area, self.focus);
+            let areas = layout::split(self.last_frame_area, self.focus, self.zen_mode);
             if let Some(index) = panel_notebooks::notebooks_hit_at(
                 self.notebooks.len(),
                 areas.notebooks,
@@ -1740,7 +1851,7 @@ impl App {
         }
 
         if self.can_start_preview_selection() {
-            let preview = layout::split(self.last_frame_area, self.focus).preview;
+            let preview = layout::split(self.last_frame_area, self.focus, self.zen_mode).preview;
             let row_count = self.note_preview_lines().map(|l| l.len()).unwrap_or(0);
             if let Some(hit) =
                 panel_preview::preview_row_at(preview, self.preview_scroll, row_count, column, row)
@@ -1754,7 +1865,7 @@ impl App {
             }
         }
 
-        let footer = layout::split(self.last_frame_area, self.focus).status_bar;
+        let footer = layout::split(self.last_frame_area, self.focus, self.zen_mode).status_bar;
         if status_bar::coffee_hit_at(footer, column, row) {
             self.open_coffee_link();
         }
@@ -1775,7 +1886,7 @@ impl App {
         // `PreviewSelection::dragged`'s own doc comment for why that
         // distinction is what `on_mouse_up` branches on.
         self.preview_selection.as_mut().unwrap().dragged = true;
-        let preview = layout::split(self.last_frame_area, self.focus).preview;
+        let preview = layout::split(self.last_frame_area, self.focus, self.zen_mode).preview;
         let row_count = self.note_preview_lines().map(|l| l.len()).unwrap_or(0);
         let scroll = self.preview_scroll;
         // Dragging outside the panel clamps to its nearest edge instead of
@@ -1867,7 +1978,7 @@ impl App {
     /// an already-present cursor's exact cell is a harmless no-op rather
     /// than a duplicate.
     fn on_editor_alt_click(&mut self, column: u16, row: u16) {
-        let preview = layout::split(self.last_frame_area, self.focus).preview;
+        let preview = layout::split(self.last_frame_area, self.focus, self.zen_mode).preview;
         let line_numbers = self.config.editor.line_numbers;
         let Some(editor) = &self.editor else {
             return;
@@ -1890,7 +2001,7 @@ impl App {
     /// word/line just selected); `false` for a plain single click, which
     /// hasn't anchored anything yet.
     fn on_editor_mouse_down(&mut self, column: u16, row: u16) {
-        let preview = layout::split(self.last_frame_area, self.focus).preview;
+        let preview = layout::split(self.last_frame_area, self.focus, self.zen_mode).preview;
         let line_numbers = self.config.editor.line_numbers;
         let Some(editor) = &mut self.editor else {
             return;
@@ -1962,7 +2073,7 @@ impl App {
     /// skips re-anchoring since one already exists (see `editor_drag_active`'s
     /// own doc comment).
     fn on_editor_mouse_drag(&mut self, column: u16, row: u16) {
-        let preview = layout::split(self.last_frame_area, self.focus).preview;
+        let preview = layout::split(self.last_frame_area, self.focus, self.zen_mode).preview;
         let line_numbers = self.config.editor.line_numbers;
         let Some(editor) = &mut self.editor else {
             return;
@@ -2714,6 +2825,7 @@ impl App {
             Action::ToggleTasks => self.open_tasks(),
             Action::PublishNotebook => self.publish_notebook(),
             Action::ExportNotebook => self.start_export_notebook(),
+            Action::ToggleZenMode => self.toggle_zen_mode(),
 
             Action::NewNotebook => self.start_input(PendingInput::NewNotebook, String::new()),
             Action::RenameNotebook => self.start_rename_notebook(),
@@ -2745,6 +2857,7 @@ impl App {
             }
             Action::ShowHistory => self.open_history(),
             Action::ShowLinks => self.open_links(),
+            Action::ShowOutline => self.open_outline(),
             Action::ToggleFavoriteEditor => self.toggle_favorite_editor(),
             Action::ToggleVisual => self.toggle_visual(),
             Action::CopyEntries => {
@@ -3551,8 +3664,51 @@ impl App {
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.editor_undo();
             }
+            // Opens the same outline modal PREVIEW's `o` binding does,
+            // without leaving Mode::Edit — jumping to a heading from here
+            // moves the editor's own cursor instead of scrolling PREVIEW.
+            KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.open_outline();
+            }
             KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.editor_redo();
+            }
+            // Ctrl+B wraps the selection in `**bold**` (or inserts an empty
+            // pair with the cursor in the middle if nothing's selected).
+            KeyCode::Char('b')
+                if key.modifiers.contains(KeyModifiers::CONTROL)
+                    && !key.modifiers.contains(KeyModifiers::ALT)
+                    && self.config.editor.format_shortcuts =>
+            {
+                self.wrap_or_insert_pair("**", "**");
+            }
+            // Ctrl+Alt+I, not plain Ctrl+I — most terminal emulators send
+            // Ctrl+I identically to Tab, so it isn't a reliable binding.
+            KeyCode::Char('i')
+                if key.modifiers.contains(KeyModifiers::CONTROL)
+                    && key.modifiers.contains(KeyModifiers::ALT)
+                    && self.config.editor.format_shortcuts =>
+            {
+                self.wrap_or_insert_pair("_", "_");
+            }
+            // Auto-pair: typing an opening bracket/quote wraps the current
+            // selection in the matching pair, or inserts an empty pair with
+            // the cursor left in the middle. `[` is deliberately excluded —
+            // pairing it would break `[[wikilink]]` autocomplete just below,
+            // which depends on the user typing two real `[` in a row. Skips
+            // while a multi-cursor edit is in flight, same as the
+            // list-continuation features above.
+            KeyCode::Char(c @ ('(' | '`' | '"'))
+                if self.config.editor.auto_pair_brackets
+                    && self.editor_secondary_cursors.is_empty() =>
+            {
+                let (open, close) = match c {
+                    '(' => ("(", ")"),
+                    '`' => ("`", "`"),
+                    '"' => ("\"", "\""),
+                    _ => unreachable!(),
+                };
+                self.wrap_or_insert_pair(open, close);
             }
             // VS Code's own "Add Cursor Above/Below" binding — a keyboard
             // alternative to Alt+Click that doesn't need the mouse at all,
@@ -3570,6 +3726,37 @@ impl App {
                     && self.config.editor.multi_cursor =>
             {
                 self.editor_add_cursor_vertical(1);
+            }
+            // Alt+Up/Alt+Down move the current line past its neighbor;
+            // Alt+D duplicates it. Always on, like Ctrl+Home/Ctrl+End below
+            // — none of these three combos are used for anything else in
+            // the editor. Excludes Ctrl so it can't shadow the
+            // Ctrl+Alt+Up/Down multi-cursor bindings above.
+            KeyCode::Up
+                if key.modifiers.contains(KeyModifiers::ALT)
+                    && !key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                self.editor_move_line(-1);
+            }
+            KeyCode::Down
+                if key.modifiers.contains(KeyModifiers::ALT)
+                    && !key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                self.editor_move_line(1);
+            }
+            KeyCode::Char('d')
+                if key.modifiers.contains(KeyModifiers::ALT)
+                    && !key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                self.editor_duplicate_line();
+            }
+            // Tab expands a matching snippet trigger — see
+            // `try_expand_snippet_on_tab`'s own doc comment. Falls through
+            // to plain Tab (a literal tab character) when nothing matches.
+            KeyCode::Tab if self.config.editor.snippet_expand_tab => {
+                if !self.try_expand_snippet_on_tab() {
+                    self.editor_forward_key_default(key);
+                }
             }
             // Always replaces the generic forward for these two — see
             // `editor_scroll_cursor`'s own doc comment for why forwarding
@@ -3602,64 +3789,212 @@ impl App {
                         ));
                 }
             }
-            _ => {
-                if let Some(editor) = &mut self.editor {
-                    let edits = if self.editor_secondary_cursors.is_empty() {
-                        // A plain `input()` call can itself push *two*
-                        // history entries (typing over an active selection
-                        // is "delete selection, then insert" — see
-                        // `multicursor::undo_history_depth`'s own doc
-                        // comment for why this is measured, not assumed).
-                        let snapshot = editor.textarea.lines().to_vec();
-                        if editor.textarea.input(key) {
-                            crate::multicursor::undo_history_depth(&mut editor.textarea, &snapshot)
-                        } else {
-                            0
-                        }
-                    } else {
-                        crate::multicursor::replay_keystroke(
-                            &mut editor.textarea,
-                            key,
-                            &mut self.editor_secondary_cursors,
-                        )
-                    };
-                    if edits > 0 {
-                        self.editor_undo_groups.push(edits);
-                        self.editor_redo_groups.clear();
-                    }
-                }
-                // `/` only opens the menu when it lands as the very first
-                // character of the line (cursor was at column 0, so it's
-                // at column 1 right after) — typing it anywhere else (a
-                // fraction, a URL, mid-sentence) is just a literal slash.
-                if key.code == KeyCode::Char('/') {
-                    let at_line_start = self
-                        .editor
-                        .as_ref()
-                        .is_some_and(|e| e.textarea.cursor().1 == 1);
-                    if at_line_start {
-                        self.slash_menu_selected = 0;
-                        self.show_slash_menu = true;
-                    }
-                }
-                // `[[` opens the wikilink menu the instant the second `[`
-                // completes the pair, anywhere in the line — unlike `/`,
-                // a wikilink is meaningful mid-sentence ("see [[Some
-                // Note]] for details"), not just at line start.
-                if key.code == KeyCode::Char('[') {
-                    let opens_wikilink = self.editor.as_ref().is_some_and(|e| {
-                        let (row, col) = crate::editor::cursor_tuple(&e.textarea);
-                        e.textarea
-                            .lines()
-                            .get(row)
-                            .is_some_and(|line| col >= 2 && line.chars().nth(col - 2) == Some('['))
-                    });
-                    if opens_wikilink {
-                        self.open_wikilink_menu();
-                    }
+            // Enter continues a list/checkbox line onto the next line, or
+            // clears an already-empty item's prefix — see
+            // `try_auto_continue_list`'s own doc comment. Falls through to
+            // plain newline insertion when it doesn't apply.
+            KeyCode::Enter if self.config.editor.auto_list_continue => {
+                if !self.try_auto_continue_list() {
+                    self.editor_forward_key_default(key);
                 }
             }
+            // Backspace right after an empty list/checkbox prefix removes
+            // the whole prefix in one step — see
+            // `try_backspace_exit_list`'s own doc comment.
+            KeyCode::Backspace if self.config.editor.auto_list_continue => {
+                if !self.try_backspace_exit_list() {
+                    self.editor_forward_key_default(key);
+                }
+            }
+            _ => self.editor_forward_key_default(key),
         }
+    }
+    /// The default "just type it" path for any key `handle_edit_key` didn't
+    /// intercept above — plain character input, Enter/Backspace when
+    /// `auto_list_continue` doesn't apply or is off, etc. Factored out of
+    /// the old catch-all `_` arm so `try_auto_continue_list`/
+    /// `try_backspace_exit_list` can fall back to exactly this same path
+    /// instead of duplicating it.
+    fn editor_forward_key_default(&mut self, key: KeyEvent) {
+        if let Some(editor) = &mut self.editor {
+            let edits = if self.editor_secondary_cursors.is_empty() {
+                // A plain `input()` call can itself push *two*
+                // history entries (typing over an active selection
+                // is "delete selection, then insert" — see
+                // `multicursor::undo_history_depth`'s own doc
+                // comment for why this is measured, not assumed).
+                let snapshot = editor.textarea.lines().to_vec();
+                if editor.textarea.input(key) {
+                    crate::multicursor::undo_history_depth(&mut editor.textarea, &snapshot)
+                } else {
+                    0
+                }
+            } else {
+                crate::multicursor::replay_keystroke(
+                    &mut editor.textarea,
+                    key,
+                    &mut self.editor_secondary_cursors,
+                )
+            };
+            if edits > 0 {
+                self.editor_undo_groups.push(edits);
+                self.editor_redo_groups.clear();
+            }
+        }
+        // `/` only opens the menu when it lands as the very first
+        // character of the line (cursor was at column 0, so it's
+        // at column 1 right after) — typing it anywhere else (a
+        // fraction, a URL, mid-sentence) is just a literal slash.
+        if key.code == KeyCode::Char('/') {
+            let at_line_start = self
+                .editor
+                .as_ref()
+                .is_some_and(|e| e.textarea.cursor().1 == 1);
+            if at_line_start {
+                self.slash_menu_selected = 0;
+                self.show_slash_menu = true;
+            }
+        }
+        // `[[` opens the wikilink menu the instant the second `[`
+        // completes the pair, anywhere in the line — unlike `/`,
+        // a wikilink is meaningful mid-sentence ("see [[Some
+        // Note]] for details"), not just at line start.
+        if key.code == KeyCode::Char('[') {
+            let opens_wikilink = self.editor.as_ref().is_some_and(|e| {
+                let (row, col) = crate::editor::cursor_tuple(&e.textarea);
+                e.textarea
+                    .lines()
+                    .get(row)
+                    .is_some_and(|line| col >= 2 && line.chars().nth(col - 2) == Some('['))
+            });
+            if opens_wikilink {
+                self.open_wikilink_menu();
+            }
+        }
+    }
+    /// Parses `line`'s leading list/checkbox marker, if any: optional
+    /// leading spaces, then `-`/`*`/`+` or `N.`, then a single space,
+    /// optionally followed by `[ ]`/`[x]`/`[X]` and another space. Returns
+    /// the exact prefix substring (byte-for-byte, so `line[prefix.len()..]`
+    /// is always a valid slice) or `None` if the line isn't a list item.
+    fn list_prefix(line: &str) -> Option<&str> {
+        let indent_len = line.len() - line.trim_start_matches(' ').len();
+        let rest = &line[indent_len..];
+        let marker_len =
+            if rest.starts_with("- ") || rest.starts_with("* ") || rest.starts_with("+ ") {
+                2
+            } else {
+                let digits = rest.chars().take_while(|c| c.is_ascii_digit()).count();
+                if digits > 0 && rest[digits..].starts_with(". ") {
+                    digits + 2
+                } else {
+                    return None;
+                }
+            };
+        let after_marker = &rest[marker_len..];
+        let checkbox_len = if after_marker.starts_with("[ ] ")
+            || after_marker.starts_with("[x] ")
+            || after_marker.starts_with("[X] ")
+        {
+            4
+        } else {
+            0
+        };
+        Some(&line[..indent_len + marker_len + checkbox_len])
+    }
+    /// The prefix to carry onto the *next* line when continuing a list —
+    /// identical to the source prefix except a checkbox always resets to
+    /// unchecked, since copying `[x]` would silently mark the new item
+    /// done before it's even been written.
+    fn continuation_prefix(prefix: &str) -> String {
+        match prefix.find("[x] ").or_else(|| prefix.find("[X] ")) {
+            Some(idx) => format!("{}[ ] ", &prefix[..idx]),
+            None => prefix.to_string(),
+        }
+    }
+    /// Enter (`config.editor.auto_list_continue`): continues a
+    /// `- item`/`- [ ] task`/`1. item` line onto the next line with the
+    /// same prefix (checkboxes always reset to unchecked); Enter on an
+    /// already-empty list item clears the prefix in place instead of
+    /// starting a new empty item, matching Word/Notion's "empty item exits
+    /// the list" convention. Only fires when the cursor sits at the end of
+    /// the line and no multi-cursor edit is in flight — everywhere else,
+    /// Enter is just a plain newline via `editor_forward_key_default`.
+    fn try_auto_continue_list(&mut self) -> bool {
+        if !self.editor_secondary_cursors.is_empty() {
+            return false;
+        }
+        let Some(editor) = &mut self.editor else {
+            return false;
+        };
+        let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
+        let Some(line) = editor.textarea.lines().get(row).cloned() else {
+            return false;
+        };
+        if col != line.chars().count() {
+            return false;
+        }
+        let Some(prefix) = Self::list_prefix(&line) else {
+            return false;
+        };
+        let prefix_len = prefix.len();
+        let is_empty_item = line[prefix_len..].trim().is_empty();
+        let continuation = Self::continuation_prefix(prefix);
+        let mut edits = 0usize;
+        if is_empty_item {
+            editor.textarea.cancel_selection();
+            editor
+                .textarea
+                .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, 0));
+            editor.textarea.start_selection();
+            editor
+                .textarea
+                .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, col as u16));
+            if editor.textarea.cut() {
+                edits += 1;
+            }
+        } else if editor.textarea.insert_str(format!("\n{continuation}")) {
+            edits += 1;
+        }
+        if edits > 0 {
+            self.editor_undo_groups.push(edits);
+            self.editor_redo_groups.clear();
+        }
+        true
+    }
+    /// Backspace (`config.editor.auto_list_continue`): if the cursor sits
+    /// right after a list/checkbox prefix with nothing else on the line,
+    /// removes the whole prefix in one step instead of one character.
+    fn try_backspace_exit_list(&mut self) -> bool {
+        if !self.editor_secondary_cursors.is_empty() {
+            return false;
+        }
+        let Some(editor) = &mut self.editor else {
+            return false;
+        };
+        let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
+        let Some(line) = editor.textarea.lines().get(row).cloned() else {
+            return false;
+        };
+        let Some(prefix) = Self::list_prefix(&line) else {
+            return false;
+        };
+        if col != prefix.chars().count() || !line[prefix.len()..].trim().is_empty() {
+            return false;
+        }
+        editor.textarea.cancel_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, 0));
+        editor.textarea.start_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, col as u16));
+        if editor.textarea.cut() {
+            self.editor_undo_groups.push(1);
+            self.editor_redo_groups.clear();
+        }
+        true
     }
     /// Snapshots the current notebook's notes (excluding the one being
     /// edited — linking to yourself isn't useful) once, the moment `[[`
@@ -3835,15 +4170,181 @@ impl App {
     /// internal yank register (`paste()`), exactly what Ctrl+V already did
     /// before `os_clipboard` existed, so nothing regresses in that case.
     fn editor_paste_os(&mut self) {
+        match crate::clipboard::paste_os() {
+            Some(text) => {
+                let edits = self.insert_pasted_text(&text);
+                if edits > 0 {
+                    self.editor_undo_groups.push(edits);
+                    self.editor_redo_groups.clear();
+                }
+            }
+            None => {
+                let Some(editor) = &mut self.editor else {
+                    return;
+                };
+                if editor.textarea.paste() {
+                    self.editor_undo_groups.push(1);
+                    self.editor_redo_groups.clear();
+                }
+            }
+        }
+    }
+    /// Shared by `editor_paste_os` (Ctrl+V) and `on_paste` (bracketed
+    /// paste): inserts `text` as-is, unless `paste_url_as_link` is on,
+    /// there's an active selection, and `text` (trimmed) is a bare
+    /// `http(s)://` URL with no whitespace — in that case the selected
+    /// text is wrapped as `[selected](url)` instead of being replaced by
+    /// the raw URL. Returns how many textarea-level edits happened, for
+    /// the caller's own undo-group bookkeeping.
+    fn insert_pasted_text(&mut self, text: &str) -> usize {
+        let Some(editor) = &mut self.editor else {
+            return 0;
+        };
+        let trimmed = text.trim();
+        let is_bare_url = (trimmed.starts_with("http://") || trimmed.starts_with("https://"))
+            && !trimmed.contains(char::is_whitespace);
+        if self.config.editor.paste_url_as_link && is_bare_url {
+            if let Some((start, end)) = editor.textarea.selection_range() {
+                let selected = crate::editor::selection_text(editor.textarea.lines(), start, end);
+                if !selected.is_empty() {
+                    let mut edits = 0usize;
+                    if editor.textarea.cut() {
+                        edits += 1;
+                    }
+                    if editor
+                        .textarea
+                        .insert_str(format!("[{selected}]({trimmed})"))
+                    {
+                        edits += 1;
+                    }
+                    return edits;
+                }
+            }
+        }
+        usize::from(editor.textarea.insert_str(text))
+    }
+    /// Shared by the bold/italic shortcuts (`format_shortcuts`) and
+    /// bracket/quote auto-pairing (`auto_pair_brackets`): wraps the active
+    /// selection in `open`/`close`, or — with nothing selected — inserts
+    /// the empty pair and leaves the cursor between the two, ready to type
+    /// inside it.
+    fn wrap_or_insert_pair(&mut self, open: &str, close: &str) {
         let Some(editor) = &mut self.editor else {
             return;
         };
-        let pasted = match crate::clipboard::paste_os() {
-            Some(text) => editor.textarea.insert_str(&text),
-            None => editor.textarea.paste(),
+        let mut edits = 0usize;
+        if let Some((start, end)) = editor.textarea.selection_range() {
+            let text = crate::editor::selection_text(editor.textarea.lines(), start, end);
+            if editor.textarea.cut() {
+                edits += 1;
+            }
+            if editor.textarea.insert_str(format!("{open}{text}{close}")) {
+                edits += 1;
+            }
+        } else {
+            if editor.textarea.insert_str(format!("{open}{close}")) {
+                edits += 1;
+            }
+            let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
+            let close_len = close.chars().count();
+            if col >= close_len {
+                editor
+                    .textarea
+                    .move_cursor(ratatui_textarea::CursorMove::Jump(
+                        row as u16,
+                        (col - close_len) as u16,
+                    ));
+            }
+        }
+        if edits > 0 {
+            self.editor_undo_groups.push(edits);
+            self.editor_redo_groups.clear();
+        }
+    }
+    /// Alt+Up/Alt+Down: swaps the cursor's line with the neighbor `delta`
+    /// rows away (`delta` is always `-1` or `1` — a single step, repeated
+    /// presses walk it further). No-op at either edge of the buffer. Cursor
+    /// column is preserved (clamped to the destination line's length) so
+    /// the same character stays under the cursor after the move.
+    fn editor_move_line(&mut self, delta: isize) {
+        let Some(editor) = &mut self.editor else {
+            return;
         };
-        if pasted {
-            self.editor_undo_groups.push(1);
+        let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
+        let line_count = editor.textarea.lines().len();
+        let target = row as isize + delta;
+        if target < 0 || target as usize >= line_count {
+            return;
+        }
+        let target = target as usize;
+        let a = row.min(target);
+        let b = row.max(target);
+        let line_a = editor.textarea.lines()[a].clone();
+        let line_b = editor.textarea.lines()[b].clone();
+        let b_len = line_b.chars().count();
+        editor.textarea.cancel_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(a as u16, 0));
+        editor.textarea.start_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(b as u16, b_len as u16));
+        let mut edits = 0usize;
+        if editor.textarea.cut() {
+            edits += 1;
+        }
+        if editor.textarea.insert_str(format!("{line_b}\n{line_a}")) {
+            edits += 1;
+        }
+        let new_col = col.min(if target == a {
+            line_b.chars().count()
+        } else {
+            line_a.chars().count()
+        });
+        editor.textarea.cancel_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(
+                target as u16,
+                new_col as u16,
+            ));
+        if edits > 0 {
+            self.editor_undo_groups.push(edits);
+            self.editor_redo_groups.clear();
+        }
+    }
+    /// Alt+D: duplicates the cursor's current line directly below it,
+    /// keeping the cursor at the same column on the new copy.
+    fn editor_duplicate_line(&mut self) {
+        let Some(editor) = &mut self.editor else {
+            return;
+        };
+        let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
+        let Some(line) = editor.textarea.lines().get(row).cloned() else {
+            return;
+        };
+        let line_len = line.chars().count();
+        editor.textarea.cancel_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(
+                row as u16,
+                line_len as u16,
+            ));
+        let mut edits = 0usize;
+        if editor.textarea.insert_str(format!("\n{line}")) {
+            edits += 1;
+        }
+        editor.textarea.cancel_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(
+                (row + 1) as u16,
+                col.min(line_len) as u16,
+            ));
+        if edits > 0 {
+            self.editor_undo_groups.push(edits);
             self.editor_redo_groups.clear();
         }
     }
@@ -4285,6 +4786,107 @@ impl App {
             _ => {}
         }
     }
+    /// Substitutes `{{title}}`/`{{date}}` in a snippet body the same way
+    /// note templates are rendered (`shiki_core::Template::render`), then
+    /// splits off a literal `{{cursor}}` marker if present — shared by
+    /// `apply_slash_command` (the `/`-menu) and `try_expand_snippet_on_tab`
+    /// (Tab-expansion), the two places a snippet's body actually gets
+    /// turned into text.
+    fn render_snippet_template(&self, body: &str) -> (String, Option<String>) {
+        let title = self
+            .selected_note()
+            .map(|n| n.frontmatter.title.clone())
+            .unwrap_or_default();
+        let mut vars = std::collections::HashMap::new();
+        vars.insert("title", title);
+        vars.insert("date", chrono::Local::now().format("%Y-%m-%d").to_string());
+        let rendered = shiki_core::Template {
+            name: String::new(),
+            contents: body.to_string(),
+        }
+        .render(&vars);
+        match rendered.split_once("{{cursor}}") {
+            Some((before, after)) => (before.to_string(), Some(after.to_string())),
+            None => (rendered, None),
+        }
+    }
+    /// Tab (`config.editor.snippet_expand_tab`): if the run of
+    /// non-whitespace characters immediately before the cursor matches a
+    /// snippet trigger — built-in or `[snippets.<trigger>]`, the exact same
+    /// set the `/`-menu draws from (`slash_menu::all_commands`) — replaces
+    /// just that trigger text with the snippet's rendered body. Falls
+    /// through to plain Tab otherwise, or while a multi-cursor edit is in
+    /// flight (same scope limit as the other new editor behaviors above).
+    fn try_expand_snippet_on_tab(&mut self) -> bool {
+        if !self.editor_secondary_cursors.is_empty() {
+            return false;
+        }
+        let Some(editor) = &self.editor else {
+            return false;
+        };
+        let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
+        let Some(line) = editor.textarea.lines().get(row) else {
+            return false;
+        };
+        let chars: Vec<char> = line.chars().collect();
+        let upto = &chars[..col.min(chars.len())];
+        let trigger_start = upto
+            .iter()
+            .rposition(|c| c.is_whitespace())
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let trigger: String = upto[trigger_start..].iter().collect();
+        if trigger.is_empty() {
+            return false;
+        }
+        let Some(cmd) = slash_menu::all_commands(&self.config)
+            .into_iter()
+            .find(|c| c.trigger.eq_ignore_ascii_case(&trigger))
+        else {
+            return false;
+        };
+        let (before, cursor_marker) = self.render_snippet_template(&cmd.body);
+        let Some(editor) = &mut self.editor else {
+            return false;
+        };
+        editor.textarea.cancel_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(
+                row as u16,
+                trigger_start as u16,
+            ));
+        editor.textarea.start_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, col as u16));
+        let mut edits = 0usize;
+        if editor.textarea.cut() {
+            edits += 1;
+        }
+        let inserted = match &cursor_marker {
+            Some(after) => editor.textarea.insert_str(format!("{before}{after}")),
+            None => editor.textarea.insert_str(&before),
+        };
+        if inserted {
+            edits += 1;
+        }
+        if cursor_marker.is_some() {
+            let target_row = row + before.matches('\n').count();
+            let target_col = before.rsplit('\n').next().unwrap_or("").chars().count();
+            editor
+                .textarea
+                .move_cursor(ratatui_textarea::CursorMove::Jump(
+                    target_row as u16,
+                    target_col as u16,
+                ));
+        }
+        if edits > 0 {
+            self.editor_undo_groups.push(edits);
+            self.editor_redo_groups.clear();
+        }
+        true
+    }
     /// Runs the chosen `/`-menu entry: deletes the typed `/query` (the
     /// same range `slash_query` reads, from the start of the line up to
     /// the cursor — `delete_line_by_head` is exactly that operation) and
@@ -4300,23 +4902,7 @@ impl App {
         // shifted, on top of each one still holding its own unconsumed
         // literal "/command" text.
         self.editor_secondary_cursors.clear();
-        let title = self
-            .selected_note()
-            .map(|n| n.frontmatter.title.clone())
-            .unwrap_or_default();
-        let mut vars = std::collections::HashMap::new();
-        vars.insert("title", title);
-        vars.insert("date", chrono::Local::now().format("%Y-%m-%d").to_string());
-        let rendered = shiki_core::Template {
-            name: String::new(),
-            contents: cmd.body.clone(),
-        }
-        .render(&vars);
-
-        let (before, cursor_marker) = match rendered.split_once("{{cursor}}") {
-            Some((before, after)) => (before.to_string(), Some(after.to_string())),
-            None => (rendered, None),
-        };
+        let (before, cursor_marker) = self.render_snippet_template(&cmd.body);
 
         let Some(editor) = &mut self.editor else {
             return;
@@ -4456,6 +5042,10 @@ impl App {
         }
         if self.show_history {
             self.handle_history_key(key);
+            return;
+        }
+        if self.show_outline {
+            self.handle_outline_key(key);
             return;
         }
         if self.show_drawer {

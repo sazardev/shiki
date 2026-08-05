@@ -31,6 +31,9 @@ pub enum Action {
     /// Exports the selected notebook to a single HTML or Markdown bundle —
     /// the same rendering `shiki export` (CLI) uses.
     ExportNotebook,
+    /// Forces the full-screen single-panel layout regardless of terminal
+    /// size, hiding NOTEBOOKS/NOTES for distraction-free writing.
+    ToggleZenMode,
     // Notebooks-focus
     NewNotebook,
     RenameNotebook,
@@ -67,6 +70,11 @@ pub enum Action {
     /// Opens the links modal — the selected note's outgoing `[[wikilinks]]`
     /// plus every other note that links back to it.
     ShowLinks,
+    /// Opens the outline modal — every `#`..`######` heading in the
+    /// selected note, jump straight to one. Also reachable as `Ctrl+O`
+    /// inside `Mode::Edit` itself (bound directly in `handle_edit_key`,
+    /// not through this scoped map).
+    ShowOutline,
 }
 
 /// Translates a config string (e.g. `"enter"`, `"tab"`, `"a"`, `"space"`) into a `KeyCode`.
@@ -144,6 +152,7 @@ impl KeyMaps {
         bind(&mut global, &cfg.global.tasks_panel, Action::ToggleTasks);
         bind(&mut global, &cfg.global.publish, Action::PublishNotebook);
         bind(&mut global, &cfg.global.export, Action::ExportNotebook);
+        bind(&mut global, &cfg.global.zen_mode, Action::ToggleZenMode);
 
         let mut notebooks = HashMap::new();
         bind(&mut notebooks, &cfg.notebooks.new, Action::NewNotebook);
@@ -192,6 +201,7 @@ impl KeyMaps {
         );
         bind(&mut preview, &cfg.preview.history, Action::ShowHistory);
         bind(&mut preview, &cfg.preview.links, Action::ShowLinks);
+        bind(&mut preview, &cfg.preview.outline, Action::ShowOutline);
 
         Self {
             leader,
@@ -378,6 +388,8 @@ pub fn action_label(action: Action) -> &'static str {
         Action::ToggleTasks => "tasks (all notebooks)",
         Action::PublishNotebook => "publish notebook to PDF",
         Action::ExportNotebook => "export notebook to HTML/Markdown",
+        Action::ToggleZenMode => "zen mode (full-screen, hide side panels)",
+        Action::ShowOutline => "outline (jump to a heading)",
     }
 }
 
@@ -413,5 +425,7 @@ pub fn action_icon(action: Action) -> char {
         Action::Scratchpad => crate::icons::PENCIL,
         Action::PublishNotebook => crate::icons::PDF,
         Action::ExportNotebook => crate::icons::NOTE,
+        Action::ToggleZenMode => crate::icons::EXPAND,
+        Action::ShowOutline => crate::icons::TREE,
     }
 }
