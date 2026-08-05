@@ -78,14 +78,14 @@
       <a href="#features">Features</a>
       <a href="#install">Install</a>
       <a href="documentation.html">Docs</a>
-      <a href="#changelog">Changelog</a>
+      <a href="changelog.html">Changelog</a>
       <a href="https://github.com/sazardev/shiki">GitHub</a>
       <span class="version-chip-wrap" id="version-chip-wrap">
         <button type="button" class="pill pill-button" id="version-pill" hidden></button>
         <div class="version-popover" id="version-popover" role="dialog" aria-label="What's new" hidden>
           <div class="version-popover-header">
             <strong>What's new</strong>
-            <a href="https://github.com/sazardev/shiki/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Full changelog →</a>
+            <a href="changelog.html">Full changelog →</a>
           </div>
           <div class="version-popover-body changelog-body" id="version-popover-content">
             <p class="changelog-loading">Loading changelog…</p>
@@ -110,9 +110,16 @@
           <a class="btn btn-ghost" href="https://github.com/sazardev/shiki">View on GitHub ★</a>
         </div>
         <div class="install-hint">
-          or <code>cargo install shiki-cli</code>
-          <button class="copy-btn copy-btn-inline" type="button" aria-label="Copy command">Copy</button>
-          — see <a href="#install">all install options</a>
+          <p class="install-hint-label" id="quick-install-label">Quick install (Cargo):</p>
+          <div class="quick-install code-block">
+            <pre id="quick-install-cmd">cargo install shiki-cli</pre>
+            <button class="copy-btn" type="button" aria-label="Copy command">Copy</button>
+          </div>
+          <p class="install-alt" id="install-alt-line" hidden>
+            or, the universal fallback: <code>cargo install shiki-cli</code>
+            <button class="copy-btn copy-btn-inline" type="button" aria-label="Copy command">Copy</button>
+          </p>
+          <p class="install-more">See <a href="#install">all install options</a>.</p>
         </div>
       </div>
       <div>
@@ -371,22 +378,6 @@ scoop install shiki</pre>
       <div id="contributors-grid" class="contributors-grid">
         <p class="contributors-loading">Loading contributors…</p>
       </div>
-    </div>
-  </section>
-
-  <section id="changelog">
-    <div class="container">
-      <span class="eyebrow">What's new</span>
-      <h2>Changelog</h2>
-      <p class="muted">Everything that's shipped — new features, real fixes, the occasional
-      oops. No highlight reel, no spin.</p>
-
-      <div id="changelog-content" class="changelog-body">
-        <p class="changelog-loading">Loading changelog…</p>
-      </div>
-      <p class="changelog-more">
-        <a href="https://github.com/sazardev/shiki/blob/main/CHANGELOG.md">Full changelog on GitHub →</a>
-      </p>
     </div>
   </section>
 

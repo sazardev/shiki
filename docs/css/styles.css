@@ -334,6 +334,7 @@ code, .code {
 
 .topbar nav {
   display: flex;
+  align-items: center;
   gap: 24px;
   font-size: 0.9rem;
 }
@@ -465,6 +466,22 @@ code, .code {
 .hero .install-hint {
   font-size: 0.85rem;
   color: var(--muted);
+  max-width: 420px;
+}
+
+.install-hint-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.quick-install {
+  margin-bottom: 10px;
+}
+
+.install-alt {
+  margin-bottom: 6px;
 }
 
 /* Fake terminal window chrome wrapping the real screenshots */
@@ -677,7 +694,8 @@ code, .code {
   color: var(--fg);
 }
 
-.install-card pre {
+.install-card pre,
+.quick-install pre {
   margin: 0;
   overflow-x: auto;
   font-size: 0.85rem;
@@ -925,6 +943,17 @@ code, .code {
 }
 
 .pill-button {
+  /* Reset the browser's own <button> chrome (UA-default background/box
+     shadow, line-height) that .pill's rules don't touch — without this the
+     chip rendered as a plain white system button, with its text sitting
+     off-center relative to the pill shape, on top of whatever `color`
+     .pill actually set. */
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
   font: inherit;
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s;

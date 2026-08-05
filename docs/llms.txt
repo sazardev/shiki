@@ -32,7 +32,7 @@ Key facts for citation or summarization:
 
 - [Full reference documentation](https://sazardev.github.io/shiki/documentation.html): every keybinding, every CLI command, the complete `config.toml` schema, note file format, and included themes.
 - [README](https://github.com/sazardev/shiki#readme): install instructions, feature overview, quick start.
-- [Changelog](https://github.com/sazardev/shiki/blob/main/CHANGELOG.md): version history, Keep a Changelog format.
+- [Changelog](https://sazardev.github.io/shiki/changelog.html): version history, Keep a Changelog format.
 
 ## Project
 

@@ -274,9 +274,12 @@ function renderChangelog(markdown, maxVersions = CHANGELOG_MAX_VERSIONS) {
 async function loadChangelog() {
   const container = document.getElementById("changelog-content");
   if (!container) return; // this script is shared across pages — not every page has a changelog
+  // changelog.html sets data-full to render every version instead of the
+  // CHANGELOG_MAX_VERSIONS-capped teaser other pages don't show anymore.
+  const maxVersions = container.hasAttribute("data-full") ? Infinity : CHANGELOG_MAX_VERSIONS;
   try {
     const text = await fetchChangelogMarkdown();
-    container.innerHTML = renderChangelog(text);
+    container.innerHTML = renderChangelog(text, maxVersions);
   } catch (err) {
     container.innerHTML = `<p class="changelog-error">Couldn't load the live changelog right now. See it directly on <a href="https://github.com/sazardev/shiki/blob/main/CHANGELOG.md">GitHub</a>.</p>`;
   }
@@ -383,6 +386,46 @@ function detectPlatformKey() {
   if (/Mac/i.test(ua) || /Mac|iPhone|iPad/i.test(platform)) return "macArm";
   if (/Linux|X11/i.test(ua) || /Linux/i.test(platform)) return "linux";
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Hero "quick install" command — same OS detection as the download button
+// above, but for the copy-paste package-manager command instead of the
+// binary download link. Only macOS and Windows have a real package manager
+// shiki actually ships to (Homebrew, Scoop); Linux has no single universal
+// one (Arch's `yay -S shiki-bin` already gets its own card further down the
+// page), so `cargo install shiki-cli` — already the one truly
+// platform-agnostic install path — stays the quick-install command there
+// and detection failing entirely (unknown UA) falls back to it too.
+// ---------------------------------------------------------------------------
+
+const QUICK_INSTALL = {
+  windows: {
+    label: "Scoop",
+    command: "scoop bucket add sazardev https://github.com/sazardev/shiki\nscoop install shiki",
+  },
+  macArm: {
+    label: "Homebrew",
+    command: "brew install sazardev/shiki/shiki",
+  },
+};
+
+function initQuickInstall() {
+  const label = document.getElementById("quick-install-label");
+  const cmd = document.getElementById("quick-install-cmd");
+  const altLine = document.getElementById("install-alt-line");
+  if (!cmd) return; // this script is shared across pages — not every page has the hero install block
+
+  const preset = QUICK_INSTALL[detectPlatformKey()];
+  if (preset) {
+    cmd.textContent = preset.command;
+    if (label) label.textContent = `Quick install (${preset.label}):`;
+    // Cargo is the fallback shown as an "optional" secondary line only once
+    // the primary command above has actually become something else — with
+    // no override (Linux/unknown), it's already the primary, so a second
+    // "or cargo install" line right under it would just repeat itself.
+    if (altLine) altLine.hidden = false;
+  }
 }
 
 // A hung (not failed) request otherwise never resolves or rejects — the
@@ -665,6 +708,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initTheme();
   loadChangelog();
   loadLatestRelease();
+  initQuickInstall();
   loadContributors();
   initCopyButtons();
   const versionPopover = initVersionPopover();
