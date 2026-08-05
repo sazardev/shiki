@@ -320,9 +320,13 @@ The rest of the editor's mouse/keyboard UX is opt-in via `[editor]` (Settings' E
   distinct from the primary's plain reverse-video) — a terminal can only blink one real caret, so
   this is the compensating visual signal rather than an attempt to actually blink more than one.
 - `auto_list_continue` (on by default): `Enter` on a `- item`/`- [ ] task`/`1. item` line carries
-  the same prefix onto the next line (checkboxes always reset to `[ ]`, never copy `[x]`); `Enter`
-  on an already-empty list item exits the list instead of continuing it, and `Backspace` right
-  after an empty prefix removes it in one step instead of one character at a time.
+  the same prefix onto the next line (checkboxes always reset to `[ ]`, never copy `[x]`; an
+  ordered `N.` marker increments — `1.` → `2.` → `3.` … as you keep pressing `Enter`, rather than
+  repeating the same number); `Enter` on an already-empty list item exits the list instead of
+  continuing it, and `Backspace` right after an empty prefix removes it in one step instead of one
+  character at a time. The same setting also gates `Tab`/`Shift+Tab` on a list/checkbox line with
+  nothing selected: they nest it one level deeper or back out (adding/removing 2 leading spaces),
+  keeping the cursor over the same character.
 - `format_shortcuts` (on by default): `Ctrl+B` wraps the current selection in `**bold**`;
   `Ctrl+Alt+I` does the same for `_italic_` (not `Ctrl+I` — that's indistinguishable from `Tab` at
   the terminal level in most emulators). With nothing selected, either inserts an empty pair with
@@ -347,11 +351,15 @@ distinguishable; picking one inserts `[[Title]]`. In PREVIEW, `Ctrl`+click on a 
 everywhere, including on top of a wikilink.
 
 Navigation inside the editor is always on, not gated by `[editor]`: `PageUp`/`PageDown` move the
-cursor a page at a time, `Home`/`End` go to the start/end of the current line, `Ctrl+Home`/
-`Ctrl+End` jump to the very start/end of the note, and the mouse wheel scrolls too. `PageUp`/
-`PageDown`/mouse-wheel scrolling move the cursor itself (there's no independent scroll offset —
-the editor's word-wrap support means it bypasses `tui-textarea`'s own rendering, and with it,
-`tui-textarea`'s own viewport-based `PageUp`/`PageDown`, which otherwise does nothing here).
+cursor a page at a time, plain `Home` is "smart" — the first press goes to the line's first
+non-whitespace character, pressing it again (or pressing it on a line already at column 0) goes to
+column 0 — `End` goes to the end of the current line, `Ctrl+Home`/`Ctrl+End` jump to the very
+start/end of the note, and the mouse wheel scrolls too. `PageUp`/`PageDown`/mouse-wheel scrolling
+move the cursor itself (there's no independent scroll offset — the editor's word-wrap support
+means it bypasses `tui-textarea`'s own rendering, and with it, `tui-textarea`'s own viewport-based
+`PageUp`/`PageDown`, which otherwise does nothing here). `Tab`/`Shift+Tab` with an active selection
+indent/outdent every line the selection spans — a plain block-indent, not list-specific, also
+always on regardless of `auto_list_continue`.
 
 ---
 

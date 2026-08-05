@@ -18,6 +18,12 @@ use crate::{
     status_bar,
 };
 
+/// Spaces added/removed per level by the editor's list indent/outdent
+/// (`try_indent_list_line`/`indent_selected_lines`) — 2 lines up under a
+/// `- `/`* `/`+ ` marker's own width, the same convention CommonMark's
+/// nested-list rules already expect.
+const LIST_INDENT_STEP: usize = 2;
+
 impl App {
     fn open_theme_picker(&mut self) {
         self.theme_picker_index = self.theme_index;
@@ -3750,11 +3756,37 @@ impl App {
             {
                 self.editor_duplicate_line();
             }
-            // Tab expands a matching snippet trigger — see
-            // `try_expand_snippet_on_tab`'s own doc comment. Falls through
-            // to plain Tab (a literal tab character) when nothing matches.
-            KeyCode::Tab if self.config.editor.snippet_expand_tab => {
-                if !self.try_expand_snippet_on_tab() {
+            // Tab: with an active selection, indents every line it spans
+            // (a plain block-indent, not list-specific — same as any code
+            // editor's Tab-on-a-selection); otherwise expands a matching
+            // snippet trigger; otherwise, on a list/checkbox line, nests it
+            // one level deeper. Falls through to plain Tab when none of
+            // those apply. Shift+Tab (`KeyCode::BackTab`) mirrors this in
+            // reverse (outdent), with no snippet step — there's nothing to
+            // "un-expand".
+            KeyCode::Tab => {
+                let has_selection = self
+                    .editor
+                    .as_ref()
+                    .is_some_and(|e| e.textarea.selection_range().is_some());
+                if has_selection {
+                    self.indent_selected_lines(1);
+                } else if self.config.editor.snippet_expand_tab && self.try_expand_snippet_on_tab()
+                {
+                    // handled
+                } else if !(self.config.editor.auto_list_continue && self.try_indent_list_line(1)) {
+                    self.editor_forward_key_default(key);
+                }
+            }
+            KeyCode::BackTab => {
+                let has_selection = self
+                    .editor
+                    .as_ref()
+                    .is_some_and(|e| e.textarea.selection_range().is_some());
+                if has_selection {
+                    self.indent_selected_lines(-1);
+                } else if !(self.config.editor.auto_list_continue && self.try_indent_list_line(-1))
+                {
                     self.editor_forward_key_default(key);
                 }
             }
@@ -3763,11 +3795,20 @@ impl App {
             // them to `ratatui-textarea` does nothing in this editor.
             KeyCode::PageDown => self.editor_scroll_cursor(PAGE_STEP),
             KeyCode::PageUp => self.editor_scroll_cursor(-PAGE_STEP),
-            // Plain Home/End already work via the generic forward
-            // (`ratatui-textarea`'s own `CursorMove::Head`/`End` — start/end of
-            // the *current* line, no viewport dependency). Ctrl+Home/
-            // Ctrl+End add the jump-to-document-start/end that plain
-            // Home/End don't cover, the common convention this was missing.
+            // Smart Home (no modifiers): toggles between the first
+            // non-whitespace character and column 0, instead of always
+            // column 0 — the common modern-editor convention (VS Code,
+            // JetBrains, Emacs' `back-to-indentation`). Shift+Home is left
+            // to the generic forward below, since this doesn't extend a
+            // selection — only plain, unmodified Home gets the toggle.
+            KeyCode::Home if key.modifiers.is_empty() => {
+                self.smart_home();
+            }
+            // Plain End already works via the generic forward
+            // (`ratatui-textarea`'s own `CursorMove::End` — end of the
+            // *current* line, no viewport dependency). Ctrl+Home/Ctrl+End
+            // add the jump-to-document-start/end that plain Home/End
+            // don't cover, the common convention this was missing.
             KeyCode::Home if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 if let Some(editor) = &mut self.editor {
                     editor.textarea.cancel_selection();
@@ -3902,11 +3943,31 @@ impl App {
         };
         Some(&line[..indent_len + marker_len + checkbox_len])
     }
-    /// The prefix to carry onto the *next* line when continuing a list —
-    /// identical to the source prefix except a checkbox always resets to
-    /// unchecked, since copying `[x]` would silently mark the new item
-    /// done before it's even been written.
+    /// The prefix to carry onto the *next* line when continuing a list.
+    /// A checkbox always resets to unchecked, since copying `[x]` would
+    /// silently mark the new item done before it's even been written. An
+    /// ordered marker (`N.`) increments — pressing Enter repeatedly after
+    /// `1. ` walks `2. `, `3. `, … the same way Word/Notion do, rather than
+    /// repeating the same number on every line; a bullet marker (`-`/`*`/
+    /// `+`) is otherwise carried over unchanged.
     fn continuation_prefix(prefix: &str) -> String {
+        let indent_len = prefix.len() - prefix.trim_start_matches(' ').len();
+        let indent = &prefix[..indent_len];
+        let rest = &prefix[indent_len..];
+        let digits = rest.chars().take_while(|c| c.is_ascii_digit()).count();
+        if digits > 0 && rest.get(digits..digits + 2) == Some(". ") {
+            let number: u64 = rest[..digits].parse().unwrap_or(1);
+            let after = &rest[digits + 2..];
+            let checkbox = if after.starts_with("[ ] ")
+                || after.starts_with("[x] ")
+                || after.starts_with("[X] ")
+            {
+                "[ ] "
+            } else {
+                ""
+            };
+            return format!("{indent}{}. {checkbox}", number + 1);
+        }
         match prefix.find("[x] ").or_else(|| prefix.find("[X] ")) {
             Some(idx) => format!("{}[ ] ", &prefix[..idx]),
             None => prefix.to_string(),
@@ -3995,6 +4056,137 @@ impl App {
             self.editor_redo_groups.clear();
         }
         true
+    }
+    /// Tab/Shift+Tab (`config.editor.auto_list_continue`), no selection:
+    /// nests the cursor's list/checkbox line one level deeper (positive
+    /// `direction`) or back out (negative `direction`) by adding/removing
+    /// `LIST_INDENT_STEP` leading spaces — a no-op (but still "handled",
+    /// so it doesn't fall through to snippet-expand/plain-Tab) on a line
+    /// that isn't a list item, or when outdenting past column 0. The
+    /// cursor stays over the same character, shifting with the indent.
+    fn try_indent_list_line(&mut self, direction: i8) -> bool {
+        if !self.editor_secondary_cursors.is_empty() {
+            return false;
+        }
+        let Some(editor) = &self.editor else {
+            return false;
+        };
+        let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
+        let Some(line) = editor.textarea.lines().get(row).cloned() else {
+            return false;
+        };
+        if Self::list_prefix(&line).is_none() {
+            return false;
+        }
+        let (new_line, shift) = Self::indent_line(&line, direction);
+        if new_line == line {
+            return true;
+        }
+        let Some(editor) = &mut self.editor else {
+            return false;
+        };
+        let edits = Self::replace_whole_line(editor, row, &line, &new_line);
+        let new_col = (col as isize + shift).max(0) as u16;
+        editor.textarea.cancel_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, new_col));
+        if edits > 0 {
+            self.editor_undo_groups.push(edits);
+            self.editor_redo_groups.clear();
+        }
+        true
+    }
+    /// Tab/Shift+Tab with an active selection: indents/outdents every line
+    /// the selection spans, list or not — the general "block indent"
+    /// behavior any code editor gives a multi-line selection, not gated by
+    /// `auto_list_continue` since it isn't list-specific. A selection
+    /// whose end sits at column 0 doesn't visually include that row (the
+    /// common result of a `Shift+Down`-built selection), so that row is
+    /// excluded — otherwise a 3-line visual selection would indent a 4th,
+    /// untouched-looking row.
+    fn indent_selected_lines(&mut self, direction: i8) {
+        let Some(editor) = &mut self.editor else {
+            return;
+        };
+        let Some((start, end)) = editor.textarea.selection_range() else {
+            return;
+        };
+        let (start_row, _) = start;
+        let (end_row, end_col) = end;
+        let last_row = editor.textarea.lines().len().saturating_sub(1);
+        let end_row = if end_col == 0 && end_row > start_row {
+            end_row - 1
+        } else {
+            end_row
+        }
+        .min(last_row);
+        let lines: Vec<String> = editor.textarea.lines().to_vec();
+        editor.textarea.cancel_selection();
+        let mut edits = 0usize;
+        for row in start_row..=end_row {
+            let Some(line) = lines.get(row) else {
+                continue;
+            };
+            let (new_line, _shift) = Self::indent_line(line, direction);
+            if new_line == *line {
+                continue;
+            }
+            edits += Self::replace_whole_line(editor, row, line, &new_line);
+        }
+        if edits > 0 {
+            self.editor_undo_groups.push(edits);
+            self.editor_redo_groups.clear();
+        }
+    }
+    /// Adds (`direction > 0`) or removes (`direction < 0`) one
+    /// `LIST_INDENT_STEP`-wide chunk of leading spaces from `line`,
+    /// returning the new text plus the column shift that keeps whatever
+    /// was under the cursor lined up. Outdenting never removes more than
+    /// the line's own existing indent.
+    fn indent_line(line: &str, direction: i8) -> (String, isize) {
+        if direction > 0 {
+            (
+                format!("{}{line}", " ".repeat(LIST_INDENT_STEP)),
+                LIST_INDENT_STEP as isize,
+            )
+        } else {
+            let current_indent = line.len() - line.trim_start_matches(' ').len();
+            let remove = LIST_INDENT_STEP.min(current_indent);
+            (line[remove..].to_string(), -(remove as isize))
+        }
+    }
+    /// Replaces `row`'s entire content with `new_line` — select the whole
+    /// line (by its *old* text's char length) and cut, then insert the
+    /// replacement, the same two-step primitive `editor_move_line`/
+    /// `editor_duplicate_line` already use for whole-line edits. Returns
+    /// how many of the two steps actually changed anything, for the
+    /// caller's own undo-group bookkeeping.
+    fn replace_whole_line(
+        editor: &mut InlineEditor,
+        row: usize,
+        old_line: &str,
+        new_line: &str,
+    ) -> usize {
+        editor.textarea.cancel_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, 0));
+        editor.textarea.start_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(
+                row as u16,
+                old_line.chars().count() as u16,
+            ));
+        let mut edits = 0usize;
+        if editor.textarea.cut() {
+            edits += 1;
+        }
+        if editor.textarea.insert_str(new_line) {
+            edits += 1;
+        }
+        edits
     }
     /// Snapshots the current notebook's notes (excluding the one being
     /// edited — linking to yourself isn't useful) once, the moment `[[`
@@ -4260,6 +4452,28 @@ impl App {
             self.editor_undo_groups.push(edits);
             self.editor_redo_groups.clear();
         }
+    }
+    /// Plain Home (no modifiers): the first press moves to the line's
+    /// first non-whitespace character; pressing it again from there (or
+    /// pressing it on a line that's already at column 0, e.g. blank or
+    /// unindented) moves to column 0 — the standard "smart home" toggle.
+    fn smart_home(&mut self) {
+        let Some(editor) = &mut self.editor else {
+            return;
+        };
+        let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
+        let Some(line) = editor.textarea.lines().get(row) else {
+            return;
+        };
+        let first_non_ws = line.chars().take_while(|c| *c == ' ' || *c == '\t').count();
+        let target = if col == first_non_ws { 0 } else { first_non_ws };
+        editor.textarea.cancel_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(
+                row as u16,
+                target as u16,
+            ));
     }
     /// Alt+Up/Alt+Down: swaps the cursor's line with the neighbor `delta`
     /// rows away (`delta` is always `-1` or `1` — a single step, repeated
