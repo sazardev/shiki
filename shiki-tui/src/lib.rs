@@ -15,6 +15,7 @@ pub mod panel_notebooks;
 pub mod panel_notes;
 pub mod panel_outline;
 pub mod panel_preview;
+pub mod panel_query;
 pub mod panel_settings;
 pub mod panel_tags;
 pub mod panel_tasks;

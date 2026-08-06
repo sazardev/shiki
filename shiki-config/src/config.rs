@@ -333,6 +333,12 @@ pub struct GlobalKeybindings {
     /// backward-compatibility reason as `logs`/`toggle_favorite_editor`.
     #[serde(default = "default_tasks_panel_key")]
     pub tasks_panel: String,
+    /// Opens the query modal: a Dataview-style `where ... sort ...` DSL
+    /// filtering/sorting notes by frontmatter field, live across every
+    /// notebook — see `shiki_core::query`. Field-level default for the same
+    /// backward-compatibility reason as `logs`/`toggle_favorite_editor`.
+    #[serde(default = "default_query_panel_key")]
+    pub query_panel: String,
     /// Renders the selected notebook to a themed PDF via `pretty-pdf`
     /// (fetched/cached automatically on first use if not already on
     /// `$PATH`), then opens it. Field-level default for the same
@@ -368,6 +374,7 @@ impl Default for GlobalKeybindings {
             scratchpad: default_scratchpad_key(),
             links: default_global_links_key(),
             tasks_panel: default_tasks_panel_key(),
+            query_panel: default_query_panel_key(),
             publish: default_publish_key(),
             export: default_export_key(),
             zen_mode: default_zen_mode_key(),
@@ -393,6 +400,10 @@ fn default_global_links_key() -> String {
 
 fn default_tasks_panel_key() -> String {
     "t".into()
+}
+
+fn default_query_panel_key() -> String {
+    "q".into()
 }
 
 fn default_logs_key() -> String {
@@ -1165,6 +1176,15 @@ pub struct NotebookGitOverride {
     /// in `config.toml` and relaunching.
     #[serde(default)]
     pub hidden: bool,
+    /// Whether this notebook's notes are encrypted at rest (`age::scrypt`,
+    /// passphrase-based — see `shiki_core::crypto`). Unlike `auto_push`/
+    /// `auto_sync`, there's no global default to inherit from: encryption
+    /// is opt-in per notebook, off unless explicitly set. The passphrase
+    /// itself is never stored here (or anywhere on disk) — it's typed in
+    /// each session (TUI) or each invocation (`shiki notebook encrypt/
+    /// decrypt`).
+    #[serde(default)]
+    pub encrypt: bool,
 }
 
 /// `[git]` settings resolved for one specific notebook — see `Config::sync_for`.
@@ -1241,6 +1261,15 @@ pub struct Config {
     /// at all, only ever the user's own additions/overrides.
     #[serde(default)]
     pub snippets: std::collections::HashMap<String, SnippetConfig>,
+    /// Named, saved `shiki query`/leader+`q` DSL strings, keyed by name —
+    /// e.g. `[queries] due-soon = "where due < today sort due asc"`. Same
+    /// `HashMap` (not `Vec`) shape as `snippets` above, and for the exact
+    /// same reason: an empty `Vec<_>` would serialize as a bare `queries =
+    /// []` line that a later hand-added `[queries.foo]`-style table would
+    /// conflict with. Ad-hoc (unsaved) queries typed directly into the CLI
+    /// arg or the TUI modal don't touch this map at all.
+    #[serde(default)]
+    pub queries: std::collections::HashMap<String, String>,
 }
 
 impl Config {
@@ -1255,6 +1284,12 @@ impl Config {
                 .and_then(|o| o.auto_sync_every)
                 .unwrap_or(self.git.auto_sync_every),
         }
+    }
+    /// Whether `notebook_name` is configured to encrypt its notes at rest.
+    /// No global default to inherit from (unlike `sync_for`'s fields) —
+    /// encryption is opt-in per notebook, so absent simply means off.
+    pub fn encrypt_for(&self, notebook_name: &str) -> bool {
+        self.notebooks.get(notebook_name).is_some_and(|o| o.encrypt)
     }
     /// Returns a map of notebook names to their custom absolute paths,
     /// as configured in `[notebooks.<name>] path = "..."`.

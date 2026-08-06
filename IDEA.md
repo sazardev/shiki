@@ -397,6 +397,10 @@ shiki notebook create <name>
 shiki notebook list --json
 shiki notebook rename <old> <new>
 shiki notebook delete <name> --yes  # permanently deletes the notebook and every note in it
+shiki notebook encrypt <name>       # enable encryption at rest (prompts for a passphrase, twice)
+shiki notebook decrypt <name>       # reverse it — decrypts every note back to plain text
+shiki query 'where status = pending sort due asc'   # Dataview-style filter/sort over frontmatter
+shiki query 'where due < today' --count             # for status bars, like `shiki tasks --count`
 shiki theme list          # list built-in themes, marking the active one
 shiki theme set <name>    # switch theme (persisted to config.toml)
 shiki theme create [--from <name>]  # scaffold all 19 color overrides from a real palette
@@ -416,6 +420,70 @@ given.
 matching an existing notebook; `data_dir` being a real directory, not just existing; two notebooks
 resolving to the same path on disk; `git.remote_template` containing its `{notebook}` placeholder;
 and `git.sign_commits` having an actual signing key configured (`git config user.signingkey`).
+
+---
+
+## Encryption at rest (per notebook, passphrase-based)
+
+Any notebook can be encrypted independently — `leader+s` → NOTEBOOKS → drill into a notebook →
+`encrypted` field, or `shiki notebook encrypt <name>` from the CLI. Every note's full content
+(frontmatter + body) is encrypted as one [age](https://age-encryption.org)-armored blob using a
+passphrase (`age::scrypt` — symmetric, no keypair), so the file on disk is still plain ASCII text
+(`git diff`/`git log -p` don't flip to "binary files differ"), just unreadable without the
+passphrase. Note filenames stay in the clear — the one accepted metadata leak, since opaque
+filenames would need a bigger redesign.
+
+**There is exactly one passphrase per notebook — not one per machine, not one per person.** It's
+the actual encryption key (well, the input `age::scrypt` derives the real key from), the same way a
+password-protected ZIP file or a KeePass database has one password that opens it anywhere, on any
+machine. Shiki **never** stores or syncs this passphrase anywhere — not in `config.toml`, not in
+the git repo, not in any file. You are the only distribution mechanism: write it down in a password
+manager, remember it, whatever — just don't lose it. There is no recovery path if you do; nothing in
+shiki can decrypt a notebook without the exact passphrase that encrypted it.
+
+Walking through it end to end, encrypting `vault` with passphrase `1234567` on one machine and then
+opening the same repo on a second machine:
+
+1. **Machine A** (has the plaintext notebook): `shiki notebook encrypt vault` prompts for the
+   passphrase twice (typo protection), writes a small canary file (`.shiki-encryption`, itself
+   encrypted with that passphrase — exists purely to verify a passphrase attempt without risking a
+   real note) at the notebook's root, re-encrypts every existing note, flips
+   `[notebooks.vault] encrypt = true` in **machine A's own** `config.toml`, and commits everything.
+   You push as usual — what lands on GitHub/GitLab/wherever is ciphertext notes plus the encrypted
+   canary. Nobody who can see the repo (including the hosting provider) can read the content
+   without the passphrase.
+2. **Machine B** `git clone`s or `git pull`s that repo. It gets the same ciphertext files and the
+   canary — but its *own* `config.toml` (which never travels with the git repo; it lives outside it
+   entirely, under `~/.config/shiki/`, precisely so the passphrase/flag can't leak through git) has
+   no idea this notebook is encrypted at all yet.
+3. Opening `vault` on machine B, shiki doesn't consult that config flag to decide whether to prompt
+   — it sniffs the *actual file content* for the age armor header, so it notices the encryption
+   regardless of what machine B's config says, and asks: `Passphrase — unlock 'vault'`.
+4. You type the **same** `1234567` you used on machine A — not a different one, not "machine B's
+   own" passphrase. Shiki decrypts the canary with it; if it matches, every note in the notebook now
+   shows up decrypted in the UI, and machine B's `config.toml` also gets `encrypt = true` written
+   into it (so a note you create or edit on machine B from now on encrypts too, instead of silently
+   falling back to plain text because that one machine's config didn't know yet).
+5. Typing the wrong passphrase at step 4 fails the canary check with a clear error and nothing is
+   shown or touched — no corruption, just a re-prompt.
+
+Practical consequences worth knowing:
+
+- **CLI read commands don't prompt for a passphrase** (`shiki list`/`tasks`/`graph`/`show`/`search`)
+  — they're built for non-interactive use (status bars, scripts), and blocking on a hidden-input
+  prompt mid-script isn't viable. Against an encrypted, locked notebook they fail with a clear error
+  instead of hanging or printing garbage; `shiki new`/`shiki daily` (the write paths) do prompt,
+  since writing plaintext into what should be an encrypted notebook would be a real correctness bug,
+  not just an inconvenience.
+- The note-history modal (`H`) degrades gracefully for an encrypted notebook: viewing an old
+  revision decrypts it the same way a live read does, but the unified *diff* view (`d`) can't work
+  at all — a tree diff of two ciphertext blobs is meaningless noise, so it falls back to showing the
+  decrypted full content instead, with a status message explaining why.
+- Changing the passphrase isn't a per-machine setting you can pick independently — it means
+  decrypting and re-encrypting with the new one, and every other machine still holding the old
+  ciphertext needs the new passphrase from that point on (there's no `shiki notebook rekey`
+  convenience command yet — do it by hand: `shiki notebook decrypt <name>` with the old passphrase,
+  then `shiki notebook encrypt <name>` with the new one, then push).
 
 ---
 
@@ -730,6 +798,11 @@ auto_sync = true
 auto_sync = true
 auto_sync_every = 3
 auto_push = true
+# Encrypts every note at rest with a passphrase (prompted, never stored here
+# or anywhere else — see "Encryption at rest" above). No global default to
+# inherit from; this is opt-in per notebook, managed via `shiki notebook
+# encrypt/decrypt <name>` or Settings → NOTEBOOKS, not by hand-editing this.
+# encrypt = true
 
 # Custom entries for the inline editor's `/`-menu, keyed by trigger. Empty by
 # default — the built-in commands (h1/h2/h3/code/math/table/check/quote/

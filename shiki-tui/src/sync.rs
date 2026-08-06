@@ -9,6 +9,12 @@ use crate::app::App;
 pub(crate) struct GitOpResult {
     pub(crate) kind: GitOpKind,
     pub(crate) message: String,
+    /// Set only when `kind` is `Pull` and the pull's outcome was
+    /// `ConflictsPending` — `(notebook, conflicted files, branch)`, the
+    /// branch carried through so the eventual merge commit message can
+    /// name it. `apply_git_op_result` opens the conflict resolver modal
+    /// when this is `Some` and the notebook is still the selected one.
+    pub(crate) conflict: Option<(String, Vec<std::path::PathBuf>, String)>,
 }
 
 pub(crate) enum GitOpKind {
@@ -45,6 +51,13 @@ impl App {
                     .get(&nb.name)
                     .is_some_and(|over| over.hidden)
             })
+            // Attaches whatever passphrase is cached for an encrypted
+            // notebook (`resolved_notebook_crypto` — `None` if it isn't
+            // encrypted, or if nothing's been typed in yet this session).
+            .map(|nb| {
+                let crypto = self.resolved_notebook_crypto(&nb.name);
+                nb.with_crypto(crypto)
+            })
             .collect();
         if self.notebooks.is_empty() {
             self.selected_notebook = 0;
@@ -55,15 +68,37 @@ impl App {
         self.reload_notes();
     }
 
+    /// Shared by `reload_notes`/`refresh_notes_preserve_selection`: lists
+    /// `relative` within the selected notebook, and — unlike the plain
+    /// `.ok()`/`unwrap_or_default()` this used to be — actually
+    /// distinguishes "an encrypted notebook with no/wrong passphrase
+    /// cached" from every other failure (missing notebook, I/O error),
+    /// since only that one case has a UI response worth taking
+    /// (`maybe_prompt_for_notebook_passphrase`) rather than just showing an
+    /// empty list.
+    fn list_dir_or_prompt_passphrase(
+        &mut self,
+        relative: &std::path::Path,
+    ) -> (Vec<String>, Vec<shiki_core::Note>) {
+        let Some(nb) = self.selected_notebook().cloned() else {
+            return (Vec::new(), Vec::new());
+        };
+        match nb.list_dir(relative) {
+            Ok(result) => result,
+            Err(shiki_core::Error::Encryption(_)) => {
+                self.maybe_prompt_for_notebook_passphrase();
+                (Vec::new(), Vec::new())
+            }
+            Err(_) => (Vec::new(), Vec::new()),
+        }
+    }
+
     /// Re-lists the current path (`notes_path`) within the selected
     /// notebook and resets the selection to the top — for a notebook switch
     /// or a folder change, where "resume where you were" doesn't apply.
     pub(crate) fn reload_notes(&mut self) {
         let relative = self.notes_relative_path();
-        let (folders, notes) = self
-            .selected_notebook()
-            .and_then(|nb| nb.list_dir(&relative).ok())
-            .unwrap_or_default();
+        let (folders, notes) = self.list_dir_or_prompt_passphrase(&relative);
         self.folders = folders;
         self.notes = notes;
         self.apply_sort();
@@ -81,10 +116,7 @@ impl App {
     pub(crate) fn refresh_notes_preserve_selection(&mut self) {
         let stem = self.selected_note().map(|n| n.file_stem());
         let relative = self.notes_relative_path();
-        let (folders, notes) = self
-            .selected_notebook()
-            .and_then(|nb| nb.list_dir(&relative).ok())
-            .unwrap_or_default();
+        let (folders, notes) = self.list_dir_or_prompt_passphrase(&relative);
         self.folders = folders;
         self.notes = notes;
         self.apply_sort();
@@ -108,6 +140,9 @@ impl App {
             .selected_notebook()
             .map(|nb| shiki_core::git::status(&nb.path, &self.config.git.remote))
             .unwrap_or_default();
+        self.merge_active = self
+            .selected_notebook()
+            .is_some_and(|nb| shiki_core::git::merge_in_progress(&nb.path));
         self.note_statuses = self
             .selected_notebook()
             .and_then(|nb| shiki_core::git::file_statuses(&nb.path).ok())
@@ -152,6 +187,7 @@ impl App {
             GitOpResult {
                 kind: GitOpKind::Sync { notebook: nb_name },
                 message,
+                conflict: None,
             }
         });
     }
@@ -221,6 +257,7 @@ impl App {
                     notebook: nb_name.clone(),
                 },
                 message: format!("'{nb_name}': {message}"),
+                conflict: None,
             }
         });
     }
@@ -266,6 +303,7 @@ impl App {
                     notebook: nb_name.clone(),
                 },
                 message: format!("auto-sync '{nb_name}': {message}"),
+                conflict: None,
             }
         });
     }
@@ -275,6 +313,15 @@ impl App {
             self.set_status("no notebook selected".into());
             return;
         };
+        // A previous pull on this notebook already left it mid-merge
+        // (conflicts unresolved, or the resolver was just closed with
+        // `Esc` rather than finished/aborted) — `p` reopens the resolver
+        // instead of attempting a second pull on top of an unfinished one,
+        // so closing the modal is never a dead end.
+        if shiki_core::git::merge_in_progress(&nb.path) {
+            self.reopen_conflicts_if_merging();
+            return;
+        }
         // Check upfront rather than letting git2 fail with a generic
         // "remote 'origin' does not exist" — that error doesn't say which
         // notebook it's about, and is easy to hit by accident: `p` pulls
@@ -291,37 +338,72 @@ impl App {
         let configured_branch = self.config.git.branch.clone();
         let (nb_name, nb_path) = (nb.name.clone(), nb.path.clone());
         self.spawn_git_op(nb_name.clone(), move || {
+            use shiki_core::git::PullOutcome;
+            let mut conflict = None;
             let message = match shiki_core::git::pull(&nb_path, &remote, &configured_branch) {
-                Ok(actual_branch) if actual_branch == configured_branch => {
+                Ok(PullOutcome::FastForwarded { branch }) if branch == configured_branch => {
                     format!("pulled '{nb_name}'")
                 }
-                Ok(actual_branch) => format!(
-                    "pulled '{nb_name}' (remote's default branch is '{actual_branch}', not '{configured_branch}')"
+                Ok(PullOutcome::FastForwarded { branch }) => format!(
+                    "pulled '{nb_name}' (remote's default branch is '{branch}', not '{configured_branch}')"
                 ),
+                Ok(PullOutcome::UpToDate { .. }) => format!("'{nb_name}' already up to date"),
+                Ok(PullOutcome::NewRepo { .. }) => format!("pulled '{nb_name}'"),
+                Ok(PullOutcome::MergedClean { .. }) => {
+                    format!("'{nb_name}': merged cleanly, no conflicts")
+                }
+                Ok(PullOutcome::ConflictsPending { branch, files }) => {
+                    let n = files.len();
+                    conflict = Some((nb_name.clone(), files, branch));
+                    format!(
+                        "'{nb_name}': pull has {n} conflicting file{} — resolve them",
+                        if n == 1 { "" } else { "s" }
+                    )
+                }
                 Err(e) => format!("pull error ('{nb_name}'): {e}"),
             };
             GitOpResult {
                 kind: GitOpKind::Pull { notebook: nb_name },
                 message,
+                conflict,
             }
         });
     }
 
+    /// Pulls every notebook that has a remote configured. Unlike
+    /// `pull_notebook`, this never auto-opens the conflict resolver — with
+    /// several notebooks in flight at once there's no single "the" notebook
+    /// to show a modal for. A notebook that comes back `ConflictsPending`
+    /// is counted separately and named in the summary message; resolving it
+    /// is a manual follow-up (select that notebook, press `p` again — the
+    /// second pull re-attempts the same merge and reports the conflict the
+    /// normal single-notebook way).
     pub(crate) fn pull_all_notebooks(&mut self) {
         let remote = self.config.git.remote.clone();
         let branch = self.config.git.branch.clone();
         let notebooks = self.notebooks.clone();
         self.spawn_git_op("all notebooks".to_string(), move || {
-            let (mut ok, mut failed) = (0u32, 0u32);
+            use shiki_core::git::PullOutcome;
+            let (mut ok, mut failed, mut conflicted) = (0u32, 0u32, Vec::new());
             for nb in notebooks {
                 match shiki_core::git::pull(&nb.path, &remote, &branch) {
+                    Ok(PullOutcome::ConflictsPending { .. }) => conflicted.push(nb.name.clone()),
                     Ok(_) => ok += 1,
                     Err(_) => failed += 1,
                 }
             }
+            let message = if conflicted.is_empty() {
+                format!("pull all: {ok} ok, {failed} failed")
+            } else {
+                format!(
+                    "pull all: {ok} ok, {failed} failed, needs conflict resolution: {}",
+                    conflicted.join(", ")
+                )
+            };
             GitOpResult {
                 kind: GitOpKind::PullAll,
-                message: format!("pull all: {ok} ok, {failed} failed"),
+                message,
+                conflict: None,
             }
         });
     }
@@ -401,6 +483,7 @@ impl App {
             GitOpResult {
                 kind: GitOpKind::Publish,
                 message,
+                conflict: None,
             }
         });
     }
@@ -474,6 +557,14 @@ impl App {
                     // moved to a different note/folder *within this same
                     // notebook* while the pull was in flight.
                     self.refresh_notes_preserve_selection();
+                    if let Some((conflict_notebook, files, branch)) = result.conflict {
+                        self.conflict_notebook = conflict_notebook;
+                        self.conflict_files = files;
+                        self.conflict_branch = branch;
+                        self.conflict_selected = 0;
+                        self.conflict_viewing = None;
+                        self.show_conflicts = true;
+                    }
                 }
             }
             // Unlike `Sync`/`Pull`, this doesn't know which specific

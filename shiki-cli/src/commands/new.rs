@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
+use shiki_config::Config;
 use shiki_core::NotebookStore;
 
-use super::open_in_editor;
+use super::{open_in_editor, unlock_if_encrypted};
 
 /// Creates a note. When `body` is `Some` (from `--body`/`--stdin`), the note
 /// is written with that content and `$EDITOR` is never spawned — the
@@ -11,6 +12,7 @@ use super::open_in_editor;
 /// unaffected when neither flag is passed.
 pub fn run(
     store: &NotebookStore,
+    config: &Config,
     notebook: &str,
     title: &str,
     editor: &str,
@@ -23,12 +25,13 @@ pub fn run(
             .create(notebook)
             .with_context(|| format!("could not create notebook '{notebook}'"))?,
     };
+    let nb = unlock_if_encrypted(config, nb)?;
     let mut note = nb.create_note(title, body.unwrap_or(""))?;
     println!("created: {}", note.path.display());
 
     if !tags.is_empty() {
         note.frontmatter.tags = tags.to_vec();
-        note.save()?;
+        note.save_with_crypto(nb.crypto.as_ref())?;
     }
 
     if body.is_some() {

@@ -184,6 +184,34 @@ pub(crate) enum PendingInput {
     /// `ExportField::ALL[self.settings_selected]`, not carried on this
     /// variant.
     SettingsExportText,
+    /// A notebook passphrase — masked input (`App::start_masked_input`).
+    /// Which notebook, and what the passphrase is *for* (unlocking an
+    /// already-encrypted one to read it, enabling encryption for the first
+    /// time, confirming that same new passphrase, or disabling encryption),
+    /// live in `App.passphrase_prompt_notebook`/`App.passphrase_purpose` —
+    /// same "tracked separately, this stays a plain unit variant" reasoning
+    /// as `SettingsNotebookRemote`.
+    NotebookPassphrase,
+}
+
+/// What a `PendingInput::NotebookPassphrase` prompt's answer will be used
+/// for — see `App::confirm_input`'s handling of that variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PassphrasePurpose {
+    /// Just need the passphrase to decrypt an already-encrypted notebook
+    /// for reading/writing this session — cached in `notebook_passphrases`
+    /// once it proves correct.
+    Unlock,
+    /// Turning encryption on for a plaintext notebook — first of two
+    /// entries (typo protection); the value is stashed in
+    /// `App.passphrase_pending_first` and immediately followed by
+    /// `EnableConfirm`.
+    Enable,
+    /// The second entry of `Enable` — must match `passphrase_pending_first`
+    /// or the whole thing aborts with no config/notebook change made.
+    EnableConfirm,
+    /// Turning encryption off — decrypts every note back to plain text.
+    Disable,
 }
 
 impl PendingInput {
@@ -211,6 +239,7 @@ impl PendingInput {
             PendingInput::MoveOrCopy => " Move/copy to ",
             PendingInput::ExportNotebook => " Export path (.html or .md) ",
             PendingInput::PublishPath => " Save PDF as ",
+            PendingInput::NotebookPassphrase => " Passphrase ",
         }
     }
 
@@ -380,6 +409,19 @@ pub(crate) struct EditorFindState {
     pub(crate) anchor: (usize, usize),
 }
 
+/// The selected file's ours/theirs sides, drilled into from the conflict
+/// resolver's flat file list — `ours`/`theirs` are each a unified diff
+/// against the common ancestor (`shiki_core::git::conflict_diff`), so the
+/// two panes read the same way the history modal's single diff pane
+/// already does, just side by side instead of one after the other.
+#[derive(Debug, Clone)]
+pub(crate) struct ConflictView {
+    pub(crate) file: std::path::PathBuf,
+    pub(crate) ours: Vec<shiki_core::git::DiffLine>,
+    pub(crate) theirs: Vec<shiki_core::git::DiffLine>,
+    pub(crate) scroll: u16,
+}
+
 pub struct App {
     pub config: Config,
     pub theme: Theme,
@@ -434,6 +476,11 @@ pub struct App {
     /// Branch/dirty/ahead-behind for the selected notebook — refreshed
     /// whenever the notebook, folder, or notes change (`refresh_git_status`).
     pub git_status: shiki_core::git::GitStatus,
+    /// Whether the *selected* notebook is mid-merge (`.git/MERGE_HEAD`
+    /// present) — refreshed in lockstep with `git_status` by the same
+    /// `refresh_git_status` call sites. Gates entry into edit mode
+    /// (`merge_blocks_editing`); browsing/preview stay allowed regardless.
+    pub(crate) merge_active: bool,
     /// Per-file git status for the selected notebook, keyed by absolute
     /// path (matches `Note::path` directly) — refreshed in lockstep with
     /// `git_status` by the same `refresh_git_status` call sites, drives
@@ -665,6 +712,21 @@ pub struct App {
     /// the modal flips it and rebuilds) — off on every open, same
     /// reset-to-top convention as `toggle_tags`.
     pub(crate) tasks_show_done: bool,
+    pub show_query: bool,
+    /// The DSL text box — same `InputBox` type `which_key_input` uses, for
+    /// the same reason: the letters `j`/`k` must be typeable into the
+    /// query, so navigation here is arrows/PageUp/PageDown/Home/End only.
+    pub(crate) query_input: crate::input::InputBox,
+    /// Loaded once when the modal opens (`open_query`), not re-walked on
+    /// every keystroke — same "expensive walk once, cheap re-score" split
+    /// as `global_search_pool`/`wikilink_candidates`.
+    pub(crate) query_pool: Vec<(shiki_core::Notebook, shiki_core::Note)>,
+    pub(crate) query_rows: Vec<shiki_core::query::QueryRow>,
+    pub(crate) query_selected: usize,
+    /// Set when the current `query_input` text fails to parse — rendered in
+    /// place of the results list (which is cleared) rather than a crash;
+    /// the user can keep typing until the query becomes valid again.
+    pub(crate) query_error: Option<String>,
     /// True right after the leader key is pressed, waiting for the next key
     /// to resolve against the `global` scope.
     pub leader_pending: bool,
@@ -751,6 +813,49 @@ pub struct App {
     /// `git init` a directory being adopted as a notebook (see
     /// `adopt_notebook_from_path`) — same pattern as `pending_revert`.
     pub(crate) pending_notebook_adopt: Option<(String, std::path::PathBuf)>,
+    /// The merge-conflict resolver modal (opened automatically when a `p`
+    /// pull comes back `ConflictsPending`, see `apply_git_op_result`) —
+    /// same list-then-drill-in shape as the history modal above.
+    pub show_conflicts: bool,
+    pub(crate) conflict_notebook: String,
+    /// Relative paths still conflicted — shrinks as `o`/`t`/`e` resolve
+    /// each one; once empty, the "commit merge?" confirm fires automatically.
+    pub(crate) conflict_files: Vec<std::path::PathBuf>,
+    pub(crate) conflict_selected: usize,
+    /// The branch being merged — threaded into the eventual merge commit
+    /// message (`finish_merge`).
+    pub(crate) conflict_branch: String,
+    /// `Some` while drilled into one conflicted file's side-by-side ours/
+    /// theirs diff view; `None` while browsing the flat file list.
+    pub(crate) conflict_viewing: Option<ConflictView>,
+    /// Notebook name staged while the `confirm` dialog asks "commit this
+    /// merge?" — mirrors `pending_revert`'s pattern.
+    pub(crate) pending_finish_merge: Option<String>,
+    /// Notebook name staged while the `confirm` dialog asks "abort this
+    /// merge?" — same pattern, a separate field so `handle_confirm_key`
+    /// can't confuse the two very different actions behind one shared `y`.
+    pub(crate) pending_abort_merge: Option<String>,
+    /// Passphrases proven correct this session, keyed by notebook name —
+    /// **never persisted to disk**, cleared on every relaunch. This is the
+    /// whole reason encryption uses a passphrase instead of a stored
+    /// identity file: nothing here can leak from a config file or a
+    /// forgotten key file, at the cost of typing it in again next session.
+    pub(crate) notebook_passphrases: std::collections::HashMap<String, String>,
+    /// Which notebook a `PendingInput::NotebookPassphrase` prompt is for,
+    /// and what the answer will be used for — see `PassphrasePurpose`.
+    pub(crate) passphrase_prompt_notebook: Option<String>,
+    pub(crate) passphrase_purpose: Option<PassphrasePurpose>,
+    /// The first of `PassphrasePurpose::Enable`'s two entries, held only
+    /// long enough to compare against the second (`EnableConfirm`) — never
+    /// written anywhere, cleared the moment that comparison happens either
+    /// way.
+    pub(crate) passphrase_pending_first: Option<String>,
+    /// True while a `NotebookPassphrase` prompt was launched from Settings'
+    /// Encryption field (rather than the auto-unlock-on-switch path) — the
+    /// one case where cancelling or completing it should reopen Settings,
+    /// same "which modal launched this" tracking `reopen_settings_after_
+    /// theme_picker` already established for the theme picker.
+    pub(crate) reopen_settings_after_passphrase: bool,
     /// Cache for the footer's "{n} changes" indicator: `(note path, revision
     /// count)` for whichever note was last checked, so `run()` calling this
     /// every draw tick only actually re-walks history when the selected
@@ -911,15 +1016,30 @@ impl App {
         let note_sort = NoteSort::from_config_str(&config.general.default_note_sort);
         let keymaps = KeyMaps::from_config(&config.keybindings);
         let notebooks = store.list()?;
-        let (folders, notes) = notebooks
+        // Deliberately tolerant, not `?` — an encrypted-and-locked default
+        // notebook (no passphrase can possibly be cached yet, this is
+        // startup) must not crash the whole app before it even has a
+        // chance to show the unlock prompt (see the `needs_passphrase_
+        // prompt` handling right after `app` is constructed, below).
+        let mut needs_passphrase_prompt = false;
+        let (folders, notes) = match notebooks
             .first()
             .map(|nb| nb.list_dir(std::path::Path::new("")))
-            .transpose()?
-            .unwrap_or_default();
+        {
+            Some(Ok(result)) => result,
+            Some(Err(shiki_core::Error::Encryption(_))) => {
+                needs_passphrase_prompt = true;
+                (Vec::new(), Vec::new())
+            }
+            Some(Err(_)) | None => (Vec::new(), Vec::new()),
+        };
         let git_status = notebooks
             .first()
             .map(|nb| shiki_core::git::status(&nb.path, &config.git.remote))
             .unwrap_or_default();
+        let merge_active = notebooks
+            .first()
+            .is_some_and(|nb| shiki_core::git::merge_in_progress(&nb.path));
         let note_statuses = notebooks
             .first()
             .and_then(|nb| shiki_core::git::file_statuses(&nb.path).ok())
@@ -965,6 +1085,7 @@ impl App {
             status_message: None,
             status_message_set_at: None,
             git_status,
+            merge_active,
             note_statuses,
             drawer_statuses: Vec::new(),
             show_drawer: false,
@@ -1023,6 +1144,12 @@ impl App {
             task_rows: Vec::new(),
             task_selected: 0,
             tasks_show_done: false,
+            show_query: false,
+            query_input: crate::input::InputBox::default(),
+            query_pool: Vec::new(),
+            query_rows: Vec::new(),
+            query_selected: 0,
+            query_error: None,
             leader_pending: false,
             preview_scroll: 0,
             preview_selection: None,
@@ -1056,6 +1183,19 @@ impl App {
             history_diff_viewing: None,
             pending_revert: None,
             pending_notebook_adopt: None,
+            show_conflicts: false,
+            conflict_notebook: String::new(),
+            conflict_files: Vec::new(),
+            conflict_selected: 0,
+            conflict_branch: String::new(),
+            conflict_viewing: None,
+            pending_finish_merge: None,
+            pending_abort_merge: None,
+            notebook_passphrases: std::collections::HashMap::new(),
+            passphrase_prompt_notebook: None,
+            passphrase_purpose: None,
+            passphrase_pending_first: None,
+            reopen_settings_after_passphrase: false,
             history_count_cache: None,
             folder_preview_cache: None,
             note_preview_cache: None,
@@ -1075,8 +1215,18 @@ impl App {
                 .ok()
                 .and_then(|path| shiki_config::SessionState::load(&path))
             {
+                // `restore_session` calls `reload_notes` itself, which
+                // already runs through the same tolerant, prompt-on-
+                // encryption path — whatever `needs_passphrase_prompt`
+                // said about the *pre-restore* default notebook no longer
+                // applies once the session may have switched to a
+                // different one.
                 app.restore_session(session);
+                needs_passphrase_prompt = false;
             }
+        }
+        if needs_passphrase_prompt {
+            app.maybe_prompt_for_notebook_passphrase();
         }
 
         Ok(app)
@@ -1395,8 +1545,9 @@ impl App {
             &self.config.git.remote,
             &self.config.git.branch,
         ) {
-            Ok(branch) => {
+            Ok(outcome) => {
                 self.reload_notes();
+                let branch = outcome.branch();
                 if branch == self.config.git.branch {
                     self.set_status(format!("cloned '{name}' from {redacted}"));
                 } else {
@@ -1581,8 +1732,17 @@ impl App {
 
     pub(crate) fn start_input(&mut self, kind: PendingInput, prefill: String) {
         self.input.value = prefill;
+        self.input.masked = false;
         self.pending_input = Some(kind);
         self.mode = Mode::Insert;
+    }
+
+    /// Same as `start_input`, but the input box renders every character as
+    /// `*` — used for a notebook passphrase, never for anything that should
+    /// stay readable while typing (titles, remotes, etc).
+    pub(crate) fn start_masked_input(&mut self, kind: PendingInput, prefill: String) {
+        self.start_input(kind, prefill);
+        self.input.masked = true;
     }
 
     /// The editor mode actually in effect right now: the resolved favorite

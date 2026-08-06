@@ -95,10 +95,20 @@ const NOTE_EXTENSIONS: [&str; 3] = ["md", "mdx", "txt"];
 
 /// A notebook is a directory with its own git repo, containing notes with
 /// one of `NOTE_EXTENSIONS`' extensions (in practice, almost always `.md`).
+///
+/// `crypto` is `None` on every `Notebook` `NotebookStore` itself returns —
+/// `shiki-core` has no access to `shiki-config`'s `Config` (the dependency
+/// chain is one-way: `shiki-core -> shiki-config -> shiki-tui -> shiki-cli`),
+/// so it can't know on its own whether a notebook is configured as
+/// encrypted, let alone hold the passphrase to prove it. `shiki-tui`/
+/// `shiki-cli`, which see both crates, resolve that (`Config::encrypt_for`
+/// plus whatever passphrase is cached/typed) and attach it via
+/// `with_crypto` before using the notebook for any note I/O.
 #[derive(Debug, Clone)]
 pub struct Notebook {
     pub name: String,
     pub path: PathBuf,
+    pub crypto: Option<crate::crypto::NotebookCrypto>,
 }
 
 impl Notebook {
@@ -106,7 +116,16 @@ impl Notebook {
         Self {
             name: name.into(),
             path,
+            crypto: None,
         }
+    }
+
+    /// Attaches (or clears, via `None`) the passphrase this notebook's
+    /// note I/O should encrypt/decrypt with — see the struct's own doc
+    /// comment for why this can't be resolved inside `shiki-core` itself.
+    pub fn with_crypto(mut self, crypto: Option<crate::crypto::NotebookCrypto>) -> Self {
+        self.crypto = crypto;
+        self
     }
 
     /// Lists the immediate contents of `relative` (a path within this
@@ -146,7 +165,11 @@ impl Notebook {
                 .and_then(|ext| ext.to_str())
                 .is_some_and(|ext| NOTE_EXTENSIONS.contains(&ext))
             {
-                notes.push(Note::from_file_in_notebook(&path, &self.name)?);
+                notes.push(Note::from_file_in_notebook_with_crypto(
+                    &path,
+                    &self.name,
+                    self.crypto.as_ref(),
+                )?);
             }
         }
         Ok((folders, notes))
@@ -209,7 +232,7 @@ impl Notebook {
         let slug = unique_slug(&dir, title);
         let path = dir.join(format!("{slug}.md"));
         let note = Note::new(path, Frontmatter::new(title, &self.name), body.into());
-        note.save()?;
+        note.save_with_crypto(self.crypto.as_ref())?;
         Ok(note)
     }
 
@@ -252,14 +275,15 @@ impl Notebook {
     /// being silently converted to `.md`, the one extension shiki itself
     /// ever creates new notes with.
     pub fn rename_note_at(&self, path: &Path, new_title: &str) -> Result<Note> {
-        let mut note = Note::from_file_in_notebook(path, &self.name)?;
+        let mut note =
+            Note::from_file_in_notebook_with_crypto(path, &self.name, self.crypto.as_ref())?;
         let dir = path.parent().unwrap_or(&self.path);
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("md");
         let slug = unique_slug_excluding(dir, new_title, path, ext);
         let new_path = dir.join(format!("{slug}.{ext}"));
         note.frontmatter.title = new_title.to_string();
         note.path = new_path;
-        note.save()?;
+        note.save_with_crypto(self.crypto.as_ref())?;
         if path != note.path {
             std::fs::remove_file(path)?;
         }
@@ -292,7 +316,13 @@ impl Notebook {
         dest_notebook: &Notebook,
         dest_relative: &Path,
     ) -> Result<Note> {
-        let mut copy = Note::from_file_in_notebook(path, &self.name)?;
+        // Decrypted with *this* notebook's key, re-encrypted (or left
+        // plain) with the *destination*'s — the two can differ (copying
+        // out of an encrypted notebook into a plain one, or vice versa),
+        // and a note's ciphertext is only ever meaningful under the key of
+        // whichever notebook it currently lives in.
+        let mut copy =
+            Note::from_file_in_notebook_with_crypto(path, &self.name, self.crypto.as_ref())?;
         let dest_dir = dest_notebook.path.join(dest_relative);
         std::fs::create_dir_all(&dest_dir)?;
         let file_name = path
@@ -306,7 +336,7 @@ impl Notebook {
         if dest_notebook.name != self.name {
             copy.frontmatter.notebook = dest_notebook.name.clone();
         }
-        copy.save()?;
+        copy.save_with_crypto(dest_notebook.crypto.as_ref())?;
         Ok(copy)
     }
 
@@ -831,5 +861,29 @@ mod tests {
         let store = NotebookStore::new(root);
 
         assert!(store.list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_encrypted_notebooks_notes_round_trip_through_list_dir_and_create() {
+        let tmp = tempfile::tempdir().unwrap();
+        let crypto = crate::crypto::NotebookCrypto::new("correct horse battery staple");
+        let nb = test_notebook(tmp.path(), "vault").with_crypto(Some(crypto.clone()));
+
+        nb.create_note_in(Path::new(""), "Secret Plans", "top secret content")
+            .unwrap();
+
+        // On disk, the file is ciphertext.
+        let raw = std::fs::read_to_string(nb.path.join("secret-plans.md")).unwrap();
+        assert!(crate::crypto::looks_encrypted(&raw));
+
+        // list_dir, given the same crypto, reads it back as a normal note.
+        let (_, notes) = nb.list_dir(Path::new("")).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].frontmatter.title, "Secret Plans");
+        assert_eq!(notes[0].body, "top secret content");
+
+        // The same notebook with no crypto attached can't read it.
+        let locked = Notebook::new("vault", nb.path.clone());
+        assert!(locked.list_dir(Path::new("")).is_err());
     }
 }

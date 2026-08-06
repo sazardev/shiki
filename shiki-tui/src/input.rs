@@ -4,9 +4,12 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 
 /// Simple single-line text input (used for search, new note, rename, etc).
+/// `masked` renders every character as `*` (a passphrase prompt) without
+/// changing how `value` itself is stored or edited — only `render` reads it.
 #[derive(Debug, Default, Clone)]
 pub struct InputBox {
     pub value: String,
+    pub masked: bool,
 }
 
 impl InputBox {
@@ -29,7 +32,12 @@ impl InputBox {
         title: &str,
         border_color: ratatui::style::Color,
     ) {
-        let paragraph = Paragraph::new(self.value.as_str()).block(
+        let display: std::borrow::Cow<str> = if self.masked {
+            "*".repeat(self.value.chars().count()).into()
+        } else {
+            self.value.as_str().into()
+        };
+        let paragraph = Paragraph::new(display.into_owned()).block(
             Block::default()
                 .title(title.to_string())
                 .borders(Borders::ALL)

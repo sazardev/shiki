@@ -193,12 +193,24 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         spans.push(sep.clone());
         let gs = &app.git_status;
         let branch = gs.branch.as_deref().unwrap_or("?");
-        let extras = crate::render::git_status_suffix(gs);
-        let color = crate::render::git_status_color(&app.theme, gs);
-        spans.push(Span::styled(
-            format!("{}{branch}{extras}", icons::GIT),
-            plain.fg(color),
-        ));
+        // A merge in progress outranks the normal dirty/ahead/behind
+        // display — that state is meaningless mid-merge (the working tree
+        // is full of conflict resolution, not ordinary pending changes),
+        // and this is the one thing most worth surfacing prominently: it's
+        // what's blocking edit mode (`merge_blocks_editing`) until resolved.
+        if app.merge_active {
+            spans.push(Span::styled(
+                format!("{}{branch} MERGING", icons::WARNING),
+                plain.fg(hex_to_color(&app.theme.warning)),
+            ));
+        } else {
+            let extras = crate::render::git_status_suffix(gs);
+            let color = crate::render::git_status_color(&app.theme, gs);
+            spans.push(Span::styled(
+                format!("{}{branch}{extras}", icons::GIT),
+                plain.fg(color),
+            ));
+        }
     }
 
     spans.push(sep.clone());

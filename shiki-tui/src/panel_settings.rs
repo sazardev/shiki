@@ -256,14 +256,20 @@ pub enum NotebookField {
     AutoPush,
     AutoSync,
     AutoSyncEvery,
+    /// Unlike the three above, this isn't a plain in-place toggle —
+    /// flipping it on/off means actually re-encrypting/decrypting every
+    /// note, so `Enter` here starts a passphrase prompt
+    /// (`App::start_passphrase_prompt`) instead of cycling a value.
+    Encryption,
 }
 
 impl NotebookField {
-    pub const ALL: [NotebookField; 4] = [
+    pub const ALL: [NotebookField; 5] = [
         NotebookField::Remote,
         NotebookField::AutoPush,
         NotebookField::AutoSync,
         NotebookField::AutoSyncEvery,
+        NotebookField::Encryption,
     ];
 }
 
@@ -567,6 +573,15 @@ fn notebook_field_rows(app: &App, name: &str) -> Vec<Line<'static>> {
             app,
             "auto_sync_every",
             num_cell(over.auto_sync_every, app.config.git.auto_sync_every),
+        ),
+        row_line(
+            app,
+            "encrypted",
+            if over.encrypt {
+                "true (enter to disable — prompts for passphrase)".to_string()
+            } else {
+                "false (enter to enable — prompts for a new passphrase)".to_string()
+            },
         ),
     ]
 }

@@ -22,3 +22,4 @@ tracing.workspace = true
 self_update.workspace = true
 tempfile.workspace = true
 pulldown-cmark.workspace = true
+age.workspace = true

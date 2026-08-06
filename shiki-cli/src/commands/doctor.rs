@@ -325,6 +325,7 @@ fn check_keybinding_health(config: &Config, r: &mut Report) {
                 ("scratchpad", kb.global.scratchpad.as_str()),
                 ("links", kb.global.links.as_str()),
                 ("tasks_panel", kb.global.tasks_panel.as_str()),
+                ("query_panel", kb.global.query_panel.as_str()),
                 ("publish", kb.global.publish.as_str()),
                 ("export", kb.global.export.as_str()),
                 ("zen_mode", kb.global.zen_mode.as_str()),
@@ -560,6 +561,7 @@ fn check_unknown_config_keys(raw: &str, r: &mut Report) {
         auto_sync_every: Some(1),
         path: Some(String::new()),
         hidden: false,
+        encrypt: false,
     })
     .ok();
     let snippet_shape = toml::Value::try_from(SnippetConfig {

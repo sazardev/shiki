@@ -25,6 +25,9 @@ pub enum Action {
     /// Opens the global tasks view: every `- [ ]` checkbox across every
     /// notebook, toggleable in place without opening the note.
     ToggleTasks,
+    /// Opens the query modal: a Dataview-style `where ... sort ...` DSL
+    /// over frontmatter, filtered/sorted live across every notebook.
+    ToggleQuery,
     /// Renders the selected notebook to a themed PDF via `pretty-pdf`
     /// (go-pretty-pdf), then opens it.
     PublishNotebook,
@@ -150,6 +153,7 @@ impl KeyMaps {
         // "what links here?" is answerable without focusing PREVIEW first.
         bind(&mut global, &cfg.global.links, Action::ShowLinks);
         bind(&mut global, &cfg.global.tasks_panel, Action::ToggleTasks);
+        bind(&mut global, &cfg.global.query_panel, Action::ToggleQuery);
         bind(&mut global, &cfg.global.publish, Action::PublishNotebook);
         bind(&mut global, &cfg.global.export, Action::ExportNotebook);
         bind(&mut global, &cfg.global.zen_mode, Action::ToggleZenMode);
@@ -399,6 +403,7 @@ pub fn action_label(action: Action) -> &'static str {
         Action::ShowHistory => "note history (view/revert)",
         Action::ShowLinks => "links (outgoing / backlinks / mentions)",
         Action::ToggleTasks => "tasks (all notebooks)",
+        Action::ToggleQuery => "query notes (frontmatter filter/sort)",
         Action::PublishNotebook => "publish notebook to PDF",
         Action::ExportNotebook => "export notebook to HTML/Markdown",
         Action::ToggleZenMode => "zen mode (full-screen, hide side panels)",
@@ -431,6 +436,7 @@ pub fn action_icon(action: Action) -> crate::icons::Icon {
         Action::ToggleTreeView => crate::icons::TREE,
         Action::ToggleDates | Action::ShowHistory => crate::icons::HISTORY,
         Action::ToggleVisual | Action::ToggleTasks => crate::icons::CHECK,
+        Action::ToggleQuery => crate::icons::FILTER,
         Action::CopyEntries => crate::icons::CLIPBOARD,
         Action::ShowLinks => crate::icons::LINK,
         Action::UndoDelete => crate::icons::UNDO,

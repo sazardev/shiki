@@ -148,6 +148,28 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
+    /// Queries notes by frontmatter field — a Dataview-style filter/sort,
+    /// e.g. `shiki query 'where status = pending sort due asc'`. Same
+    /// engine as the TUI's leader+`q` modal, so a query means the same
+    /// thing in both places. `--count`/`--json` are for status bars and
+    /// scripting, same as `shiki tasks`.
+    Query {
+        /// The query DSL string (quote it). Omit if using `--saved`.
+        dsl: Option<String>,
+        /// Runs a query saved under `[queries.<name>]` in config.toml
+        /// instead of a literal DSL string.
+        #[arg(long, conflicts_with = "dsl")]
+        saved: Option<String>,
+        /// Only notes from this notebook (default: all notebooks).
+        #[arg(short = 'n', long)]
+        notebook: Option<String>,
+        /// Prints just the number of matching notes — for status bars.
+        #[arg(long, conflicts_with = "json")]
+        count: bool,
+        /// Emits a JSON array instead of plain text — for scripting.
+        #[arg(long)]
+        json: bool,
+    },
     /// Shows the path to the config file
     Config,
     /// Checks the environment (config, data dir, git, editor, terminal, notebooks)
@@ -186,6 +208,16 @@ enum NotebookAction {
         name: String,
         #[arg(long)]
         yes: bool,
+    },
+    /// Enables encryption at rest for an existing notebook — prompts for a
+    /// passphrase (twice), re-encrypts every existing note, and commits.
+    /// The same `age::scrypt` passphrase engine the TUI uses.
+    Encrypt {
+        name: String,
+    },
+    /// Reverses `encrypt`: decrypts every note back to plain text.
+    Decrypt {
+        name: String,
     },
 }
 
@@ -285,6 +317,7 @@ fn main() -> Result<()> {
             };
             commands::new::run(
                 &ctx.store,
+                &ctx.config,
                 &notebook,
                 &title,
                 &editor,
@@ -323,6 +356,7 @@ fn main() -> Result<()> {
             let editor = ctx.resolve_editor();
             commands::daily::run(
                 &ctx.store,
+                &ctx.config,
                 &notebook,
                 &templates_dir,
                 &editor,
@@ -382,6 +416,26 @@ fn main() -> Result<()> {
             width,
             json,
         }) => commands::graph::run(&ctx.store, notebook.as_deref(), width, json),
+        Some(Commands::Query {
+            dsl,
+            saved,
+            notebook,
+            count,
+            json,
+        }) => {
+            let dsl = match (dsl, saved) {
+                (Some(d), None) => d,
+                (None, Some(name)) => ctx
+                    .config
+                    .queries
+                    .get(&name)
+                    .cloned()
+                    .with_context(|| format!("no saved query named '{name}'"))?,
+                (None, None) => anyhow::bail!("provide a query string or --saved <name>"),
+                (Some(_), Some(_)) => unreachable!("clap enforces --saved conflicts_with dsl"),
+            };
+            commands::query::run(&ctx.store, notebook.as_deref(), &dsl, json, count)
+        }
         Some(Commands::Config) => commands::config::run(),
         Some(Commands::Doctor) => unreachable!("handled before Context::load() above"),
         Some(Commands::Notebook { action }) => match action {
@@ -392,6 +446,12 @@ fn main() -> Result<()> {
             }
             NotebookAction::Delete { name, yes } => {
                 commands::notebook::delete(&ctx.store, &name, yes)
+            }
+            NotebookAction::Encrypt { name } => {
+                commands::notebook::encrypt(&ctx.store, &mut ctx.config, &name)
+            }
+            NotebookAction::Decrypt { name } => {
+                commands::notebook::decrypt(&ctx.store, &mut ctx.config, &name)
             }
         },
         Some(Commands::Theme { action }) => match action {

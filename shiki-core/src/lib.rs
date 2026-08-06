@@ -1,4 +1,5 @@
 pub mod browser;
+pub mod crypto;
 pub mod daily;
 pub mod editor;
 pub mod export;
@@ -8,6 +9,7 @@ pub mod note;
 pub mod notebook;
 pub mod process;
 pub mod publish;
+pub mod query;
 pub mod search;
 pub mod tags;
 pub mod tasks;
@@ -60,6 +62,10 @@ pub enum Error {
     /// source's own children by the time the walk reaches it).
     #[error("cannot move/copy '{0}' into itself or one of its own subfolders")]
     DestinationInsideSource(String),
+    /// Encryption/decryption failure — a wrong or missing passphrase for an
+    /// encrypted notebook, or an `age` error setting up encryption.
+    #[error("{0}")]
+    Encryption(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -62,6 +62,14 @@ tempfile = "3"
 # `image`/`objc2-core-graphics`/etc. transitive deps) — shiki only ever
 # copies/pastes plain text through this, never images.
 arboard = { version = "3", default-features = false }
+# age::scrypt — symmetric passphrase-based encryption for `[notebooks.<name>]
+# encrypt = true`. Pure-Rust, no system libsodium/openssl dependency. The
+# `armor` feature is required for ASCII-armored output (so ciphertext still
+# reads as text to git, not a binary blob).
+age = { version = "0.11", features = ["armor"] }
+# Hidden passphrase input for `shiki notebook encrypt/decrypt` — the CLI
+# equivalent of the TUI's masked passphrase prompt.
+rpassword = "7"
 
 [profile.release]
 lto = true

@@ -34,7 +34,11 @@ pub fn create_or_open(
 ) -> Result<Note> {
     let path = daily_note_path(notebook, date);
     if path.exists() {
-        return Note::from_file_in_notebook(&path, &notebook.name);
+        return Note::from_file_in_notebook_with_crypto(
+            &path,
+            &notebook.name,
+            notebook.crypto.as_ref(),
+        );
     }
 
     let mut body = match Template::load(templates_dir, template_name) {
@@ -65,7 +69,7 @@ pub fn create_or_open(
     frontmatter.template = Some(template_name.to_string());
 
     let note = Note::new(path, frontmatter, body);
-    note.save()?;
+    note.save_with_crypto(notebook.crypto.as_ref())?;
     Ok(note)
 }
 

@@ -8,6 +8,7 @@ pub mod list;
 pub mod new;
 pub mod notebook;
 pub mod publish;
+pub mod query;
 pub mod search;
 pub mod show;
 pub mod sync;
@@ -56,6 +57,21 @@ pub fn find_note(store: &NotebookStore, notebook: &str, needle: &str) -> Result<
             )
         }
     }
+}
+
+/// Attaches this session's passphrase to `nb` if it's configured as
+/// encrypted — prompted interactively (hidden input), never cached or
+/// stored anywhere beyond the lifetime of this one CLI invocation. A
+/// plaintext notebook passes through untouched, no prompt at all.
+pub fn unlock_if_encrypted(
+    config: &shiki_config::Config,
+    nb: shiki_core::Notebook,
+) -> Result<shiki_core::Notebook> {
+    if !config.encrypt_for(&nb.name) {
+        return Ok(nb);
+    }
+    let passphrase = rpassword::prompt_password(format!("Passphrase for '{}': ", nb.name))?;
+    Ok(nb.with_crypto(Some(shiki_core::crypto::NotebookCrypto::new(passphrase))))
 }
 
 /// Opens `path` with the configured external editor, waiting for it to finish.

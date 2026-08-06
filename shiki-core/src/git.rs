@@ -274,11 +274,270 @@ pub fn push(path: &Path, remote: &str) -> Result<()> {
     Ok(())
 }
 
-/// Pull (fetch + fast-forward merge) from `remote`, preferring `branch`.
-/// Returns the branch name actually pulled — it can differ from `branch`
-/// (see the fallback below), so callers should report it rather than
-/// assuming the configured name was used.
-pub fn pull(path: &Path, remote: &str, branch: &str) -> Result<String> {
+/// What `pull` actually did. Every variant carries the branch name that was
+/// pulled — it can differ from the `branch` argument (see `pull`'s fallback
+/// logic), so callers should report it rather than assuming the configured
+/// name was used.
+#[derive(Debug, Clone)]
+pub enum PullOutcome {
+    /// The local branch had no unpushed-relative-to-remote commits of its
+    /// own, so it was simply moved forward to the fetched commit.
+    FastForwarded { branch: String },
+    /// Nothing to do — the local branch already contains everything fetched.
+    UpToDate { branch: String },
+    /// No local branch existed yet (a brand-new/empty notebook, or one just
+    /// pointed at an existing remote for the first time) — it was created
+    /// pointing straight at the fetched commit, the same initial checkout
+    /// `git clone` would do. Can't conflict: there was nothing local to
+    /// diverge from.
+    NewRepo { branch: String },
+    /// Local and remote history had diverged, and merging them landed
+    /// conflicting changes to the same file(s) — `conflicted_files`,
+    /// `conflict_sides`/`conflict_diff`, `resolve_conflict`, and finally
+    /// `finish_merge` (or `abort_merge`) are how a caller works through
+    /// this. The working tree already has the conflict reflected in it
+    /// (via `repo.merge`), and `merge_in_progress` is true until resolved.
+    ConflictsPending { branch: String, files: Vec<PathBuf> },
+    /// Local and remote history had diverged, but the merge produced no
+    /// conflicts (different files, or non-overlapping regions of the same
+    /// file) — already finalized as a normal two-parent merge commit, no
+    /// further action needed from the caller.
+    MergedClean { branch: String },
+}
+
+impl PullOutcome {
+    pub fn branch(&self) -> &str {
+        match self {
+            PullOutcome::FastForwarded { branch }
+            | PullOutcome::UpToDate { branch }
+            | PullOutcome::NewRepo { branch }
+            | PullOutcome::ConflictsPending { branch, .. }
+            | PullOutcome::MergedClean { branch } => branch,
+        }
+    }
+}
+
+/// Every path with an unresolved conflict in `index`, in the order
+/// `index.conflicts()` yields them, deduplicated — an add/add or
+/// modify/modify conflict can otherwise report the same path via more than
+/// one side (`ancestor`/`our`/`their`).
+fn conflict_paths_in_index(index: &git2::Index) -> Result<Vec<PathBuf>> {
+    let mut seen = std::collections::HashSet::new();
+    let mut files = Vec::new();
+    for conflict in index.conflicts()? {
+        let conflict = conflict?;
+        let entry = conflict
+            .ancestor
+            .as_ref()
+            .or(conflict.our.as_ref())
+            .or(conflict.their.as_ref());
+        if let Some(entry) = entry {
+            let path = PathBuf::from(String::from_utf8_lossy(&entry.path).into_owned());
+            if seen.insert(path.clone()) {
+                files.push(path);
+            }
+        }
+    }
+    Ok(files)
+}
+
+fn find_conflict_entry(index: &git2::Index, file_relative: &Path) -> Result<git2::IndexConflict> {
+    for conflict in index.conflicts()? {
+        let conflict = conflict?;
+        let matches = [&conflict.ancestor, &conflict.our, &conflict.their]
+            .iter()
+            .filter_map(|e| e.as_ref())
+            .any(|e| Path::new(&String::from_utf8_lossy(&e.path).into_owned()) == file_relative);
+        if matches {
+            return Ok(conflict);
+        }
+    }
+    Err(Error::Git(git2::Error::from_str(&format!(
+        "no conflict entry for {}",
+        file_relative.display()
+    ))))
+}
+
+/// Finalizes an in-progress merge as a normal two-parent commit and clears
+/// merge state (`repo.cleanup_state()`, which removes `.git/MERGE_HEAD`) —
+/// the generalization of `commit_all`'s zero-or-one-parent commit to
+/// exactly two, since a merge commit's second parent is `their` side.
+/// Requires the index to have no remaining conflicts; callers check that
+/// first (`pull`'s clean-merge branch never has any by construction, since
+/// it's only reached when `index.has_conflicts()` is false; `finish_merge`
+/// checks explicitly since a caller could call it too early).
+fn finalize_merge_commit(repo: &Repository, their: &git2::Oid, message: &str) -> Result<()> {
+    let mut index = repo.index()?;
+    let tree_id = index.write_tree()?;
+    let tree = repo.find_tree(tree_id)?;
+    let signature = repo
+        .signature()
+        .unwrap_or_else(|_| Signature::now("shiki", "shiki@localhost").unwrap());
+    let our_commit = repo.head()?.peel_to_commit()?;
+    let their_commit = repo.find_commit(*their)?;
+    repo.commit(
+        Some("HEAD"),
+        &signature,
+        &signature,
+        message,
+        &tree,
+        &[&our_commit, &their_commit],
+    )?;
+    repo.cleanup_state()?;
+    Ok(())
+}
+
+/// Every currently-conflicted file in the notebook at `path`, relative
+/// paths — empty (not an error) when there's no merge in progress at all.
+pub fn conflicted_files(path: &Path) -> Result<Vec<PathBuf>> {
+    let repo = Repository::open(path)?;
+    let index = repo.index()?;
+    conflict_paths_in_index(&index)
+}
+
+/// Whether `path` has an in-progress merge (`.git/MERGE_HEAD` present) —
+/// checked via `repo.state()` rather than reading that file directly, since
+/// libgit2 already tracks and exposes this. A notebook stays in this state
+/// from the moment `pull` reports `ConflictsPending` until `finish_merge` or
+/// `abort_merge` resolves it, even across shiki restarts.
+pub fn merge_in_progress(path: &Path) -> bool {
+    Repository::open(path)
+        .map(|repo| repo.state() == git2::RepositoryState::Merge)
+        .unwrap_or(false)
+}
+
+/// The three sides of one conflicted file — `base` (the common ancestor),
+/// `ours` (the local side), `theirs` (the fetched/remote side). Any of the
+/// three can be `None`: an add/add conflict has no `base`; a modify/delete
+/// conflict is missing whichever side deleted the file.
+#[derive(Debug, Clone, Default)]
+pub struct ConflictSides {
+    pub base: Option<String>,
+    pub ours: Option<String>,
+    pub theirs: Option<String>,
+}
+
+/// Reads the full text content of every present side of `file_relative`'s
+/// conflict, for a "here's what changed" view before picking a resolution.
+pub fn conflict_sides(path: &Path, file_relative: &Path) -> Result<ConflictSides> {
+    let repo = Repository::open(path)?;
+    let index = repo.index()?;
+    let conflict = find_conflict_entry(&index, file_relative)?;
+    let blob_text = |entry: &Option<git2::IndexEntry>| -> Option<String> {
+        let entry = entry.as_ref()?;
+        let blob = repo.find_blob(entry.id).ok()?;
+        Some(String::from_utf8_lossy(blob.content()).into_owned())
+    };
+    Ok(ConflictSides {
+        base: blob_text(&conflict.ancestor),
+        ours: blob_text(&conflict.our),
+        theirs: blob_text(&conflict.their),
+    })
+}
+
+/// A unified diff of one conflict side against the common ancestor (`base`
+/// vs `ours`, and `base` vs `theirs`) — the same real-libgit2-diff approach
+/// `diff_file_at` uses for note history, just computed from in-memory blobs
+/// (`git2::Patch::from_blobs`) instead of two tree entries, since a
+/// conflict's sides live only in the index, not as commits of their own. A
+/// missing side (see `ConflictSides`) is treated as an empty blob, so an
+/// add/add conflict's `ours` diff reads as "the whole file is new," the
+/// same convention `diff_file_at` already uses for a file's very first
+/// commit.
+pub fn conflict_diff(path: &Path, file_relative: &Path) -> Result<(Vec<DiffLine>, Vec<DiffLine>)> {
+    let repo = Repository::open(path)?;
+    let index = repo.index()?;
+    let conflict = find_conflict_entry(&index, file_relative)?;
+
+    let empty_oid = repo.blob(b"")?;
+    let blob_for = |entry: &Option<git2::IndexEntry>| -> Result<git2::Blob> {
+        let oid = entry.as_ref().map(|e| e.id).unwrap_or(empty_oid);
+        Ok(repo.find_blob(oid)?)
+    };
+    let base_blob = blob_for(&conflict.ancestor)?;
+    let our_blob = blob_for(&conflict.our)?;
+    let their_blob = blob_for(&conflict.their)?;
+
+    let lines_of = |patch: &mut git2::Patch| -> Result<Vec<DiffLine>> {
+        let mut lines = Vec::new();
+        patch.print(&mut |_delta, _hunk, line| {
+            if matches!(line.origin(), '+' | '-' | ' ') {
+                lines.push(DiffLine {
+                    origin: line.origin(),
+                    content: String::from_utf8_lossy(line.content())
+                        .trim_end_matches('\n')
+                        .to_string(),
+                });
+            }
+            true
+        })?;
+        Ok(lines)
+    };
+
+    let mut ours_patch = git2::Patch::from_blobs(&base_blob, None, &our_blob, None, None)?;
+    let mut theirs_patch = git2::Patch::from_blobs(&base_blob, None, &their_blob, None, None)?;
+    Ok((lines_of(&mut ours_patch)?, lines_of(&mut theirs_patch)?))
+}
+
+/// Resolves one conflicted file to `content`: writes it to the working
+/// tree, then re-stages it, which clears every one of its conflict entries
+/// from the index (`remove_path` first, since `add_path` alone doesn't
+/// otherwise drop the now-stale ancestor/our/their stage entries). Doesn't
+/// finalize the merge by itself — `finish_merge` is the explicit next step,
+/// once every conflicted file has gone through this.
+pub fn resolve_conflict(path: &Path, file_relative: &Path, content: &str) -> Result<()> {
+    std::fs::write(path.join(file_relative), content)?;
+    let repo = Repository::open(path)?;
+    let mut index = repo.index()?;
+    index.remove_path(file_relative)?;
+    index.add_path(file_relative)?;
+    index.write()?;
+    Ok(())
+}
+
+/// Commits the now-fully-resolved merge as a two-parent commit and clears
+/// merge state. Errors if any conflict remains — a caller shouldn't reach
+/// this until `conflicted_files` is empty, but this checks explicitly
+/// rather than trusting that. Reads the incoming side's commit off
+/// `MERGE_HEAD` (set by `repo.merge` and still present at this point, unlike
+/// during `pull` itself, where the `AnnotatedCommit` from the fetch is used
+/// directly instead of round-tripping through that ref).
+pub fn finish_merge(path: &Path, message: &str) -> Result<()> {
+    let repo = Repository::open(path)?;
+    let index = repo.index()?;
+    if index.has_conflicts() {
+        return Err(Error::Git(git2::Error::from_str(
+            "cannot finish merge: unresolved conflicts remain",
+        )));
+    }
+    let merge_head = repo.find_reference("MERGE_HEAD").map_err(|_| {
+        Error::Git(git2::Error::from_str(
+            "no merge in progress (MERGE_HEAD not found)",
+        ))
+    })?;
+    let their_oid = merge_head
+        .target()
+        .ok_or_else(|| Error::Git(git2::Error::from_str("MERGE_HEAD has no target")))?;
+    finalize_merge_commit(&repo, &their_oid, message)
+}
+
+/// Discards an in-progress merge entirely: resets the index and working
+/// tree back to `HEAD` (before the merge touched anything) and clears merge
+/// state. The fetched commits themselves stay in the object database (they
+/// were already fetched into `refs/remotes/{remote}/*`), so a later `pull`
+/// can attempt the merge again without re-fetching.
+pub fn abort_merge(path: &Path) -> Result<()> {
+    let repo = Repository::open(path)?;
+    let head_commit = repo.head()?.peel_to_commit()?;
+    repo.reset(head_commit.as_object(), git2::ResetType::Hard, None)?;
+    repo.cleanup_state()?;
+    Ok(())
+}
+
+/// Pull (fetch + merge) from `remote`, preferring `branch`. Only ever
+/// fast-forwards or merges — never discards local commits. See
+/// `PullOutcome` for what each possible result means.
+pub fn pull(path: &Path, remote: &str, branch: &str) -> Result<PullOutcome> {
     let repo = Repository::open(path)?;
     let mut remote_ref = repo.find_remote(remote)?;
     let mut opts = git2::FetchOptions::new();
@@ -338,14 +597,47 @@ pub fn pull(path: &Path, remote: &str, branch: &str) -> Result<String> {
     let fetch_commit = repo.find_annotated_commit(fetched_oid)?;
     let refname = format!("refs/heads/{resolved_branch}");
 
-    match repo.find_reference(&refname) {
-        // Local branch exists — only fast-forward, never discard local commits.
+    let outcome = match repo.find_reference(&refname) {
+        // Local branch exists — fast-forward when possible; otherwise
+        // (history diverged) attempt a real merge instead of silently
+        // doing nothing. This used to just skip the `if` and return success
+        // regardless — the local ref never advanced, but `pull` reported
+        // as if it had. `repo.merge` populates the index (and, for a real
+        // conflict, the working tree's conflict markers) the same way `git
+        // merge` itself would; `repo.state()` becomes `Merge` until
+        // `finish_merge`/`abort_merge` clears it.
         Ok(mut reference) => {
             let analysis = repo.merge_analysis(&[&fetch_commit])?;
             if analysis.0.is_fast_forward() {
                 reference.set_target(fetch_commit.id(), "shiki: fast-forward")?;
                 repo.set_head(&refname)?;
                 repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
+                Ok(PullOutcome::FastForwarded {
+                    branch: resolved_branch,
+                })
+            } else if analysis.0.is_up_to_date() {
+                Ok(PullOutcome::UpToDate {
+                    branch: resolved_branch,
+                })
+            } else {
+                repo.merge(&[&fetch_commit], None, None)?;
+                let index = repo.index()?;
+                if index.has_conflicts() {
+                    let files = conflict_paths_in_index(&index)?;
+                    Ok(PullOutcome::ConflictsPending {
+                        branch: resolved_branch,
+                        files,
+                    })
+                } else {
+                    finalize_merge_commit(
+                        &repo,
+                        &fetch_commit.id(),
+                        &format!("shiki: merge '{resolved_branch}'"),
+                    )?;
+                    Ok(PullOutcome::MergedClean {
+                        branch: resolved_branch,
+                    })
+                }
             }
         }
         // No local branch yet — this is the first pull into a brand-new
@@ -356,9 +648,12 @@ pub fn pull(path: &Path, remote: &str, branch: &str) -> Result<String> {
             repo.reference(&refname, fetch_commit.id(), true, "shiki: initial pull")?;
             repo.set_head(&refname)?;
             repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
+            Ok(PullOutcome::NewRepo {
+                branch: resolved_branch,
+            })
         }
-    }
-    Ok(resolved_branch)
+    };
+    outcome
 }
 
 /// Sets (creating or replacing) the notebook's `origin` remote. `url` can be
@@ -705,5 +1000,194 @@ mod tests {
         assert_eq!(diff.len(), 1);
         assert_eq!(diff[0].origin, '+');
         assert_eq!(diff[0].content, "brand new");
+    }
+
+    /// `Repository::init` alone leaves the initial branch name up to
+    /// whatever `init.defaultBranch` happens to be configured to on the
+    /// machine running the test — pinning it to "main" via
+    /// `RepositoryInitOptions` keeps these tests deterministic regardless
+    /// of that config.
+    fn init_with_main(path: &Path) {
+        let mut opts = git2::RepositoryInitOptions::new();
+        opts.initial_head("main");
+        Repository::init_opts(path, &opts).unwrap();
+    }
+
+    /// Sets up a genuine diverged-history scenario: a bare "origin", two
+    /// working clones (`a`/`b`) both starting from the same pushed commit,
+    /// then each committing a conflicting edit to the same line of
+    /// `note.md` — `a` pushes first, `b` doesn't (a non-fast-forward push
+    /// would just be rejected). Returns the two clone directories; `b` is
+    /// the one every test then calls `pull` against.
+    fn diverge_on_the_same_line(root: &Path) -> (PathBuf, PathBuf) {
+        let bare_path = root.join("bare.git");
+        Repository::init_bare(&bare_path).unwrap();
+        let bare_url = bare_path.to_string_lossy().into_owned();
+
+        let dir_a = root.join("a");
+        let dir_b = root.join("b");
+        init_with_main(&dir_a);
+        init_with_main(&dir_b);
+        set_remote(&dir_a, &bare_url).unwrap();
+        set_remote(&dir_b, &bare_url).unwrap();
+
+        std::fs::write(dir_a.join("note.md"), "line one\nline two\nline three\n").unwrap();
+        commit_all(&dir_a, "first").unwrap();
+        push(&dir_a, "origin").unwrap();
+
+        // b's first pull: its local "main" is unborn (no commits yet), so
+        // there's nothing to fast-forward against — it just adopts what
+        // was fetched, same as a fresh `git clone`.
+        let first_pull = pull(&dir_b, "origin", "main").unwrap();
+        assert!(matches!(first_pull, PullOutcome::NewRepo { .. }));
+
+        std::fs::write(
+            dir_a.join("note.md"),
+            "line one\nA changed this\nline three\n",
+        )
+        .unwrap();
+        commit_all(&dir_a, "a-edit").unwrap();
+        push(&dir_a, "origin").unwrap();
+
+        std::fs::write(
+            dir_b.join("note.md"),
+            "line one\nB changed this\nline three\n",
+        )
+        .unwrap();
+        commit_all(&dir_b, "b-edit").unwrap();
+
+        (dir_a, dir_b)
+    }
+
+    #[test]
+    fn pull_reports_conflicts_when_the_same_line_diverges() {
+        let root = tempfile::tempdir().unwrap();
+        let (_dir_a, dir_b) = diverge_on_the_same_line(root.path());
+
+        let outcome = pull(&dir_b, "origin", "main").unwrap();
+        let files = match outcome {
+            PullOutcome::ConflictsPending { files, branch } => {
+                assert_eq!(branch, "main");
+                files
+            }
+            other => panic!("expected ConflictsPending, got {other:?}"),
+        };
+        assert_eq!(files, vec![PathBuf::from("note.md")]);
+        assert!(merge_in_progress(&dir_b));
+        assert_eq!(
+            conflicted_files(&dir_b).unwrap(),
+            vec![PathBuf::from("note.md")]
+        );
+
+        let sides = conflict_sides(&dir_b, Path::new("note.md")).unwrap();
+        assert!(sides.base.unwrap().contains("line two"));
+        assert!(sides.ours.unwrap().contains("B changed this"));
+        assert!(sides.theirs.unwrap().contains("A changed this"));
+
+        let (ours_diff, theirs_diff) = conflict_diff(&dir_b, Path::new("note.md")).unwrap();
+        assert!(ours_diff
+            .iter()
+            .any(|l| l.origin == '+' && l.content == "B changed this"));
+        assert!(theirs_diff
+            .iter()
+            .any(|l| l.origin == '+' && l.content == "A changed this"));
+    }
+
+    #[test]
+    fn resolving_and_finishing_a_merge_produces_a_two_parent_commit() {
+        let root = tempfile::tempdir().unwrap();
+        let (_dir_a, dir_b) = diverge_on_the_same_line(root.path());
+        pull(&dir_b, "origin", "main").unwrap();
+
+        resolve_conflict(
+            &dir_b,
+            Path::new("note.md"),
+            "line one\nresolved together\nline three\n",
+        )
+        .unwrap();
+        assert!(conflicted_files(&dir_b).unwrap().is_empty());
+        // Not finalized yet — still mid-merge until finish_merge runs.
+        assert!(merge_in_progress(&dir_b));
+
+        finish_merge(&dir_b, "shiki: merge 'main'").unwrap();
+
+        assert!(!merge_in_progress(&dir_b));
+        let repo_b = Repository::open(&dir_b).unwrap();
+        let head_commit = repo_b.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(head_commit.parent_count(), 2);
+        assert_eq!(
+            std::fs::read_to_string(dir_b.join("note.md")).unwrap(),
+            "line one\nresolved together\nline three\n"
+        );
+    }
+
+    #[test]
+    fn finish_merge_errors_while_conflicts_remain() {
+        let root = tempfile::tempdir().unwrap();
+        let (_dir_a, dir_b) = diverge_on_the_same_line(root.path());
+        pull(&dir_b, "origin", "main").unwrap();
+
+        assert!(finish_merge(&dir_b, "shiki: merge 'main'").is_err());
+        assert!(merge_in_progress(&dir_b));
+    }
+
+    #[test]
+    fn abort_merge_restores_the_pre_merge_working_tree() {
+        let root = tempfile::tempdir().unwrap();
+        let (_dir_a, dir_b) = diverge_on_the_same_line(root.path());
+        pull(&dir_b, "origin", "main").unwrap();
+
+        abort_merge(&dir_b).unwrap();
+
+        assert!(!merge_in_progress(&dir_b));
+        assert!(conflicted_files(&dir_b).unwrap().is_empty());
+        assert_eq!(
+            std::fs::read_to_string(dir_b.join("note.md")).unwrap(),
+            "line one\nB changed this\nline three\n"
+        );
+    }
+
+    #[test]
+    fn pull_merges_cleanly_when_edits_touch_different_files() {
+        let root = tempfile::tempdir().unwrap();
+        let bare_path = root.path().join("bare.git");
+        Repository::init_bare(&bare_path).unwrap();
+        let bare_url = bare_path.to_string_lossy().into_owned();
+
+        let dir_a = root.path().join("a");
+        let dir_b = root.path().join("b");
+        init_with_main(&dir_a);
+        init_with_main(&dir_b);
+        set_remote(&dir_a, &bare_url).unwrap();
+        set_remote(&dir_b, &bare_url).unwrap();
+
+        std::fs::write(dir_a.join("one.md"), "one\n").unwrap();
+        std::fs::write(dir_a.join("two.md"), "two\n").unwrap();
+        commit_all(&dir_a, "first").unwrap();
+        push(&dir_a, "origin").unwrap();
+        pull(&dir_b, "origin", "main").unwrap();
+
+        std::fs::write(dir_a.join("one.md"), "one, edited by a\n").unwrap();
+        commit_all(&dir_a, "a-edit").unwrap();
+        push(&dir_a, "origin").unwrap();
+
+        std::fs::write(dir_b.join("two.md"), "two, edited by b\n").unwrap();
+        commit_all(&dir_b, "b-edit").unwrap();
+
+        let outcome = pull(&dir_b, "origin", "main").unwrap();
+        assert!(matches!(outcome, PullOutcome::MergedClean { .. }));
+        assert!(!merge_in_progress(&dir_b));
+
+        let repo_b = Repository::open(&dir_b).unwrap();
+        let head_commit = repo_b.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(head_commit.parent_count(), 2);
+        assert_eq!(
+            std::fs::read_to_string(dir_b.join("one.md")).unwrap(),
+            "one, edited by a\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir_b.join("two.md")).unwrap(),
+            "two, edited by b\n"
+        );
     }
 }

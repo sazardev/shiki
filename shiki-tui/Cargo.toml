@@ -27,3 +27,4 @@ base64.workspace = true
 unicode-width.workspace = true
 directories.workspace = true
 arboard.workspace = true
+serde_yaml.workspace = true

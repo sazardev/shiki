@@ -5,7 +5,7 @@ use crate::app::{
 use crate::icons;
 use crate::render::{hex_to_color, panel_block};
 use crate::{
-    layout, panel_drawer, panel_notebooks, panel_notes, panel_outline, panel_preview,
+    layout, panel_drawer, panel_notebooks, panel_notes, panel_outline, panel_preview, panel_query,
     panel_settings, panel_tags, panel_tasks, status_bar, which,
 };
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -193,8 +193,16 @@ pub fn draw(frame: &mut Frame, app: &App) {
         panel_tasks::render(frame, frame.area(), app);
     }
 
+    if app.show_query {
+        panel_query::render(frame, frame.area(), app);
+    }
+
     if app.show_history {
         render_history(frame, frame.area(), app);
+    }
+
+    if app.show_conflicts {
+        render_conflicts(frame, frame.area(), app);
     }
 
     if app.show_update {
@@ -616,6 +624,83 @@ fn render_history(frame: &mut Frame, frame_area: Rect, app: &App) {
     let mut state = ListState::default();
     if !app.history_entries.is_empty() {
         state.select(Some(app.history_selected));
+    }
+    frame.render_stateful_widget(list, popup_area, &mut state);
+}
+
+/// The merge-conflict resolver. Unlike `render_history`'s single diff pane,
+/// a conflict genuinely has two sides worth comparing at once, so
+/// `conflict_viewing` splits the popup horizontally into OURS/THEIRS panes
+/// rather than showing one after the other.
+fn render_conflicts(frame: &mut Frame, frame_area: Rect, app: &App) {
+    let height = (frame_area.height * 3 / 4).max(8);
+    let popup_area = centered_rect(frame_area, (frame_area.width * 3 / 4).max(50), height);
+    frame.render_widget(Clear, popup_area);
+
+    let muted = hex_to_color(&app.theme.muted);
+    let success = hex_to_color(&app.theme.success);
+    let error = hex_to_color(&app.theme.error);
+
+    if let Some(view) = &app.conflict_viewing {
+        let [ours_area, theirs_area] =
+            Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .areas(popup_area);
+        let to_lines = |lines: &[shiki_core::git::DiffLine]| -> Vec<Line<'static>> {
+            lines
+                .iter()
+                .map(|l| {
+                    let color = match l.origin {
+                        '+' => success,
+                        '-' => error,
+                        _ => muted,
+                    };
+                    Line::from(Span::styled(format!("{} {}", l.origin, l.content), color))
+                })
+                .collect()
+        };
+        let hint =
+            "o keep ours \u{B7} t keep theirs \u{B7} e mark resolved (edited) \u{B7} esc back";
+        let ours_title = format!(" {}OURS  \u{2014}  {hint} ", icons::GIT);
+        let theirs_title = format!(" {}THEIRS  \u{2014}  {hint} ", icons::GIT);
+        let ours_paragraph = ratatui::widgets::Paragraph::new(to_lines(&view.ours))
+            .block(panel_block(Line::from(ours_title), true, &app.theme))
+            .scroll((view.scroll, 0))
+            .wrap(ratatui::widgets::Wrap { trim: false });
+        let theirs_paragraph = ratatui::widgets::Paragraph::new(to_lines(&view.theirs))
+            .block(panel_block(Line::from(theirs_title), true, &app.theme))
+            .scroll((view.scroll, 0))
+            .wrap(ratatui::widgets::Wrap { trim: false });
+        frame.render_widget(ours_paragraph, ours_area);
+        frame.render_widget(theirs_paragraph, theirs_area);
+        return;
+    }
+
+    let items: Vec<ListItem> = app
+        .conflict_files
+        .iter()
+        .map(|f| ListItem::new(Line::from(Span::raw(f.display().to_string()))))
+        .collect();
+    let highlight_symbol = format!("{}", icons::ARROW);
+    let title = format!(
+        " {}Merge conflicts on '{}' [{} file{}]  \u{2014}  enter resolve \u{B7} o ours \u{B7} t theirs \u{B7} a abort \u{B7} esc close ",
+        icons::WARNING,
+        app.conflict_branch,
+        app.conflict_files.len(),
+        if app.conflict_files.len() == 1 { "" } else { "s" }
+    );
+    let list = List::new(items)
+        .block(panel_block(Line::from(title), true, &app.theme))
+        .highlight_style(
+            Style::default()
+                .bg(hex_to_color(&app.theme.selection))
+                .fg(hex_to_color(&app.theme.accent))
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol(highlight_symbol.as_str());
+
+    let mut state = ListState::default();
+    if !app.conflict_files.is_empty() {
+        state.select(Some(app.conflict_selected));
     }
     frame.render_stateful_widget(list, popup_area, &mut state);
 }

@@ -19,6 +19,15 @@ fn normalize_line_endings(contents: String) -> String {
 }
 
 /// YAML frontmatter at the top of every note.
+///
+/// `extra` captures any user-defined key beyond the six named fields (e.g.
+/// `status: pending`, `priority: 3`) via `#[serde(flatten)]` — without it,
+/// an unrecognized key parses fine but is silently dropped on the next
+/// `to_file_contents` round-trip, since only the named fields get
+/// reserialized. This is what makes a Dataview-style query over frontmatter
+/// possible: `shiki_core::query` reads fields out of `extra` the same way it
+/// reads the named ones. A note with no `---` block (`synthesize_frontmatter`)
+/// always has an empty `extra` — absence is the normal case, not an error.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Frontmatter {
     pub title: String,
@@ -30,6 +39,8 @@ pub struct Frontmatter {
     pub links: Vec<String>,
     #[serde(default)]
     pub template: Option<String>,
+    #[serde(flatten)]
+    pub extra: serde_yaml::Mapping,
 }
 
 impl Frontmatter {
@@ -41,6 +52,7 @@ impl Frontmatter {
             notebook: notebook.into(),
             links: Vec::new(),
             template: None,
+            extra: serde_yaml::Mapping::new(),
         }
     }
 }
@@ -94,7 +106,21 @@ impl Note {
     /// `synthesize_frontmatter` and `from_file_in_notebook` for the
     /// notebook-aware variant. The only real failure mode left is I/O.
     pub fn from_file(path: &Path) -> Result<Self> {
-        let contents = normalize_line_endings(std::fs::read_to_string(path)?);
+        Self::from_file_with_crypto(path, None)
+    }
+
+    /// Like `from_file`, but decrypts first when `crypto` is given and the
+    /// file's content is age-armored (`crypto::looks_encrypted`) — an
+    /// encrypted file with no `crypto` provided is a clear
+    /// `Error::Encryption`, never treated as a plain note with no
+    /// frontmatter (which is what would happen if the armor header were
+    /// left for `try_parse_frontmatter`/`synthesize_frontmatter` to deal
+    /// with, neither of which know what ciphertext is).
+    pub fn from_file_with_crypto(
+        path: &Path,
+        crypto: Option<&crate::crypto::NotebookCrypto>,
+    ) -> Result<Self> {
+        let contents = Self::read_and_decrypt(path, crypto)?;
         let (frontmatter, body) = Self::split(path, &contents, None);
         Ok(Self {
             path: path.to_path_buf(),
@@ -110,13 +136,45 @@ impl Note {
     /// from `path.parent().file_name()`, which would pick up an
     /// intermediate folder name instead of the notebook itself.
     pub fn from_file_in_notebook(path: &Path, notebook_name: &str) -> Result<Self> {
-        let contents = normalize_line_endings(std::fs::read_to_string(path)?);
+        Self::from_file_in_notebook_with_crypto(path, notebook_name, None)
+    }
+
+    /// `from_file_in_notebook`, decrypting first when `crypto` is given —
+    /// see `from_file_with_crypto`.
+    pub fn from_file_in_notebook_with_crypto(
+        path: &Path,
+        notebook_name: &str,
+        crypto: Option<&crate::crypto::NotebookCrypto>,
+    ) -> Result<Self> {
+        let contents = Self::read_and_decrypt(path, crypto)?;
         let (frontmatter, body) = Self::split(path, &contents, Some(notebook_name));
         Ok(Self {
             path: path.to_path_buf(),
             frontmatter,
             body,
         })
+    }
+
+    /// Reads `path` and, if its content is age-armored, decrypts it —
+    /// erroring clearly if it's encrypted but no `crypto` (passphrase) was
+    /// given, rather than falling through to `synthesize_frontmatter` and
+    /// silently treating ciphertext as a plain-text note body.
+    fn read_and_decrypt(
+        path: &Path,
+        crypto: Option<&crate::crypto::NotebookCrypto>,
+    ) -> Result<String> {
+        let raw = normalize_line_endings(std::fs::read_to_string(path)?);
+        if crate::crypto::looks_encrypted(&raw) {
+            match crypto {
+                Some(c) => c.decrypt(&raw),
+                None => Err(crate::Error::Encryption(format!(
+                    "'{}' is encrypted — no passphrase available",
+                    path.display()
+                ))),
+            }
+        } else {
+            Ok(raw)
+        }
     }
 
     fn split(path: &Path, contents: &str, notebook: Option<&str>) -> (Frontmatter, String) {
@@ -186,6 +244,7 @@ impl Note {
             notebook,
             links: Vec::new(),
             template: None,
+            extra: serde_yaml::Mapping::new(),
         }
     }
 
@@ -196,17 +255,34 @@ impl Note {
             .unwrap_or_else(|| "Untitled".to_string())
     }
 
-    /// Serializes the full note (frontmatter + body) to the on-disk file format.
+    /// Serializes the full note (frontmatter + body) to the on-disk file
+    /// format — the plaintext form, always; encryption (if any) happens in
+    /// `save_with_crypto`/`save`, one layer further out, since this is also
+    /// what the note-history modal needs when displaying an old revision.
     pub fn to_file_contents(&self) -> Result<String> {
         let yaml = serde_yaml::to_string(&self.frontmatter)?;
         Ok(format!("---\n{yaml}---\n\n{}", self.body))
     }
 
     pub fn save(&self) -> Result<()> {
+        self.save_with_crypto(None)
+    }
+
+    /// `save`, encrypting the serialized content when `crypto` is given —
+    /// the write-side counterpart of `from_file_with_crypto`. A notebook's
+    /// encryption setting is a property of the notebook, not the note, so
+    /// this always encrypts when `crypto` is `Some` rather than trying to
+    /// detect "was this file already encrypted" first.
+    pub fn save_with_crypto(&self, crypto: Option<&crate::crypto::NotebookCrypto>) -> Result<()> {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(&self.path, self.to_file_contents()?)?;
+        let plaintext = self.to_file_contents()?;
+        let contents = match crypto {
+            Some(c) => c.encrypt(&plaintext)?,
+            None => plaintext,
+        };
+        std::fs::write(&self.path, contents)?;
         Ok(())
     }
 }
@@ -290,6 +366,66 @@ mod tests {
     }
 
     #[test]
+    fn extra_frontmatter_fields_survive_a_round_trip_with_their_yaml_types() {
+        // Spike for shiki_core::query: #[serde(flatten)] on `extra` next to
+        // a typed field like `date: NaiveDate` is a known serde_yaml sharp
+        // edge (flatten routes deserialization through an internal buffer
+        // that has historically mangled scalar types). Assert the typed
+        // fields AND the extra fields keep their real YAML types across
+        // parse -> reserialize -> reparse, not just that parsing succeeds.
+        let contents = "---\n\
+            title: T\n\
+            date: 2026-08-06\n\
+            notebook: work\n\
+            status: pending\n\
+            priority: 3\n\
+            done: false\n\
+            due: 2026-08-10\n\
+            ---\n\
+            \n\
+            body";
+        let (fm, _) = Note::try_parse_frontmatter(contents).unwrap();
+        assert_eq!(fm.title, "T");
+        assert_eq!(
+            fm.date,
+            chrono::NaiveDate::from_ymd_opt(2026, 8, 6).unwrap()
+        );
+        assert_eq!(fm.notebook, "work");
+        assert_eq!(
+            fm.extra.get("status").and_then(|v| v.as_str()),
+            Some("pending")
+        );
+        assert_eq!(fm.extra.get("priority").and_then(|v| v.as_i64()), Some(3));
+        assert_eq!(fm.extra.get("done").and_then(|v| v.as_bool()), Some(false));
+        assert_eq!(
+            fm.extra.get("due").and_then(|v| v.as_str()),
+            Some("2026-08-10")
+        );
+
+        // Round-trip through to_file_contents and reparse.
+        let note = Note::new(PathBuf::from("/tmp/x.md"), fm, "body".to_string());
+        let written = note.to_file_contents().unwrap();
+        let (fm2, _) = Note::try_parse_frontmatter(&written).unwrap();
+        assert_eq!(
+            fm2.date,
+            chrono::NaiveDate::from_ymd_opt(2026, 8, 6).unwrap()
+        );
+        assert_eq!(fm2.extra.get("priority").and_then(|v| v.as_i64()), Some(3));
+        assert_eq!(fm2.extra.get("done").and_then(|v| v.as_bool()), Some(false));
+    }
+
+    #[test]
+    fn synthesized_frontmatter_has_empty_extra() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("plain.md");
+        std::fs::write(&path, "no heading here").unwrap();
+
+        let note = Note::from_file_in_notebook(&path, "work").unwrap();
+
+        assert!(note.frontmatter.extra.is_empty());
+    }
+
+    #[test]
     fn from_file_falls_back_to_filename_when_no_heading_present() {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("my-plain-note.md");
@@ -298,5 +434,35 @@ mod tests {
         let note = Note::from_file_in_notebook(&path, "work").unwrap();
 
         assert_eq!(note.frontmatter.title, "my plain note");
+    }
+
+    #[test]
+    fn save_with_crypto_writes_ciphertext_that_round_trips_back_to_the_note() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("secret.md");
+        let crypto = crate::crypto::NotebookCrypto::new("hunter2");
+
+        let note = Note::new(
+            path.clone(),
+            Frontmatter::new("Secret", "vault"),
+            "top secret body".to_string(),
+        );
+        note.save_with_crypto(Some(&crypto)).unwrap();
+
+        // On disk, it's really ciphertext, not a readable note.
+        let raw = std::fs::read_to_string(&path).unwrap();
+        assert!(crate::crypto::looks_encrypted(&raw));
+        assert!(!raw.contains("top secret"));
+
+        // With the right passphrase it reads back exactly as written.
+        let read_back = Note::from_file_with_crypto(&path, Some(&crypto)).unwrap();
+        assert_eq!(read_back.frontmatter.title, "Secret");
+        assert_eq!(read_back.body, "top secret body");
+
+        // With no passphrase (or the wrong one) it's a clear error, never
+        // silently parsed as a plain note with no frontmatter.
+        assert!(Note::from_file_with_crypto(&path, None).is_err());
+        let wrong = crate::crypto::NotebookCrypto::new("wrong");
+        assert!(Note::from_file_with_crypto(&path, Some(&wrong)).is_err());
     }
 }
