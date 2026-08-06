@@ -106,6 +106,12 @@ pub fn render(frame: &mut Frame, frame_area: Rect, app: &App) {
                 Span::styled(marker, marker_style),
                 Span::styled(task.text.clone(), text_style),
             ];
+            if let Some(spec) = &task.recurrence {
+                spans.push(Span::styled(
+                    format!("  {}{spec}", icons::REPEAT),
+                    Style::default().fg(muted),
+                ));
+            }
             if let Some(due) = task.due {
                 spans.push(Span::styled(
                     format!("  {}{due}", icons::CALENDAR),

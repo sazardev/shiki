@@ -71,6 +71,7 @@ pub fn run(
                     "done": r.task.done,
                     "due": r.task.due.map(|d| d.to_string()),
                     "overdue": is_overdue(&r.task, today),
+                    "recurrence": r.task.recurrence,
                     "notebook": r.notebook,
                     "note": r.note_title,
                     "location": r.location,
@@ -137,5 +138,10 @@ fn format_row(row: &Row, today: NaiveDate, color: bool) -> String {
     } else {
         format!("  {}", row.location)
     };
-    format!("{marker} {}{due}{location}", row.task.text)
+    let recurrence = match &row.task.recurrence {
+        Some(spec) if color => format!("  {DIM}\u{21bb}{spec}{RESET}"),
+        Some(spec) => format!("  \u{21bb}{spec}"),
+        None => String::new(),
+    };
+    format!("{marker} {}{recurrence}{due}{location}", row.task.text)
 }

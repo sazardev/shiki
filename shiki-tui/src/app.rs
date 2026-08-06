@@ -736,6 +736,13 @@ pub struct App {
     /// full content inside the history modal; `None` while just browsing
     /// the revision list.
     pub(crate) history_viewing: Option<(String, String)>,
+    /// `Some((commit_id, lines))` while viewing that revision's *diff*
+    /// against its parent instead of its full content — a separate field
+    /// from `history_viewing` rather than a mode flag on it, so both `Enter`
+    /// (full content) and `d` (diff) can each remember their own state
+    /// independently; only one is ever `Some` at a time in practice, since
+    /// opening either one is only reachable while browsing the plain list.
+    pub(crate) history_diff_viewing: Option<(String, Vec<shiki_core::git::DiffLine>)>,
     /// `(note path, commit id)` to revert to, staged while the `confirm`
     /// dialog is up — mirrors `pending_delete`'s pattern so `y`/`n` in
     /// `handle_confirm_key` can handle either kind of pending action.
@@ -1046,6 +1053,7 @@ impl App {
             history_entries: Vec::new(),
             history_selected: 0,
             history_viewing: None,
+            history_diff_viewing: None,
             pending_revert: None,
             pending_notebook_adopt: None,
             history_count_cache: None,

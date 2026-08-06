@@ -100,3 +100,4 @@ pub const GEAR: Icon = Icon('\u{f013}', "", true); // gear/cog, settings screen
 pub const IMAGE: Icon = Icon('\u{f03e}', "", true); // picture-o, markdown image placeholder in the preview
 pub const PDF: Icon = Icon('\u{f1c1}', "", true); // file-pdf-o, publish-to-PDF action
 pub const EXPAND: Icon = Icon('\u{f065}', "", true); // arrows-alt (expand), zen mode
+pub const REPEAT: Icon = Icon('\u{f01e}', "", true); // repeat, recurring task indicator

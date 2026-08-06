@@ -499,6 +499,57 @@ pub fn show_file_at(repo_path: &Path, commit_id: &str, file_relative: &Path) -> 
     Ok(String::from_utf8_lossy(blob.content()).into_owned())
 }
 
+/// One line of a unified diff for a single file — `origin` is `'+'`
+/// (added), `'-'` (removed), or `' '` (unchanged context line); nothing
+/// else is ever produced, since `diff_file_at` only keeps those three
+/// origins from libgit2's own patch output (file/hunk headers are
+/// filtered out — the caller already knows which commit and file this is).
+#[derive(Debug, Clone)]
+pub struct DiffLine {
+    pub origin: char,
+    pub content: String,
+}
+
+/// A unified diff of `file_relative` between `commit_id` and its first
+/// parent — "what did this commit actually change here," the same thing
+/// `git log -p -- <path>` would show for that one commit. If `commit_id`
+/// has no parent (the repo's very first commit), the file is diffed
+/// against an empty tree, so every line comes back as an addition — which
+/// is the correct answer, not a special case: the whole file really is
+/// new at that point. Real diff computation (via libgit2's own
+/// `Repository::diff_tree_to_tree`, not a hand-rolled line algorithm), so
+/// it's the same result `git diff` itself would produce, including its
+/// line-matching heuristics.
+pub fn diff_file_at(
+    repo_path: &Path,
+    commit_id: &str,
+    file_relative: &Path,
+) -> Result<Vec<DiffLine>> {
+    let repo = Repository::open(repo_path)?;
+    let oid = git2::Oid::from_str(commit_id)?;
+    let commit = repo.find_commit(oid)?;
+    let new_tree = commit.tree()?;
+    let old_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
+
+    let mut opts = git2::DiffOptions::new();
+    opts.pathspec(file_relative);
+    let diff = repo.diff_tree_to_tree(old_tree.as_ref(), Some(&new_tree), Some(&mut opts))?;
+
+    let mut lines = Vec::new();
+    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+        if matches!(line.origin(), '+' | '-' | ' ') {
+            lines.push(DiffLine {
+                origin: line.origin(),
+                content: String::from_utf8_lossy(line.content())
+                    .trim_end_matches('\n')
+                    .to_string(),
+            });
+        }
+        true
+    })?;
+    Ok(lines)
+}
+
 /// Overwrites the current working copy of `file_relative` with its content
 /// from `commit_id` — a full-file revert (frontmatter included, since
 /// that's what's actually stored in the blob), not just the body text.
@@ -602,5 +653,57 @@ mod tests {
             redact_credentials("https://git.example.com/repos/notes@backup.git"),
             "https://git.example.com/repos/notes@backup.git"
         );
+    }
+
+    #[test]
+    fn diff_file_at_reports_the_changed_line_as_removed_and_added() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path();
+        let file = path.join("note.md");
+
+        std::fs::write(&file, "line one\nline two\nline three\n").unwrap();
+        commit_all(path, "first").unwrap();
+        std::fs::write(&file, "line one\nline TWO changed\nline three\n").unwrap();
+        commit_all(path, "second").unwrap();
+
+        let relative = std::path::Path::new("note.md");
+        let history = file_history(path, relative).unwrap();
+        assert_eq!(history.len(), 2, "both commits touched note.md");
+        let latest = &history[0].commit_id; // newest first
+
+        let diff = diff_file_at(path, latest, relative).unwrap();
+        let removed: Vec<&str> = diff
+            .iter()
+            .filter(|l| l.origin == '-')
+            .map(|l| l.content.as_str())
+            .collect();
+        let added: Vec<&str> = diff
+            .iter()
+            .filter(|l| l.origin == '+')
+            .map(|l| l.content.as_str())
+            .collect();
+        assert_eq!(removed, vec!["line two"]);
+        assert_eq!(added, vec!["line TWO changed"]);
+        // The untouched lines still show up as context, not as churn.
+        assert!(diff
+            .iter()
+            .any(|l| l.origin == ' ' && l.content == "line one"));
+    }
+
+    #[test]
+    fn diff_file_at_treats_the_first_commit_as_entirely_added() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path();
+        let file = path.join("note.md");
+        std::fs::write(&file, "brand new\n").unwrap();
+        commit_all(path, "first").unwrap();
+
+        let relative = std::path::Path::new("note.md");
+        let history = file_history(path, relative).unwrap();
+        let diff = diff_file_at(path, &history[0].commit_id, relative).unwrap();
+
+        assert_eq!(diff.len(), 1);
+        assert_eq!(diff[0].origin, '+');
+        assert_eq!(diff[0].content, "brand new");
     }
 }

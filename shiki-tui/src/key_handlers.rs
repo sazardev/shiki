@@ -1241,16 +1241,29 @@ impl App {
             shiki_core::git::file_history(&nb.path, &relative).unwrap_or_default();
         self.history_selected = 0;
         self.history_viewing = None;
+        self.history_diff_viewing = None;
         self.show_history = true;
         if self.history_entries.is_empty() {
             self.set_status("no history yet — sync (`s`) to commit this note first".into());
         }
     }
     fn handle_history_key(&mut self, key: KeyEvent) {
+        if self.history_diff_viewing.is_some() {
+            match key.code {
+                KeyCode::Esc => self.history_diff_viewing = None,
+                KeyCode::Char('r') => self.start_revert_selected_history(),
+                _ => {}
+            }
+            return;
+        }
         if self.history_viewing.is_some() {
             match key.code {
                 KeyCode::Esc => self.history_viewing = None,
                 KeyCode::Char('r') => self.start_revert_selected_history(),
+                KeyCode::Char('d') => {
+                    self.history_viewing = None;
+                    self.view_selected_history_diff();
+                }
                 _ => {}
             }
             return;
@@ -1258,6 +1271,7 @@ impl App {
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => self.show_history = false,
             KeyCode::Enter => self.view_selected_history(),
+            KeyCode::Char('d') => self.view_selected_history_diff(),
             KeyCode::Char('r') => self.start_revert_selected_history(),
             KeyCode::Char('j') | KeyCode::Down => {
                 if self.history_selected + 1 < self.history_entries.len() {
@@ -1296,6 +1310,24 @@ impl App {
             Err(e) => self.set_status(format!("could not load revision: {e}")),
         }
     }
+    /// Fetches and shows the highlighted revision's diff against its parent
+    /// — "what did this commit actually change here," the `d` alternative
+    /// to `Enter`'s full-content view. The very first commit in the file's
+    /// history has no parent to diff against, so every line comes back as
+    /// an addition — the correct answer (the whole file really is new at
+    /// that point), not an error.
+    fn view_selected_history_diff(&mut self) {
+        let Some((nb, relative)) = self.selected_note_relative_path() else {
+            return;
+        };
+        let Some(entry) = self.history_entries.get(self.history_selected).cloned() else {
+            return;
+        };
+        match shiki_core::git::diff_file_at(&nb.path, &entry.commit_id, &relative) {
+            Ok(lines) => self.history_diff_viewing = Some((entry.commit_id, lines)),
+            Err(e) => self.set_status(format!("could not load diff: {e}")),
+        }
+    }
     /// Stages a revert of the currently highlighted (or viewed) revision
     /// behind the usual `y`/`n` confirmation, since it overwrites the
     /// note's current working content.
@@ -1307,6 +1339,7 @@ impl App {
             .history_viewing
             .as_ref()
             .map(|(id, _)| id.clone())
+            .or_else(|| self.history_diff_viewing.as_ref().map(|(id, _)| id.clone()))
             .or_else(|| {
                 self.history_entries
                     .get(self.history_selected)
@@ -1340,6 +1373,7 @@ impl App {
                 self.set_status(format!("reverted to {short}"));
                 self.show_history = false;
                 self.history_viewing = None;
+                self.history_diff_viewing = None;
                 self.history_count_cache = None;
             }
             Err(e) => self.set_status(format!("revert error: {e}")),
@@ -1607,7 +1641,11 @@ impl App {
     /// the row in place — deliberately *not* a rebuild, so a task checked
     /// off while the pending-only filter is active stays visible (checked,
     /// struck through) and can be immediately un-toggled instead of
-    /// vanishing out from under the cursor.
+    /// vanishing out from under the cursor. The one exception is completing
+    /// an `@every(...)` task: `shiki_core::tasks::toggle` itself spawned a
+    /// brand-new line for the next occurrence, which the in-place patch
+    /// below has no way to also insert — a full `rebuild_task_rows` is the
+    /// only way that new row can show up at all.
     fn toggle_selected_task(&mut self) {
         let Some(row) = self.task_rows.get(self.task_selected) else {
             return;
@@ -1618,19 +1656,24 @@ impl App {
         match shiki_core::tasks::toggle(&note_path, &task.raw_line, task.occurrence) {
             Ok(toggled) => {
                 let done = toggled.done;
-                let task = &mut self.task_rows[self.task_selected].task;
-                task.done = toggled.done;
-                task.raw_line = toggled.raw_line;
-                task.occurrence = toggled.occurrence;
-                // A toggle is a real note edit: refresh the panels/caches
-                // underneath the modal and count it toward auto_sync, the
-                // same as any other save.
                 self.refresh_notes_preserve_selection();
                 self.note_changed(&notebook);
-                self.set_status(format!(
-                    "task {}",
-                    if done { "completed" } else { "reopened" }
-                ));
+                if let Some(next_due) = toggled.spawned_next {
+                    self.rebuild_task_rows();
+                    self.task_selected = self
+                        .task_selected
+                        .min(self.task_selectable_count().saturating_sub(1));
+                    self.set_status(format!("task completed — next due {next_due}"));
+                } else {
+                    let task = &mut self.task_rows[self.task_selected].task;
+                    task.done = toggled.done;
+                    task.raw_line = toggled.raw_line;
+                    task.occurrence = toggled.occurrence;
+                    self.set_status(format!(
+                        "task {}",
+                        if done { "completed" } else { "reopened" }
+                    ));
+                }
             }
             Err(e) => self.set_status(format!("couldn't toggle task: {e}")),
         }

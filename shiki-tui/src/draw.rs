@@ -543,10 +543,36 @@ fn render_history(frame: &mut Frame, frame_area: Rect, app: &App) {
     let fg = hex_to_color(&app.theme.fg);
     let muted = hex_to_color(&app.theme.muted);
 
+    if let Some((commit_id, lines)) = &app.history_diff_viewing {
+        let short = commit_id.chars().take(7).collect::<String>();
+        let title = format!(
+            " {}Diff {short}  \u{2014}  r revert \u{B7} esc back ",
+            icons::HISTORY
+        );
+        let success = hex_to_color(&app.theme.success);
+        let error = hex_to_color(&app.theme.error);
+        let diff_lines: Vec<Line> = lines
+            .iter()
+            .map(|l| {
+                let color = match l.origin {
+                    '+' => success,
+                    '-' => error,
+                    _ => muted,
+                };
+                Line::from(Span::styled(format!("{} {}", l.origin, l.content), color))
+            })
+            .collect();
+        let paragraph = ratatui::widgets::Paragraph::new(diff_lines)
+            .block(panel_block(Line::from(title), true, &app.theme))
+            .wrap(ratatui::widgets::Wrap { trim: false });
+        frame.render_widget(paragraph, popup_area);
+        return;
+    }
+
     if let Some((commit_id, content)) = &app.history_viewing {
         let short = commit_id.chars().take(7).collect::<String>();
         let title = format!(
-            " {}Revision {short}  \u{2014}  r revert \u{B7} esc back ",
+            " {}Revision {short}  \u{2014}  d diff \u{B7} r revert \u{B7} esc back ",
             icons::HISTORY
         );
         let paragraph = ratatui::widgets::Paragraph::new(content.as_str())
@@ -573,7 +599,7 @@ fn render_history(frame: &mut Frame, frame_area: Rect, app: &App) {
         .collect();
     let highlight_symbol = format!("{}", icons::ARROW);
     let title = format!(
-        " {}History [{} revisions]  \u{2014}  enter view \u{B7} r revert \u{B7} esc/q close ",
+        " {}History [{} revisions]  \u{2014}  enter view \u{B7} d diff \u{B7} r revert \u{B7} esc/q close ",
         icons::HISTORY,
         app.history_entries.len()
     );

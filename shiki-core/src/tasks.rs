@@ -33,6 +33,11 @@ pub struct Task {
     /// Parsed from a `@due(YYYY-MM-DD)` tag anywhere in the text, if present
     /// and well-formed — a malformed date is just text, not an error.
     pub due: Option<NaiveDate>,
+    /// The raw spec inside an `@every(...)` tag, if present (e.g. `"week"`,
+    /// `"3d"`) — see `parse_recurrence` for what's actually recognized. An
+    /// unrecognized spec is still captured here (so it's visible in the UI)
+    /// even though `toggle` silently won't act on it.
+    pub recurrence: Option<String>,
 }
 
 fn task_line_re() -> &'static Regex {
@@ -43,6 +48,11 @@ fn task_line_re() -> &'static Regex {
 fn due_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"@due\((\d{4}-\d{2}-\d{2})\)").unwrap())
+}
+
+fn every_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"@every\(([^)]*)\)").unwrap())
 }
 
 /// Every checkbox task in `body`, in the order they appear.
@@ -61,15 +71,65 @@ pub fn extract(body: &str) -> Vec<Task> {
             let due = due_re()
                 .captures(&text)
                 .and_then(|c| NaiveDate::parse_from_str(&c[1], "%Y-%m-%d").ok());
+            let recurrence = every_re().captures(&text).map(|c| c[1].to_string());
             Some(Task {
                 raw_line: line.to_string(),
                 occurrence,
                 done: &caps[2] != " ",
                 text,
                 due,
+                recurrence,
             })
         })
         .collect()
+}
+
+/// A parsed `@every(...)` spec — `Days` covers `day`/`daily`, `week`/
+/// `weekly`, and `Nd`/`Nw`; `Months` covers `month`/`monthly`, `year`/
+/// `yearly`/`annually`, and `Nm`. Kept as two variants instead of always
+/// converting to a day count because a month isn't a fixed number of days
+/// (`advance_date` needs `NaiveDate::checked_add_months` for those, which
+/// correctly lands on the last day of a shorter month rather than
+/// overflowing into the next one).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Recurrence {
+    Days(u32),
+    Months(u32),
+}
+
+/// Parses an `@every(...)` spec. Case-insensitive. Returns `None` for
+/// anything unrecognized — same "leave it alone, don't guess" philosophy
+/// as `parse_relative_due`, except here that means `toggle` just won't spawn
+/// a next occurrence rather than silently substituting the wrong one.
+pub fn parse_recurrence(spec: &str) -> Option<Recurrence> {
+    let spec = spec.trim().to_ascii_lowercase();
+    match spec.as_str() {
+        "day" | "daily" => return Some(Recurrence::Days(1)),
+        "week" | "weekly" => return Some(Recurrence::Days(7)),
+        "month" | "monthly" => return Some(Recurrence::Months(1)),
+        "year" | "yearly" | "annually" => return Some(Recurrence::Months(12)),
+        _ => {}
+    }
+    if let Some(n) = spec.strip_suffix('d') {
+        return n.parse().ok().map(Recurrence::Days);
+    }
+    if let Some(n) = spec.strip_suffix('w') {
+        return n.parse::<u32>().ok().map(|n| Recurrence::Days(n * 7));
+    }
+    if let Some(n) = spec.strip_suffix('m') {
+        return n.parse().ok().map(Recurrence::Months);
+    }
+    None
+}
+
+/// Advances `date` by one recurrence interval. `Months` uses
+/// `checked_add_months`, which lands on the last day of a shorter target
+/// month rather than overflowing (e.g. Jan 31 + 1 month -> Feb 28/29).
+pub fn advance_date(date: NaiveDate, recurrence: Recurrence) -> Option<NaiveDate> {
+    match recurrence {
+        Recurrence::Days(n) => date.checked_add_signed(chrono::Duration::days(n as i64)),
+        Recurrence::Months(n) => date.checked_add_months(chrono::Months::new(n)),
+    }
 }
 
 /// What `toggle` did: the task's new state plus its new address (`raw_line`
@@ -77,11 +137,16 @@ pub fn extract(body: &str) -> Vec<Task> {
 /// occurrence index among now-identical lines). A caller keeping a `Task`
 /// alive across the toggle must adopt all three or the *next* toggle of the
 /// same row could match a different, coincidentally-identical line.
+/// `spawned_next` is `Some(next_due_date)` when completing this task also
+/// inserted its next recurrence right below it (an `@every(...)` task,
+/// toggled to done) — the caller should re-extract rather than patch the
+/// row in place, since a whole new line now exists that wasn't there before.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Toggled {
     pub done: bool,
     pub raw_line: String,
     pub occurrence: usize,
+    pub spawned_next: Option<NaiveDate>,
 }
 
 /// Flips one task's checkbox in the file at `path` and writes it back.
@@ -124,6 +189,40 @@ pub fn toggle(path: &Path, raw_line: &str, occurrence: usize) -> Result<Toggled>
     let marker = if new_done { "x" } else { " " };
     let new_raw = format!("{}{}{}{}", &caps[1], marker, &caps[3], &caps[4]);
     let crlf = if line.ends_with('\r') { "\r" } else { "" };
+
+    // Completing an `@every(...)` task spawns its next occurrence right
+    // below it — unchecked, with `@due` advanced by the recurrence interval
+    // (from the task's own due date if it had one, else from today; see
+    // `Recurrence`'s own doc comment for why months aren't just a day
+    // count). Only on the checking-off transition, never on un-checking —
+    // reopening a task you just completed shouldn't also spawn a duplicate
+    // of the one it already spawned.
+    let mut spawned_next = None;
+    if new_done {
+        let original_text = &caps[4];
+        if let Some(recurrence) = every_re()
+            .captures(original_text)
+            .and_then(|c| parse_recurrence(&c[1]))
+        {
+            let base = due_re()
+                .captures(original_text)
+                .and_then(|c| NaiveDate::parse_from_str(&c[1], "%Y-%m-%d").ok())
+                .unwrap_or_else(|| chrono::Local::now().date_naive());
+            if let Some(next_date) = advance_date(base, recurrence) {
+                let next_text = if due_re().is_match(original_text) {
+                    due_re()
+                        .replace(original_text, format!("@due({next_date})"))
+                        .into_owned()
+                } else {
+                    format!("{original_text} @due({next_date})")
+                };
+                let next_line = format!("{}{}{}{}{}", &caps[1], " ", &caps[3], next_text, crlf);
+                lines.insert(idx + 1, next_line);
+                spawned_next = Some(next_date);
+            }
+        }
+    }
+
     lines[idx] = format!("{new_raw}{crlf}");
 
     // The flipped line's occurrence among lines *now identical to it* —
@@ -139,6 +238,7 @@ pub fn toggle(path: &Path, raw_line: &str, occurrence: usize) -> Result<Toggled>
         done: new_done,
         raw_line: new_raw,
         occurrence: new_occurrence,
+        spawned_next,
     })
 }
 
@@ -362,6 +462,81 @@ mod tests {
             std::fs::read_to_string(&path).unwrap(),
             "---\n- [ ] task\n---\n- [x] task\n"
         );
+    }
+
+    #[test]
+    fn parse_recurrence_handles_every_supported_form() {
+        assert_eq!(parse_recurrence("day"), Some(Recurrence::Days(1)));
+        assert_eq!(parse_recurrence("Daily"), Some(Recurrence::Days(1)));
+        assert_eq!(parse_recurrence("week"), Some(Recurrence::Days(7)));
+        assert_eq!(parse_recurrence("3d"), Some(Recurrence::Days(3)));
+        assert_eq!(parse_recurrence("2w"), Some(Recurrence::Days(14)));
+        assert_eq!(parse_recurrence("month"), Some(Recurrence::Months(1)));
+        assert_eq!(parse_recurrence("YEARLY"), Some(Recurrence::Months(12)));
+        assert_eq!(parse_recurrence("6m"), Some(Recurrence::Months(6)));
+        assert_eq!(parse_recurrence("nonsense"), None);
+    }
+
+    #[test]
+    fn advance_date_lands_on_the_last_day_of_a_shorter_month() {
+        let jan_31 = NaiveDate::from_ymd_opt(2026, 1, 31).unwrap();
+        let advanced = advance_date(jan_31, Recurrence::Months(1)).unwrap();
+        assert_eq!(advanced, NaiveDate::from_ymd_opt(2026, 2, 28).unwrap());
+    }
+
+    #[test]
+    fn toggle_spawns_the_next_occurrence_advancing_from_the_existing_due_date() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("note.md");
+        std::fs::write(&path, "- [ ] water plants @every(week) @due(2026-08-03)\n").unwrap();
+
+        let toggled = toggle(&path, "- [ ] water plants @every(week) @due(2026-08-03)", 0).unwrap();
+
+        assert!(toggled.done);
+        assert_eq!(toggled.spawned_next, NaiveDate::from_ymd_opt(2026, 8, 10));
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "- [x] water plants @every(week) @due(2026-08-03)\n\
+             - [ ] water plants @every(week) @due(2026-08-10)\n"
+        );
+    }
+
+    #[test]
+    fn toggle_spawns_the_next_occurrence_from_today_when_there_was_no_due_date() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("note.md");
+        std::fs::write(&path, "- [ ] stretch @every(day)\n").unwrap();
+
+        let toggled = toggle(&path, "- [ ] stretch @every(day)", 0).unwrap();
+
+        let expected = chrono::Local::now().date_naive().succ_opt().unwrap();
+        assert_eq!(toggled.spawned_next, Some(expected));
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            format!("- [x] stretch @every(day)\n- [ ] stretch @every(day) @due({expected})\n")
+        );
+    }
+
+    #[test]
+    fn toggle_does_not_spawn_anything_when_unchecking() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("note.md");
+        std::fs::write(&path, "- [x] water plants @every(week)\n").unwrap();
+
+        let toggled = toggle(&path, "- [x] water plants @every(week)", 0).unwrap();
+
+        assert!(!toggled.done);
+        assert_eq!(toggled.spawned_next, None);
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "- [ ] water plants @every(week)\n"
+        );
+    }
+
+    #[test]
+    fn extract_parses_the_every_tag_into_recurrence() {
+        let tasks = extract("- [ ] water plants @every(week) @due(2026-08-10)\n");
+        assert_eq!(tasks[0].recurrence.as_deref(), Some("week"));
     }
 
     #[test]

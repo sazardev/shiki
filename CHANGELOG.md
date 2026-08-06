@@ -50,6 +50,16 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 - Note templates and snippets gained two more substitution variables, `{{time}}` and
   `{{notebook}}`, alongside the existing `{{title}}`/`{{date}}`/`{{cursor}}` — available in note
   templates (`a`, the `@`-dropdown), the daily note, and `/`-menu snippets alike.
+- Note history (PREVIEW `H`) gained a real diff view: `d` on a revision shows a unified diff
+  against its parent (colored `-`/`+` lines, computed by libgit2 itself) instead of the full file
+  content — "what did this commit actually change here," the same thing `git log -p` shows for one
+  commit. Works from either the revision list or the existing full-content view; `r` (revert)
+  still acts on whichever revision is currently being looked at, in either view.
+- Recurring tasks: an `@every(<spec>)` tag (`day`/`daily`, `week`/`weekly`, `month`/`monthly`,
+  `year`/`yearly`, or `Nd`/`Nw`/`Nm`) marks a checkbox task as recurring. Completing one (never
+  un-completing) inserts its next occurrence right below it, unchecked, with `@due` advanced by
+  that interval from the task's existing due date (or from today if it had none) — a repeat icon
+  plus the raw spec shows next to the task text in the tasks view.
 
 ### Fixed
 
