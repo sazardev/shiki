@@ -984,6 +984,32 @@ code, .code {
    (screenshot alongside the notes), stacking on narrow ones.
    ========================================================================== */
 
+.release-share-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  font-size: 0.85rem;
+}
+
+.release-share-label {
+  color: var(--muted);
+}
+
+.release-share-link {
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 10px;
+}
+
+.release-share-link:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  text-decoration: none;
+}
+
 .release-layout {
   display: flex;
   gap: 48px;
@@ -1210,4 +1236,129 @@ footer.site-footer small {
   .topbar nav .version-chip-wrap {
     padding: 10px 0;
   }
+}
+
+/* ==========================================================================
+   Press / media kit (press.html) — boilerplate copy blocks, brand asset
+   cards, and a compact screenshot grid. All static markup, no generator
+   script involved (unlike the per-version release pages), since there's
+   only ever one of these pages and its content doesn't change per release.
+   ========================================================================== */
+
+.press-copy-block {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  background: var(--statusbar);
+  margin-bottom: 16px;
+}
+
+.press-copy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.press-copy-header h3 {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.press-copy-block p {
+  margin-bottom: 10px;
+}
+
+.press-copy-block p:last-child {
+  margin-bottom: 0;
+}
+
+.press-facts {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px 24px;
+}
+
+.press-facts li {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.press-asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.press-asset-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  background: var(--statusbar);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.press-asset-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  font-size: 0.82rem;
+}
+
+.press-swatches {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.press-swatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.press-swatch-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  display: inline-block;
+}
+
+.press-screenshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.press-screenshot {
+  display: block;
+  color: var(--fg);
+  text-align: center;
+  font-size: 0.82rem;
+}
+
+.press-screenshot img {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.press-screenshot:hover img {
+  border-color: var(--accent);
 }

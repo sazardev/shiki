@@ -44,6 +44,7 @@
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+  <link rel="alternate" type="application/rss+xml" title="shiki changelog" href="../feed.xml" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -51,6 +52,8 @@
 
   <link rel="stylesheet" href="../css/styles.css" />
   <link rel="stylesheet" href="../css/documentation.css" />
+
+  <script type="application/ld+json">{{JSONLD}}</script>
 </head>
 <body class="doc-page">
 
@@ -63,6 +66,7 @@
       <a href="../index.html#install">Install</a>
       <a href="../documentation.html">Docs</a>
       <a href="../changelog.html" class="active">Changelog</a>
+      <a href="../press.html">Press</a>
       <a href="https://github.com/sazardev/shiki">GitHub</a>
       <span class="version-chip-wrap" id="version-chip-wrap">
         <button type="button" class="pill pill-button" id="version-pill" hidden></button>
@@ -84,6 +88,17 @@
       <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
       <h1>shiki v{{VERSION}}</h1>
       <p class="muted" style="max-width: 66ch;">{{DATE_LINE}}</p>
+      <div class="release-share-row">
+        <span class="release-share-label">Share:</span>
+        <a class="release-share-link" href="{{SHARE_X}}" target="_blank" rel="noopener">X</a>
+        <a class="release-share-link" href="{{SHARE_BLUESKY}}" target="_blank" rel="noopener">Bluesky</a>
+        <a class="release-share-link" href="{{SHARE_REDDIT}}" target="_blank" rel="noopener">Reddit</a>
+        <a class="release-share-link" href="{{SHARE_HN}}" target="_blank" rel="noopener">Hacker News</a>
+        <a class="release-share-link" href="{{SHARE_WHATSAPP}}" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="release-share-link" href="{{SHARE_TELEGRAM}}" target="_blank" rel="noopener">Telegram</a>
+        <a class="release-share-link" href="{{SHARE_EMAIL}}">Email</a>
+        <button type="button" class="copy-btn copy-btn-inline" data-copy-text="{{ANNOUNCEMENT_TEXT}}">Copy announcement</button>
+      </div>
     </div>
   </section>
 

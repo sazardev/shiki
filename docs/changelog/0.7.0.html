@@ -44,6 +44,7 @@
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+  <link rel="alternate" type="application/rss+xml" title="shiki changelog" href="../feed.xml" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -51,6 +52,8 @@
 
   <link rel="stylesheet" href="../css/styles.css" />
   <link rel="stylesheet" href="../css/documentation.css" />
+
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "shiki v0.7.0 — Release notes", "description": "Tags modal (leader+T) is now real, two-level navigation instead of a read-only list: j/k browse tags, Enter/l drills into the notes carrying one, Enter/l the…", "image": "https://sazardev.github.io/shiki/assets/og/0.7.0.png", "url": "https://sazardev.github.io/shiki/changelog/0.7.0.html", "mainEntityOfPage": {"@type": "WebPage", "@id": "https://sazardev.github.io/shiki/changelog/0.7.0.html"}, "author": {"@type": "Person", "name": "sazardev", "url": "https://github.com/sazardev"}, "publisher": {"@type": "Organization", "name": "shiki", "logo": {"@type": "ImageObject", "url": "https://sazardev.github.io/shiki/assets/favicon-512.png"}}, "datePublished": "2026-07-23", "dateModified": "2026-07-23"}</script>
 </head>
 <body class="doc-page">
 
@@ -63,6 +66,7 @@
       <a href="../index.html#install">Install</a>
       <a href="../documentation.html">Docs</a>
       <a href="../changelog.html" class="active">Changelog</a>
+      <a href="../press.html">Press</a>
       <a href="https://github.com/sazardev/shiki">GitHub</a>
       <span class="version-chip-wrap" id="version-chip-wrap">
         <button type="button" class="pill pill-button" id="version-pill" hidden></button>
@@ -84,6 +88,21 @@
       <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
       <h1>shiki v0.7.0</h1>
       <p class="muted" style="max-width: 66ch;">Released 2026-07-23.</p>
+      <div class="release-share-row">
+        <span class="release-share-label">Share:</span>
+        <a class="release-share-link" href="https://twitter.com/intent/tweet?text=shiki%20v0.7.0%3A%20Tags%20modal%20%28leader%2BT%29%20is%20now%20real%2C%20two-level%20navigation%20instead%20of%20a%20read-only%20list%3A%20j%2Fk%20browse%20tags%2C%20Enter%2Fl%20drills%20into%20the%20notes%20carrying%20one%2C%20Enter%2Fl%20the%E2%80%A6&amp;url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.7.0.html" target="_blank" rel="noopener">X</a>
+        <a class="release-share-link" href="https://bsky.app/intent/compose?text=shiki%20v0.7.0%3A%20Tags%20modal%20%28leader%2BT%29%20is%20now%20real%2C%20two-level%20navigation%20instead%20of%20a%20read-only%20list%3A%20j%2Fk%20browse%20tags%2C%20Enter%2Fl%20drills%20into%20the%20notes%20carrying%20one%2C%20Enter%2Fl%20the%E2%80%A6%20https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.7.0.html" target="_blank" rel="noopener">Bluesky</a>
+        <a class="release-share-link" href="https://www.reddit.com/submit?url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.7.0.html&amp;title=shiki%20v0.7.0%3A%20Tags%20modal%20%28leader%2BT%29%20is%20now%20real%2C%20two-level%20navigation%20instead%20of%20a%20read-only%20list%3A%20j%2Fk%20browse%20tags%2C%20Enter%2Fl%20drills%20into%20the%20notes%20carrying%20one%2C%20Enter%2Fl%20the%E2%80%A6" target="_blank" rel="noopener">Reddit</a>
+        <a class="release-share-link" href="https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.7.0.html&amp;t=shiki%20v0.7.0%3A%20Tags%20modal%20%28leader%2BT%29%20is%20now%20real%2C%20two-level%20navigation%20instead%20of%20a%20read-only%20list%3A%20j%2Fk%20browse%20tags%2C%20Enter%2Fl%20drills%20into%20the%20notes%20carrying%20one%2C%20Enter%2Fl%20the%E2%80%A6" target="_blank" rel="noopener">Hacker News</a>
+        <a class="release-share-link" href="https://wa.me/?text=shiki%20v0.7.0%3A%20Tags%20modal%20%28leader%2BT%29%20is%20now%20real%2C%20two-level%20navigation%20instead%20of%20a%20read-only%20list%3A%20j%2Fk%20browse%20tags%2C%20Enter%2Fl%20drills%20into%20the%20notes%20carrying%20one%2C%20Enter%2Fl%20the%E2%80%A6%20https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.7.0.html" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="release-share-link" href="https://t.me/share/url?url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.7.0.html&amp;text=shiki%20v0.7.0%3A%20Tags%20modal%20%28leader%2BT%29%20is%20now%20real%2C%20two-level%20navigation%20instead%20of%20a%20read-only%20list%3A%20j%2Fk%20browse%20tags%2C%20Enter%2Fl%20drills%20into%20the%20notes%20carrying%20one%2C%20Enter%2Fl%20the%E2%80%A6" target="_blank" rel="noopener">Telegram</a>
+        <a class="release-share-link" href="mailto:?subject=shiki%20v0.7.0%20released&amp;body=shiki%20v0.7.0%3A%20Tags%20modal%20%28leader%2BT%29%20is%20now%20real%2C%20two-level%20navigation%20instead%20of%20a%20read-only%20list%3A%20j%2Fk%20browse%20tags%2C%20Enter%2Fl%20drills%20into%20the%20notes%20carrying%20one%2C%20Enter%2Fl%20the%E2%80%A6%0A%0Ahttps%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.7.0.html">Email</a>
+        <button type="button" class="copy-btn copy-btn-inline" data-copy-text="🚀 shiki v0.7.0 is out — Tags modal (leader+T) is now real, two-level navigation instead of a read-only list: j/k browse tags, Enter/l drills into the notes carrying one, Enter/l the…
+
+https://sazardev.github.io/shiki/changelog/0.7.0.html
+
+#rustlang #TUI #opensource">Copy announcement</button>
+      </div>
     </div>
   </section>
 

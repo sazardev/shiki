@@ -8,8 +8,10 @@ For each released version in CHANGELOG.md this produces:
   - docs/assets/og/{version}.png   (1200x630 OG/Twitter card, rendered via
     headless Chromium from scripts/templates/og_card.html)
 
-It also rewrites the RELEASE PAGES block of docs/sitemap.xml so every
-generated page is listed there too.
+It also rewrites the RELEASE PAGES block of docs/sitemap.xml, and the whole
+of docs/feed.xml (an RSS feed of every release, full content included — see
+update_feed's own docstring for why that matters for dev.to's RSS import),
+so every generated page is listed and syndicated.
 
 Usage:
   scripts/generate_release_pages.py --all
@@ -26,14 +28,18 @@ needing its own "already exists" special case.
 from __future__ import annotations
 
 import argparse
+import email.utils
 import html
+import json
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parent.parent
 CHANGELOG_MD = ROOT / "CHANGELOG.md"
@@ -43,6 +49,7 @@ OUT_OG_DIR = DOCS / "assets" / "og"
 SCREENSHOTS_DIR = DOCS / "assets" / "screenshots"
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 SITEMAP = DOCS / "sitemap.xml"
+FEED_PATH = DOCS / "feed.xml"
 SITE_URL = "https://sazardev.github.io/shiki"
 
 # Every release page/OG card uses the same theme, deliberately — shiki has
@@ -167,6 +174,81 @@ def tagline_for(v: Version) -> str:
     return f"shiki v{v.version} release notes."
 
 
+def page_url_for(v: Version) -> str:
+    return f"{SITE_URL}/changelog/{v.version}.html"
+
+
+def jsonld_for(v: Version, page_url: str, og_url: str) -> str:
+    """schema.org structured data for a single release page — index.html
+    already carries a SoftwareApplication block for the app as a whole
+    (see its own <head>); this is `Article` instead, one per version,
+    since a release page reads as a dated post about a specific release,
+    not a second description of the whole app. Gives Google something to
+    key a rich result (date + image) off when someone searches a specific
+    version, e.g. "shiki v0.9.0"."""
+    data = {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": f"shiki v{v.version} — Release notes",
+        "description": tagline_for(v),
+        "image": og_url,
+        "url": page_url,
+        "mainEntityOfPage": {"@type": "WebPage", "@id": page_url},
+        "author": {"@type": "Person", "name": "sazardev", "url": "https://github.com/sazardev"},
+        "publisher": {
+            "@type": "Organization",
+            "name": "shiki",
+            "logo": {"@type": "ImageObject", "url": f"{SITE_URL}/assets/favicon-512.png"},
+        },
+    }
+    if v.date:  # every real release has one; only a hypothetical malformed
+        # CHANGELOG.md entry wouldn't — omit rather than emit an invalid
+        # empty-string ISO date if that ever happens.
+        data["datePublished"] = v.date
+        data["dateModified"] = v.date
+    # Defensive against a "</script>" substring anywhere in the tagline
+    # (there isn't one today, but a JSON-LD block otherwise closes its own
+    # <script> tag early if one ever appears) — the standard escape for
+    # embedding JSON inside HTML <script> content.
+    return json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+
+
+def announcement_text(v: Version, page_url: str) -> str:
+    """The "copy announcement" button's payload — a ready-to-paste blurb for
+    anywhere that isn't covered by an intent link (LinkedIn's own share
+    intent only accepts a URL, not pre-filled text, and there's no public
+    intent link for e.g. a Discord/Slack message), so this exists for
+    "paste it by hand" cases instead."""
+    return (
+        f"🚀 shiki v{v.version} is out — {tagline_for(v)}\n\n"
+        f"{page_url}\n\n"
+        "#rustlang #TUI #opensource"
+    )
+
+
+def share_links(v: Version, page_url: str) -> dict[str, str]:
+    """Plain public "intent" URLs — every one of these just opens that
+    platform's own compose/submit dialog for the *visitor* to post,
+    pre-filled. No API call, no account, no token on shiki's side at all;
+    the whole reason this is worth doing instead of a real API integration
+    (Bluesky/Mastodon's APIs are simple, but still need a stored
+    credential and someone to maintain it — this needs nothing)."""
+    text = f"shiki v{v.version}: {tagline_for(v)}"
+
+    def q(s: str) -> str:
+        return quote(s, safe="")
+
+    return {
+        "x": f"https://twitter.com/intent/tweet?text={q(text)}&url={q(page_url)}",
+        "bluesky": f"https://bsky.app/intent/compose?text={q(text + ' ' + page_url)}",
+        "reddit": f"https://www.reddit.com/submit?url={q(page_url)}&title={q(text)}",
+        "hn": f"https://news.ycombinator.com/submitlink?u={q(page_url)}&t={q(text)}",
+        "whatsapp": f"https://wa.me/?text={q(text + ' ' + page_url)}",
+        "telegram": f"https://t.me/share/url?url={q(page_url)}&text={q(text)}",
+        "email": f"mailto:?subject={q(f'shiki v{v.version} released')}&body={q(text + chr(10) + chr(10) + page_url)}",
+    }
+
+
 def render_og_card(v: Version, chromium: str) -> None:
     bg, fg, accent, _label = THEME_COLORS[FIXED_THEME]
     screenshot = SCREENSHOTS_DIR / f"{FIXED_THEME}.png"
@@ -222,10 +304,15 @@ def render_page(v: Version, prev_v: Version | None, next_v: Version | None) -> N
     prev_href, prev_label, prev_disabled = nav_link(prev_v, "No earlier release")
     next_href, next_label, next_disabled = nav_link(next_v, "No newer release")
 
+    page_url = page_url_for(v)
+    og_url = f"{SITE_URL}/assets/og/{v.version}.png"
+    links = share_links(v, page_url)
+
     rendered = (
         template.replace("{{VERSION}}", html.escape(v.version))
         .replace("{{DATE_LINE}}", html.escape(date_line))
         .replace("{{TAGLINE}}", html.escape(tagline_for(v)))
+        .replace("{{JSONLD}}", jsonld_for(v, page_url, og_url))
         .replace("{{THEME_ID}}", FIXED_THEME)
         .replace("{{CHANGELOG_HTML}}", changelog_html(v))
         .replace("{{PREV_HREF}}", prev_href)
@@ -234,6 +321,20 @@ def render_page(v: Version, prev_v: Version | None, next_v: Version | None) -> N
         .replace("{{NEXT_HREF}}", next_href)
         .replace("{{NEXT_LABEL}}", html.escape(next_label))
         .replace("{{NEXT_DISABLED}}", next_disabled)
+        # Intent links only ever need HTML-attribute escaping (they're
+        # already fully percent-encoded query strings, so no further
+        # escaping of the URL content itself is needed) — quote=True so an
+        # eventual literal `"` inside one (there won't be, but the "email"
+        # mailto: link is the shakiest one) can't break out of the
+        # surrounding href="...".
+        .replace("{{SHARE_X}}", html.escape(links["x"], quote=True))
+        .replace("{{SHARE_BLUESKY}}", html.escape(links["bluesky"], quote=True))
+        .replace("{{SHARE_REDDIT}}", html.escape(links["reddit"], quote=True))
+        .replace("{{SHARE_HN}}", html.escape(links["hn"], quote=True))
+        .replace("{{SHARE_WHATSAPP}}", html.escape(links["whatsapp"], quote=True))
+        .replace("{{SHARE_TELEGRAM}}", html.escape(links["telegram"], quote=True))
+        .replace("{{SHARE_EMAIL}}", html.escape(links["email"], quote=True))
+        .replace("{{ANNOUNCEMENT_TEXT}}", html.escape(announcement_text(v, page_url), quote=True))
     )
 
     OUT_PAGES_DIR.mkdir(parents=True, exist_ok=True)
@@ -268,6 +369,72 @@ def update_sitemap(versions: list[Version]) -> None:
     block = begin + "\n" + "\n".join(entries) + ("\n" if entries else "") + "  " + end
     new_text = re.sub(re.escape(begin) + r".*?" + re.escape(end), block, text, flags=re.DOTALL)
     SITEMAP.write_text(new_text)
+
+
+def rfc822(date_str: str) -> str:
+    """RSS pubDate needs RFC 822 — CHANGELOG.md only ever records a date, no
+    time of day, so every release is pinned to midnight UTC on that date
+    rather than inventing a fake time. Good enough for feed readers/dev.to's
+    RSS import, which sort and dedupe by this field but don't need
+    minute-level precision for something that ships at most a few times a
+    week."""
+    dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    return email.utils.format_datetime(dt)
+
+
+def update_feed(versions: list[Version]) -> None:
+    """Rewrites docs/feed.xml from scratch every run, same idempotent
+    "rebuild the whole thing, don't try to patch it" approach as
+    update_sitemap — an RSS feed has no natural place to surgically insert
+    one new <item> without risking a stray duplicate, so this just emits
+    every released version, newest first, every time.
+
+    Each <item> carries the *full* changelog body as <content:encoded> (not
+    just the tagline) specifically because dev.to's "Publish from RSS"
+    feature (https://dev.to/settings/extensions) posts whatever's in that
+    field as the article body — a feed with only a one-line description
+    would auto-publish a nearly-empty post there. <enclosure> points at the
+    version's own OG card so feed readers that show a thumbnail (Feedly,
+    etc.) have something to display."""
+    items = []
+    for v in versions:
+        page = OUT_PAGES_DIR / f"{v.version}.html"
+        if not page.exists() or not v.date:
+            continue
+        page_url = f"{SITE_URL}/changelog/{v.version}.html"
+        og_url = f"{SITE_URL}/assets/og/{v.version}.png"
+        items.append(
+            "    <item>\n"
+            f"      <title>{html.escape(f'shiki v{v.version}')}</title>\n"
+            f"      <link>{page_url}</link>\n"
+            f'      <guid isPermaLink="true">{page_url}</guid>\n'
+            f"      <pubDate>{rfc822(v.date)}</pubDate>\n"
+            f"      <description>{html.escape(tagline_for(v))}</description>\n"
+            f"      <content:encoded><![CDATA[{changelog_html(v)}]]></content:encoded>\n"
+            f'      <enclosure url="{og_url}" type="image/png" />\n'
+            "    </item>"
+        )
+
+    feed = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0" '
+        'xmlns:content="http://purl.org/rss/1.0/modules/content/" '
+        'xmlns:atom="http://www.w3.org/2005/Atom">\n'
+        "  <channel>\n"
+        "    <title>shiki (私記) — Changelog</title>\n"
+        f"    <link>{SITE_URL}/changelog.html</link>\n"
+        f'    <atom:link href="{SITE_URL}/feed.xml" rel="self" type="application/rss+xml" />\n'
+        "    <description>Every shiki release, in full — new features, real fixes, the occasional oops.</description>\n"
+        "    <language>en-us</language>\n"
+        "    <image>\n"
+        f"      <url>{SITE_URL}/assets/favicon-512.png</url>\n"
+        "      <title>shiki (私記) — Changelog</title>\n"
+        f"      <link>{SITE_URL}/changelog.html</link>\n"
+        "    </image>\n"
+        + "\n".join(items)
+        + "\n  </channel>\n</rss>\n"
+    )
+    FEED_PATH.write_text(feed)
 
 
 def find_chromium(explicit: str | None) -> str:
@@ -315,7 +482,8 @@ def main() -> None:
         render_page(v, prev_v, next_v)
 
     update_sitemap(all_versions)
-    print(f"done: {len(targets)} version page(s) + OG card(s), sitemap.xml updated.")
+    update_feed(all_versions)
+    print(f"done: {len(targets)} version page(s) + OG card(s), sitemap.xml + feed.xml updated.")
 
 
 if __name__ == "__main__":

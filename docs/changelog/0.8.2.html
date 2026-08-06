@@ -44,6 +44,7 @@
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+  <link rel="alternate" type="application/rss+xml" title="shiki changelog" href="../feed.xml" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -51,6 +52,8 @@
 
   <link rel="stylesheet" href="../css/styles.css" />
   <link rel="stylesheet" href="../css/documentation.css" />
+
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "shiki v0.8.2 — Release notes", "description": "The CLI's find_note now searches subfolders recursively (all_notes_recursive), not just the notebook's root — shiki edit/shiki show now find nested notes.", "image": "https://sazardev.github.io/shiki/assets/og/0.8.2.png", "url": "https://sazardev.github.io/shiki/changelog/0.8.2.html", "mainEntityOfPage": {"@type": "WebPage", "@id": "https://sazardev.github.io/shiki/changelog/0.8.2.html"}, "author": {"@type": "Person", "name": "sazardev", "url": "https://github.com/sazardev"}, "publisher": {"@type": "Organization", "name": "shiki", "logo": {"@type": "ImageObject", "url": "https://sazardev.github.io/shiki/assets/favicon-512.png"}}, "datePublished": "2026-07-24", "dateModified": "2026-07-24"}</script>
 </head>
 <body class="doc-page">
 
@@ -63,6 +66,7 @@
       <a href="../index.html#install">Install</a>
       <a href="../documentation.html">Docs</a>
       <a href="../changelog.html" class="active">Changelog</a>
+      <a href="../press.html">Press</a>
       <a href="https://github.com/sazardev/shiki">GitHub</a>
       <span class="version-chip-wrap" id="version-chip-wrap">
         <button type="button" class="pill pill-button" id="version-pill" hidden></button>
@@ -84,6 +88,21 @@
       <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
       <h1>shiki v0.8.2</h1>
       <p class="muted" style="max-width: 66ch;">Released 2026-07-24.</p>
+      <div class="release-share-row">
+        <span class="release-share-label">Share:</span>
+        <a class="release-share-link" href="https://twitter.com/intent/tweet?text=shiki%20v0.8.2%3A%20The%20CLI%27s%20find_note%20now%20searches%20subfolders%20recursively%20%28all_notes_recursive%29%2C%20not%20just%20the%20notebook%27s%20root%20%E2%80%94%20shiki%20edit%2Fshiki%20show%20now%20find%20nested%20notes.&amp;url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.2.html" target="_blank" rel="noopener">X</a>
+        <a class="release-share-link" href="https://bsky.app/intent/compose?text=shiki%20v0.8.2%3A%20The%20CLI%27s%20find_note%20now%20searches%20subfolders%20recursively%20%28all_notes_recursive%29%2C%20not%20just%20the%20notebook%27s%20root%20%E2%80%94%20shiki%20edit%2Fshiki%20show%20now%20find%20nested%20notes.%20https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.2.html" target="_blank" rel="noopener">Bluesky</a>
+        <a class="release-share-link" href="https://www.reddit.com/submit?url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.2.html&amp;title=shiki%20v0.8.2%3A%20The%20CLI%27s%20find_note%20now%20searches%20subfolders%20recursively%20%28all_notes_recursive%29%2C%20not%20just%20the%20notebook%27s%20root%20%E2%80%94%20shiki%20edit%2Fshiki%20show%20now%20find%20nested%20notes." target="_blank" rel="noopener">Reddit</a>
+        <a class="release-share-link" href="https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.2.html&amp;t=shiki%20v0.8.2%3A%20The%20CLI%27s%20find_note%20now%20searches%20subfolders%20recursively%20%28all_notes_recursive%29%2C%20not%20just%20the%20notebook%27s%20root%20%E2%80%94%20shiki%20edit%2Fshiki%20show%20now%20find%20nested%20notes." target="_blank" rel="noopener">Hacker News</a>
+        <a class="release-share-link" href="https://wa.me/?text=shiki%20v0.8.2%3A%20The%20CLI%27s%20find_note%20now%20searches%20subfolders%20recursively%20%28all_notes_recursive%29%2C%20not%20just%20the%20notebook%27s%20root%20%E2%80%94%20shiki%20edit%2Fshiki%20show%20now%20find%20nested%20notes.%20https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.2.html" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="release-share-link" href="https://t.me/share/url?url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.2.html&amp;text=shiki%20v0.8.2%3A%20The%20CLI%27s%20find_note%20now%20searches%20subfolders%20recursively%20%28all_notes_recursive%29%2C%20not%20just%20the%20notebook%27s%20root%20%E2%80%94%20shiki%20edit%2Fshiki%20show%20now%20find%20nested%20notes." target="_blank" rel="noopener">Telegram</a>
+        <a class="release-share-link" href="mailto:?subject=shiki%20v0.8.2%20released&amp;body=shiki%20v0.8.2%3A%20The%20CLI%27s%20find_note%20now%20searches%20subfolders%20recursively%20%28all_notes_recursive%29%2C%20not%20just%20the%20notebook%27s%20root%20%E2%80%94%20shiki%20edit%2Fshiki%20show%20now%20find%20nested%20notes.%0A%0Ahttps%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.2.html">Email</a>
+        <button type="button" class="copy-btn copy-btn-inline" data-copy-text="🚀 shiki v0.8.2 is out — The CLI&#x27;s find_note now searches subfolders recursively (all_notes_recursive), not just the notebook&#x27;s root — shiki edit/shiki show now find nested notes.
+
+https://sazardev.github.io/shiki/changelog/0.8.2.html
+
+#rustlang #TUI #opensource">Copy announcement</button>
+      </div>
     </div>
   </section>
 

@@ -673,9 +673,15 @@ async function loadContributors() {
 function initCopyButtons() {
   document.querySelectorAll(".copy-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
+      // Release pages' "Copy announcement" button carries its own
+      // ready-made text in a data attribute (scripts/generate_release_pages.py
+      // bakes it in at generation time) instead of reading it off a sibling
+      // <pre>/<code> — there's no visible code block to mirror on this page,
+      // the whole point is a blurb the visitor never sees until they paste it.
+      const attrText = btn.getAttribute("data-copy-text");
       const block = btn.closest(".code-block");
-      const source = block ? block.querySelector("pre") : btn.previousElementSibling;
-      const text = source ? source.textContent.trim() : "";
+      const source = attrText === null ? (block ? block.querySelector("pre") : btn.previousElementSibling) : null;
+      const text = attrText !== null ? attrText : source ? source.textContent.trim() : "";
       if (!text) return;
       try {
         await navigator.clipboard.writeText(text);

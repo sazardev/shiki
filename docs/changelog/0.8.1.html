@@ -44,6 +44,7 @@
   <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+  <link rel="alternate" type="application/rss+xml" title="shiki changelog" href="../feed.xml" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -51,6 +52,8 @@
 
   <link rel="stylesheet" href="../css/styles.css" />
   <link rel="stylesheet" href="../css/documentation.css" />
+
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "shiki v0.8.1 — Release notes", "description": "Footer now shows a clickable \"☕ Support\" link (buymeacoffee.com/sazarcode) — opens in the default browser cross-platform via a new shiki_core::browser::open_…", "image": "https://sazardev.github.io/shiki/assets/og/0.8.1.png", "url": "https://sazardev.github.io/shiki/changelog/0.8.1.html", "mainEntityOfPage": {"@type": "WebPage", "@id": "https://sazardev.github.io/shiki/changelog/0.8.1.html"}, "author": {"@type": "Person", "name": "sazardev", "url": "https://github.com/sazardev"}, "publisher": {"@type": "Organization", "name": "shiki", "logo": {"@type": "ImageObject", "url": "https://sazardev.github.io/shiki/assets/favicon-512.png"}}, "datePublished": "2026-07-23", "dateModified": "2026-07-23"}</script>
 </head>
 <body class="doc-page">
 
@@ -63,6 +66,7 @@
       <a href="../index.html#install">Install</a>
       <a href="../documentation.html">Docs</a>
       <a href="../changelog.html" class="active">Changelog</a>
+      <a href="../press.html">Press</a>
       <a href="https://github.com/sazardev/shiki">GitHub</a>
       <span class="version-chip-wrap" id="version-chip-wrap">
         <button type="button" class="pill pill-button" id="version-pill" hidden></button>
@@ -84,6 +88,21 @@
       <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
       <h1>shiki v0.8.1</h1>
       <p class="muted" style="max-width: 66ch;">Released 2026-07-23.</p>
+      <div class="release-share-row">
+        <span class="release-share-label">Share:</span>
+        <a class="release-share-link" href="https://twitter.com/intent/tweet?text=shiki%20v0.8.1%3A%20Footer%20now%20shows%20a%20clickable%20%22%E2%98%95%20Support%22%20link%20%28buymeacoffee.com%2Fsazarcode%29%20%E2%80%94%20opens%20in%20the%20default%20browser%20cross-platform%20via%20a%20new%20shiki_core%3A%3Abrowser%3A%3Aopen_%E2%80%A6&amp;url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.1.html" target="_blank" rel="noopener">X</a>
+        <a class="release-share-link" href="https://bsky.app/intent/compose?text=shiki%20v0.8.1%3A%20Footer%20now%20shows%20a%20clickable%20%22%E2%98%95%20Support%22%20link%20%28buymeacoffee.com%2Fsazarcode%29%20%E2%80%94%20opens%20in%20the%20default%20browser%20cross-platform%20via%20a%20new%20shiki_core%3A%3Abrowser%3A%3Aopen_%E2%80%A6%20https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.1.html" target="_blank" rel="noopener">Bluesky</a>
+        <a class="release-share-link" href="https://www.reddit.com/submit?url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.1.html&amp;title=shiki%20v0.8.1%3A%20Footer%20now%20shows%20a%20clickable%20%22%E2%98%95%20Support%22%20link%20%28buymeacoffee.com%2Fsazarcode%29%20%E2%80%94%20opens%20in%20the%20default%20browser%20cross-platform%20via%20a%20new%20shiki_core%3A%3Abrowser%3A%3Aopen_%E2%80%A6" target="_blank" rel="noopener">Reddit</a>
+        <a class="release-share-link" href="https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.1.html&amp;t=shiki%20v0.8.1%3A%20Footer%20now%20shows%20a%20clickable%20%22%E2%98%95%20Support%22%20link%20%28buymeacoffee.com%2Fsazarcode%29%20%E2%80%94%20opens%20in%20the%20default%20browser%20cross-platform%20via%20a%20new%20shiki_core%3A%3Abrowser%3A%3Aopen_%E2%80%A6" target="_blank" rel="noopener">Hacker News</a>
+        <a class="release-share-link" href="https://wa.me/?text=shiki%20v0.8.1%3A%20Footer%20now%20shows%20a%20clickable%20%22%E2%98%95%20Support%22%20link%20%28buymeacoffee.com%2Fsazarcode%29%20%E2%80%94%20opens%20in%20the%20default%20browser%20cross-platform%20via%20a%20new%20shiki_core%3A%3Abrowser%3A%3Aopen_%E2%80%A6%20https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.1.html" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="release-share-link" href="https://t.me/share/url?url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.1.html&amp;text=shiki%20v0.8.1%3A%20Footer%20now%20shows%20a%20clickable%20%22%E2%98%95%20Support%22%20link%20%28buymeacoffee.com%2Fsazarcode%29%20%E2%80%94%20opens%20in%20the%20default%20browser%20cross-platform%20via%20a%20new%20shiki_core%3A%3Abrowser%3A%3Aopen_%E2%80%A6" target="_blank" rel="noopener">Telegram</a>
+        <a class="release-share-link" href="mailto:?subject=shiki%20v0.8.1%20released&amp;body=shiki%20v0.8.1%3A%20Footer%20now%20shows%20a%20clickable%20%22%E2%98%95%20Support%22%20link%20%28buymeacoffee.com%2Fsazarcode%29%20%E2%80%94%20opens%20in%20the%20default%20browser%20cross-platform%20via%20a%20new%20shiki_core%3A%3Abrowser%3A%3Aopen_%E2%80%A6%0A%0Ahttps%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.8.1.html">Email</a>
+        <button type="button" class="copy-btn copy-btn-inline" data-copy-text="🚀 shiki v0.8.1 is out — Footer now shows a clickable &quot;☕ Support&quot; link (buymeacoffee.com/sazarcode) — opens in the default browser cross-platform via a new shiki_core::browser::open_…
+
+https://sazardev.github.io/shiki/changelog/0.8.1.html
+
+#rustlang #TUI #opensource">Copy announcement</button>
+      </div>
     </div>
   </section>
 
