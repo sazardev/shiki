@@ -11,7 +11,7 @@ use shiki_core::{Note, Notebook};
 #[derive(Debug, Clone)]
 pub enum TreeRow {
     Folder { depth: usize, name: String },
-    Note { depth: usize, note: Note },
+    Note { depth: usize, note: Box<Note> },
 }
 
 /// Depth-first flatten of `nb`'s entire tree, folders (and everything under
@@ -35,6 +35,9 @@ fn build_at(nb: &Notebook, relative: &Path, depth: usize, out: &mut Vec<TreeRow>
         build_at(nb, &relative.join(folder), depth + 1, out);
     }
     for note in notes {
-        out.push(TreeRow::Note { depth, note });
+        out.push(TreeRow::Note {
+            depth,
+            note: Box::new(note),
+        });
     }
 }
