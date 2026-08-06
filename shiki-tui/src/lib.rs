@@ -1,6 +1,5 @@
 pub mod app;
 pub mod clipboard;
-pub mod command;
 pub mod confirm;
 pub mod draw;
 pub mod editor;

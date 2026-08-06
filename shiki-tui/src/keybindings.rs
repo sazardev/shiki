@@ -307,18 +307,29 @@ pub enum WhichKeyRow {
         key: String,
         label: &'static str,
     },
+    /// A note matching the current filter, from a fuzzy search across every
+    /// notebook (`App.global_search_pool`, same pool/scoring the standalone
+    /// global search modal uses) — only ever appended while the filter is
+    /// non-empty, so an empty which-key still reads as "browse every
+    /// keybinding" and doesn't also dump every note in every notebook.
+    /// `pool_index` is the row's index into `global_search_pool`, resolved
+    /// by `App::jump_to_global_hit` on `Enter`, the same jump global
+    /// search's own `Enter` uses.
+    NoteHit { pool_index: usize, label: String },
 }
 
 impl WhichKeyRow {
     pub fn scope(&self) -> &'static str {
         match self {
             WhichKeyRow::Bound { scope, .. } | WhichKeyRow::Nav { scope, .. } => scope,
+            WhichKeyRow::NoteHit { .. } => "notes",
         }
     }
 
     pub fn key(&self) -> &str {
         match self {
             WhichKeyRow::Bound { key, .. } | WhichKeyRow::Nav { key, .. } => key,
+            WhichKeyRow::NoteHit { .. } => "",
         }
     }
 
@@ -326,6 +337,7 @@ impl WhichKeyRow {
         match self {
             WhichKeyRow::Bound { action, .. } => action_label(*action),
             WhichKeyRow::Nav { label, .. } => label,
+            WhichKeyRow::NoteHit { label, .. } => label,
         }
     }
 
@@ -333,6 +345,7 @@ impl WhichKeyRow {
         match self {
             WhichKeyRow::Bound { action, .. } => action_icon(*action),
             WhichKeyRow::Nav { .. } => crate::icons::ARROW,
+            WhichKeyRow::NoteHit { .. } => crate::icons::NOTE,
         }
     }
 }

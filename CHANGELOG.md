@@ -40,6 +40,24 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   `trash_retention_days` (auto-purge trash older than N days at startup — `0` means never),
   `reading_wpm` (words-per-minute for the "N min read" estimate), and `page_step` (how many rows
   `PageUp`/`PageDown` move at once, everywhere).
+- The which-key modal (`?`) now doubles as a unified command palette: once the filter query is
+  non-empty, it also fuzzy-matches notes across every notebook (title/body/notebook name, same
+  scoring the standalone global search modal uses) and lists up to 8 under a "notes" section —
+  `Enter` on one jumps straight to it, same as it already runs the highlighted action on a
+  keybinding row. Replaces `shiki-tui/src/command.rs`'s `CommandPalette`, which was unused dead
+  code that only duplicated the existing title-only note search (`/`, `leader`+`g`) without ever
+  being wired up to anything — removed rather than kept alongside the real thing.
+- Note templates and snippets gained two more substitution variables, `{{time}}` and
+  `{{notebook}}`, alongside the existing `{{title}}`/`{{date}}`/`{{cursor}}` — available in note
+  templates (`a`, the `@`-dropdown), the daily note, and `/`-menu snippets alike.
+
+### Fixed
+
+- The template picker's `{{cursor}}` marker (`a` → title → pick a template) was never actually
+  handled — it saved the literal text `{{cursor}}` into the new note's file and always opened the
+  editor at the top, unlike the identical marker in `/`-menu snippets, which already worked
+  correctly. Fixed to split it out before saving (so it's never written to disk) and jump the
+  cursor to exactly where it was in the template, same as snippets already do.
 
 ## [0.9.0] - 2026-08-04
 

@@ -97,8 +97,7 @@ shiki/
 │       ├── panel_tags.rs          # tag filter
 │       ├── editor.rs              # inline editor (tui-textarea)
 │       ├── status_bar.rs          # bottom status bar
-│       ├── command.rs             # command palette / global fuzzy finder
-│       ├── which.rs               # keybindings popup (like Yazi)
+│       ├── which.rs               # keybindings popup + command palette (like Yazi)
 │       ├── confirm.rs             # confirmation dialog
 │       ├── input.rs               # simple text input
 │       ├── keybindings.rs         # configurable key map
@@ -188,7 +187,7 @@ table: `[keybindings.global]` (needs the leader key first),
 | `l` / `→` / `enter` | Go one level deeper (Yazi-style): NOTEBOOKS → NOTES → PREVIEW |
 | `h` / `←` | Go back one level (Yazi-style) |
 | `tab` | Cycle focus between panels |
-| `?` | Which-key — near-full-screen list of every binding, doubling as a command palette: type to filter (by key, action, or scope), `↑`/`↓`/`PageUp`/`PageDown`/`Home`/`End` move the selection, `enter` runs the highlighted action immediately, `Esc` just closes |
+| `?` | Which-key — near-full-screen list of every binding, doubling as a command palette: type to filter (by key, action, or scope) — once the query is non-empty, it also fuzzy-matches notes across every notebook (title/body/notebook name) and lists up to 8 under a "notes" section — `↑`/`↓`/`PageUp`/`PageDown`/`Home`/`End` move the selection, `enter` runs the highlighted action or jumps straight to the highlighted note, `Esc` just closes |
 | `q` | Quit |
 | `Esc` | Back to NORMAL / close popup / cancel leader |
 
@@ -240,7 +239,7 @@ sync attempt (manual or automatic) just tries the push again.
 
 | Key | Action |
 |---|---|
-| `a` | New note (empty title stamps today's date). After the title, a template picker opens — every `.md` file in `~/.config/shiki/templates/` plus a "blank" option; `j`/`k` browse, `Enter` picks one and jumps straight to editing (`{{title}}`/`{{date}}` already substituted), `Esc`/`q` cancels the note entirely. Typing `@` anywhere in the title prompt (with or without a title before it) opens a quick dropdown instead — `today`/`yesterday`/`tomorrow` (a computed date, no template) plus every available template, fuzzy-filtered as you keep typing; `Enter` creates the note and jumps straight to editing, skipping the title→Enter→pick-a-template two-step entirely |
+| `a` | New note (empty title stamps today's date). After the title, a template picker opens — every `.md` file in `~/.config/shiki/templates/` plus a "blank" option; `j`/`k` browse, `Enter` picks one and jumps straight to editing (`{{title}}`/`{{date}}`/`{{time}}`/`{{notebook}}` already substituted, and a `{{cursor}}` marker — never saved to disk — leaves the cursor exactly where it was in the template instead of at the top), `Esc`/`q` cancels the note entirely. Typing `@` anywhere in the title prompt (with or without a title before it) opens a quick dropdown instead — `today`/`yesterday`/`tomorrow` (a computed date, no template) plus every available template, fuzzy-filtered as you keep typing; `Enter` creates the note and jumps straight to editing, skipping the title→Enter→pick-a-template two-step entirely |
 | `f` | New folder — empty name cancels rather than creating something unnamed. Created at the current breadcrumb depth, so it can be nested arbitrarily by descending first |
 | `r` | Rename note |
 | `d` | Delete the selected note *or* folder (with confirmation) — a folder deletes everything inside it too. In `v` select mode, deletes every selected item at once. Moved to the trash rather than permanently removed, so leader+`u` can undo it |
@@ -737,8 +736,9 @@ auto_push = true
 # divider/date/tags/frontmatter/bullet/numbered/link/image/note/warning/
 # details) aren't listed here at all, only your own additions/overrides.
 # `label` falls back to the trigger when omitted; `body` supports
-# {{title}}/{{date}} (substituted the same way note templates are) plus a
-# {{cursor}} marker for where the cursor lands after insertion.
+# {{title}}/{{date}}/{{time}}/{{notebook}} (substituted the same way note
+# templates are) plus a {{cursor}} marker for where the cursor lands after
+# insertion.
 [snippets.callout]
 label = "Info callout"
 body = "> **Info:** {{cursor}}"

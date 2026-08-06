@@ -1029,14 +1029,48 @@ impl App {
             }
         }
     }
+    /// Loads every note from every notebook into `global_search_pool` —
+    /// same pool `open_global_search` builds, reused here so which-key's
+    /// note results and the standalone global search modal can never
+    /// disagree about which notes exist or how they're identified
+    /// (`pool_index`). Safe to share the one field since the two modals
+    /// are never open at the same time.
     fn open_which_key(&mut self) {
         self.which_key_input.clear();
         self.which_key_selected = 0;
+        self.global_search_pool = self.store.all_notes().unwrap_or_default();
+        self.which_key_note_hits.clear();
         self.show_which_key = true;
+    }
+    /// Re-scores `global_search_pool` against the current which-key query
+    /// (title + body + notebook name, same haystack `refresh_global_search`
+    /// scores against) — called on every keystroke, not from
+    /// `which_key_filtered_entries` itself, since `SearchEngine::search_text`
+    /// needs `&mut self` but that function is `&self` (called from
+    /// rendering). Deliberately empty while the query is empty: an
+    /// unfiltered which-key should still read as "browse every keybinding,"
+    /// not also dump every note in every notebook.
+    fn refresh_which_key_notes(&mut self) {
+        let query = self.which_key_input.value.clone();
+        if query.is_empty() {
+            self.which_key_note_hits.clear();
+            return;
+        }
+        let haystacks: Vec<String> = self
+            .global_search_pool
+            .iter()
+            .map(|(nb, note)| format!("{} {} {}", nb.name, note.frontmatter.title, note.body))
+            .collect();
+        let haystack_refs: Vec<&str> = haystacks.iter().map(String::as_str).collect();
+        let mut hits = self.search_engine.search_text(&query, &haystack_refs);
+        hits.truncate(8);
+        self.which_key_note_hits = hits;
     }
     /// Every keybinding entry whose key, action label, or scope name
     /// contains the current query (case-insensitive) — all of them if the
-    /// query is empty. Backs both rendering and `Enter`'s execute-in-place.
+    /// query is empty — plus, once the query is non-empty, up to 8 matching
+    /// notes from `which_key_note_hits` (see `refresh_which_key_notes`).
+    /// Backs both rendering and `Enter`'s execute-in-place.
     pub fn which_key_filtered_entries(&self) -> Vec<WhichKeyRow> {
         let query = self.which_key_input.value.to_lowercase();
         let bound = self
@@ -1049,7 +1083,7 @@ impl App {
             .nav_rows()
             .into_iter()
             .map(|(scope, key, label)| WhichKeyRow::Nav { scope, key, label });
-        bound
+        let mut rows: Vec<WhichKeyRow> = bound
             .chain(nav)
             .filter(|row| {
                 query.is_empty()
@@ -1057,26 +1091,40 @@ impl App {
                     || row.label().to_lowercase().contains(&query)
                     || row.scope().to_lowercase().contains(&query)
             })
-            .collect()
+            .collect();
+        rows.extend(self.which_key_note_hits.iter().filter_map(|hit| {
+            let (nb, note) = self.global_search_pool.get(hit.index)?;
+            Some(WhichKeyRow::NoteHit {
+                pool_index: hit.index,
+                label: format!("{}  —  {}", note.frontmatter.title, nb.name),
+            })
+        }));
+        rows
     }
     fn handle_which_key_key(&mut self, key: KeyEvent) {
         let len = self.which_key_filtered_entries().len();
         match key.code {
             KeyCode::Esc => self.show_which_key = false,
-            // Executes the highlighted entry directly — the which-key modal
-            // doubles as a fast command palette: type to filter, Enter to run,
-            // instead of memorizing the key and closing the modal first.
+            // Executes the highlighted entry directly, or jumps straight to
+            // it if it's a note — the which-key modal doubles as a fast
+            // command palette: type to filter (actions AND notes), Enter to
+            // run/open, instead of memorizing the key and closing the modal
+            // first.
             KeyCode::Enter => {
-                let action = self
+                match self
                     .which_key_filtered_entries()
                     .get(self.which_key_selected)
-                    .and_then(|row| match row {
-                        WhichKeyRow::Bound { action, .. } => Some(*action),
-                        WhichKeyRow::Nav { .. } => None,
-                    });
-                if let Some(action) = action {
-                    self.show_which_key = false;
-                    self.handle_action(action);
+                    .cloned()
+                {
+                    Some(WhichKeyRow::Bound { action, .. }) => {
+                        self.show_which_key = false;
+                        self.handle_action(action);
+                    }
+                    Some(WhichKeyRow::NoteHit { pool_index, .. }) => {
+                        self.show_which_key = false;
+                        self.jump_to_global_hit(pool_index);
+                    }
+                    Some(WhichKeyRow::Nav { .. }) | None => {}
                 }
             }
             KeyCode::Down => {
@@ -1094,10 +1142,12 @@ impl App {
             KeyCode::Backspace => {
                 self.which_key_input.backspace();
                 self.which_key_selected = 0;
+                self.refresh_which_key_notes();
             }
             KeyCode::Char(c) => {
                 self.which_key_input.push(c);
                 self.which_key_selected = 0;
+                self.refresh_which_key_notes();
             }
             _ => {}
         }
@@ -2797,21 +2847,41 @@ impl App {
         // too: `frontmatter.template` must only ever record a template that
         // actually rendered the body, not one that was picked but discarded.
         let template_applied = pending_body.is_none() && template_choice.is_some();
-        let body = match pending_body {
+        let rendered = match pending_body {
             Some(body) => body,
             None => match &template_choice {
                 Some(name) => Config::default_templates_dir()
                     .ok()
                     .and_then(|dir| shiki_core::Template::load(&dir, name).ok())
                     .map(|template| {
+                        let now = chrono::Local::now();
                         let mut vars = std::collections::HashMap::new();
                         vars.insert("title", title.clone());
-                        vars.insert("date", chrono::Local::now().format("%Y-%m-%d").to_string());
+                        vars.insert("date", now.format("%Y-%m-%d").to_string());
+                        vars.insert("time", now.format("%H:%M").to_string());
+                        vars.insert(
+                            "notebook",
+                            self.selected_notebook()
+                                .map(|nb| nb.name.clone())
+                                .unwrap_or_default(),
+                        );
                         template.render(&vars)
                     })
                     .unwrap_or_default(),
                 None => String::new(),
             },
+        };
+        // A literal `{{cursor}}` marker (same convention slash-menu snippets
+        // use) is never meant to be saved to disk — split it out before the
+        // note is written, and remember where the split landed so the
+        // cursor can be moved there once the inline editor actually opens.
+        let (before, cursor_marker) = match rendered.split_once("{{cursor}}") {
+            Some((before, after)) => (before.to_string(), Some(after.to_string())),
+            None => (rendered, None),
+        };
+        let body = match &cursor_marker {
+            Some(after) => format!("{before}{after}"),
+            None => before.clone(),
         };
 
         match self.selected_notebook().cloned() {
@@ -2837,6 +2907,19 @@ impl App {
                     // Drop straight into the inline editor — a fresh note
                     // (blank or templated) isn't useful to just sit on.
                     self.start_edit_inline();
+                    if cursor_marker.is_some() {
+                        if let Some(editor) = &mut self.editor {
+                            let target_row = before.matches('\n').count();
+                            let target_col =
+                                before.rsplit('\n').next().unwrap_or("").chars().count();
+                            editor
+                                .textarea
+                                .move_cursor(ratatui_textarea::CursorMove::Jump(
+                                    target_row as u16,
+                                    target_col as u16,
+                                ));
+                        }
+                    }
                 }
                 Err(e) => self.set_status(format!("could not create note: {e}")),
             },
@@ -5261,20 +5344,28 @@ impl App {
             _ => {}
         }
     }
-    /// Substitutes `{{title}}`/`{{date}}` in a snippet body the same way
-    /// note templates are rendered (`shiki_core::Template::render`), then
-    /// splits off a literal `{{cursor}}` marker if present — shared by
-    /// `apply_slash_command` (the `/`-menu) and `try_expand_snippet_on_tab`
-    /// (Tab-expansion), the two places a snippet's body actually gets
-    /// turned into text.
+    /// Substitutes `{{title}}`/`{{date}}`/`{{time}}`/`{{notebook}}` in a
+    /// snippet body the same way note templates are rendered
+    /// (`shiki_core::Template::render`), then splits off a literal
+    /// `{{cursor}}` marker if present — shared by `apply_slash_command`
+    /// (the `/`-menu) and `try_expand_snippet_on_tab` (Tab-expansion), the
+    /// two places a snippet's body actually gets turned into text.
     fn render_snippet_template(&self, body: &str) -> (String, Option<String>) {
         let title = self
             .selected_note()
             .map(|n| n.frontmatter.title.clone())
             .unwrap_or_default();
+        let now = chrono::Local::now();
         let mut vars = std::collections::HashMap::new();
         vars.insert("title", title);
-        vars.insert("date", chrono::Local::now().format("%Y-%m-%d").to_string());
+        vars.insert("date", now.format("%Y-%m-%d").to_string());
+        vars.insert("time", now.format("%H:%M").to_string());
+        vars.insert(
+            "notebook",
+            self.selected_notebook()
+                .map(|nb| nb.name.clone())
+                .unwrap_or_default(),
+        );
         let rendered = shiki_core::Template {
             name: String::new(),
             contents: body.to_string(),

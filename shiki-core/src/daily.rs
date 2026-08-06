@@ -41,6 +41,9 @@ pub fn create_or_open(
         Ok(template) => {
             let mut vars = HashMap::new();
             vars.insert("date", date.format("%Y-%m-%d").to_string());
+            vars.insert("time", chrono::Local::now().format("%H:%M").to_string());
+            vars.insert("notebook", notebook.name.clone());
+            vars.insert("title", format!("{} Daily", date.format("%Y-%m-%d")));
             template.render(&vars)
         }
         Err(_) => format!(
@@ -101,6 +104,24 @@ mod tests {
         assert_eq!(note.frontmatter.template.as_deref(), Some("daily"));
         assert!(note.body.contains("2024-03-07"));
         assert!(note.path.exists());
+    }
+
+    #[test]
+    fn create_or_open_substitutes_notebook_and_title_in_the_template() {
+        let tmp = tempfile::tempdir().unwrap();
+        let nb = test_notebook(tmp.path(), "work");
+        let templates_dir = tmp.path().join("templates");
+        std::fs::create_dir_all(&templates_dir).unwrap();
+        std::fs::write(
+            templates_dir.join("daily.md"),
+            "# {{title}} ({{notebook}})\n\n{{date}}\n",
+        )
+        .unwrap();
+        let date = NaiveDate::from_ymd_opt(2024, 3, 7).unwrap();
+
+        let note = create_or_open(&nb, date, &templates_dir, "daily", None).unwrap();
+
+        assert_eq!(note.body, "# 2024-03-07 Daily (work)\n\n2024-03-07\n");
     }
 
     #[test]

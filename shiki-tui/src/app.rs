@@ -711,6 +711,15 @@ pub struct App {
     /// matches against the key, action label, or scope name.
     pub which_key_input: InputBox,
     pub which_key_selected: usize,
+    /// Notes matching the current which-key filter, scored against
+    /// `global_search_pool` (every note, every notebook) — the "cheap
+    /// re-score" half of the same "expensive walk once" split
+    /// `global_search_pool`/`global_search_results` already established,
+    /// re-run on every keystroke by `App::refresh_which_key_notes` rather
+    /// than inside `which_key_filtered_entries` itself, since that function
+    /// is `&self` (called from rendering) while `SearchEngine::search_text`
+    /// needs `&mut self`.
+    pub(crate) which_key_note_hits: Vec<shiki_core::search::SearchHit>,
     /// The OS-detected favorite editor, resolved once at startup (not
     /// per-render — detection can shell out to `xdg-mime` on Linux, too
     /// expensive to redo every ~100ms draw tick) and reused both for the
@@ -1030,6 +1039,7 @@ impl App {
             pending_changes: std::collections::HashMap::new(),
             which_key_input: InputBox::default(),
             which_key_selected: 0,
+            which_key_note_hits: Vec::new(),
             favorite_editor: shiki_core::editor::detect_favorite_editor(),
             show_dates,
             show_history: false,
