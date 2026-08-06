@@ -36,6 +36,64 @@ pub fn restore(trash_path: &Path, original_path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Permanently removes every trashed item older than `days`, across every
+/// notebook's subdirectory of `trash_root` — called once at startup
+/// (`config.general.trash_retention_days`, `0` meaning "never", the
+/// default) rather than on a timer, since the TUI has no background
+/// scheduler and a note deleted 5 minutes ago obviously isn't due for
+/// purging regardless of how long the app then stays open.
+///
+/// Age comes from the `{unix_millis}-{original name}` prefix `move_to_trash`
+/// already names every entry with, not filesystem mtime — a trashed item's
+/// mtime is whatever it was before the move (rename preserves it on most
+/// filesystems), which would read as "already old" the instant something
+/// old gets deleted, not from when it was actually trashed.
+///
+/// Best-effort: an unreadable trash root, a sibling entry that isn't
+/// actually a notebook subdirectory, or a single item that fails to
+/// remove are all silently skipped rather than aborting the whole sweep —
+/// this runs unconditionally on every startup, so it can't be allowed to
+/// block launch over a single stray/permission-denied file. Returns how
+/// many items were actually removed, for an optional status message.
+pub fn purge_older_than(trash_root: &Path, days: u32) -> usize {
+    if days == 0 {
+        return 0;
+    }
+    let cutoff_millis = chrono::Local::now().timestamp_millis() - (days as i64) * 86_400_000;
+    let Ok(notebook_dirs) = std::fs::read_dir(trash_root) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for notebook_dir in notebook_dirs.flatten() {
+        let Ok(entries) = std::fs::read_dir(notebook_dir.path()) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let Some((millis_str, _)) = name.split_once('-') else {
+                continue;
+            };
+            let Ok(millis) = millis_str.parse::<i64>() else {
+                continue;
+            };
+            if millis > cutoff_millis {
+                continue;
+            }
+            let path = entry.path();
+            let result = if path.is_dir() {
+                std::fs::remove_dir_all(&path)
+            } else {
+                std::fs::remove_file(&path)
+            };
+            if result.is_ok() {
+                removed += 1;
+            }
+        }
+    }
+    removed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,6 +145,42 @@ mod tests {
         restore(&trashed, &original).unwrap();
 
         assert_eq!(std::fs::read_to_string(&original).unwrap(), "body");
+    }
+
+    #[test]
+    fn purge_older_than_removes_only_entries_past_the_cutoff() {
+        let tmp = tempfile::tempdir().unwrap();
+        let trash_root = tmp.path().join("trash");
+        let nb_dir = trash_root.join("notebook");
+        std::fs::create_dir_all(&nb_dir).unwrap();
+
+        let now = chrono::Local::now().timestamp_millis();
+        let old_millis = now - 10 * 86_400_000; // 10 days ago
+        let recent_millis = now - 86_400_000; // 1 day ago
+
+        let old_entry = nb_dir.join(format!("{old_millis}-old.md"));
+        let recent_entry = nb_dir.join(format!("{recent_millis}-recent.md"));
+        std::fs::write(&old_entry, "old").unwrap();
+        std::fs::write(&recent_entry, "recent").unwrap();
+
+        let removed = purge_older_than(&trash_root, 5);
+
+        assert_eq!(removed, 1);
+        assert!(!old_entry.exists());
+        assert!(recent_entry.exists());
+    }
+
+    #[test]
+    fn purge_older_than_is_a_no_op_when_retention_is_zero() {
+        let tmp = tempfile::tempdir().unwrap();
+        let trash_root = tmp.path().join("trash");
+        let nb_dir = trash_root.join("notebook");
+        std::fs::create_dir_all(&nb_dir).unwrap();
+        let ancient = nb_dir.join("0-ancient.md");
+        std::fs::write(&ancient, "x").unwrap();
+
+        assert_eq!(purge_older_than(&trash_root, 0), 0);
+        assert!(ancient.exists());
     }
 
     #[test]

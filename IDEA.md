@@ -572,6 +572,29 @@ daily_agenda = true
 # Hides char/word count, reading time, and note-count detail from the
 # footer, leaving just the essentials — notebook, git status, editor mode.
 compact_footer = false
+# How long a footer status message stays visible before clearing itself.
+status_message_timeout_secs = 2
+# Width in columns of the notebook drawer (leader+`b`). Clamped against
+# the frame's actual width at render time regardless of this value.
+drawer_width = 30
+# Whether the tasks view (leader+`t`) starts showing every task, including
+# already-done ones, instead of just pending.
+tasks_show_done_default = false
+# "filename", "title", or "date" — which order the NOTES list sorts by on
+# a fresh launch. The notes-scope `o` cycle still changes it for the rest
+# of the session on top of whichever default this resolves to.
+default_note_sort = "filename"
+# Max entries kept in the logs modal (leader+`l`) and the persisted log
+# file. Lowering this doesn't retroactively trim an existing log file.
+log_history_limit = 500
+# Days a deleted note/folder stays in the trash before being permanently
+# purged at startup. 0 (the default) means never auto-purge.
+trash_retention_days = 0
+# Words-per-minute used for the footer's "N min read" estimate.
+reading_wpm = 200
+# How many rows PageUp/PageDown (and the mouse wheel) move at once, across
+# every scrollable list/modal in the TUI.
+page_step = 10
 
 [keybindings]
 leader = "space"

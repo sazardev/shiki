@@ -105,6 +105,55 @@ pub struct General {
     /// this is a visible reduction, not a pure addition.
     #[serde(default)]
     pub compact_footer: bool,
+    /// How long a footer status message stays visible before clearing
+    /// itself (`App::expire_status_message`), in seconds. Defaults to `2`.
+    /// The full message is always in the logs modal (leader+`l`) regardless
+    /// of how quickly the footer clears it.
+    #[serde(default = "default_status_message_timeout_secs")]
+    pub status_message_timeout_secs: u64,
+    /// Width, in terminal columns, of the notebook drawer (leader+`b`).
+    /// Defaults to `30`. Clamped against the frame's actual width at
+    /// render time regardless of this value, so an overly large number on
+    /// a narrow terminal can't push the drawer off-screen.
+    #[serde(default = "default_drawer_width")]
+    pub drawer_width: u16,
+    /// Whether the tasks view (leader+`t`) starts showing every task,
+    /// including already-done ones, instead of just pending — the
+    /// persisted default for the tasks-view `a` toggle, which used to
+    /// always reset to pending-only on every open. Defaults to `false`.
+    #[serde(default)]
+    pub tasks_show_done_default: bool,
+    /// Which order the NOTES list sorts by on a fresh launch — one of
+    /// `"filename"`, `"title"`, or `"date"` (case-insensitive; an
+    /// unrecognized value falls back to `"filename"`, the existing
+    /// default, same tolerance `pdf_theme` already has for a typo'd
+    /// theme name). The notes-scope `o` cycle still changes it for the
+    /// rest of the session on top of whichever default this resolves to.
+    #[serde(default = "default_note_sort")]
+    pub default_note_sort: String,
+    /// Maximum number of entries kept in the logs modal (leader+`l`) and
+    /// in the persisted log file (`Config::default_log_path`). Defaults to
+    /// `500`. Lowering this doesn't retroactively trim an existing log
+    /// file — it only caps growth going forward.
+    #[serde(default = "default_log_history_limit")]
+    pub log_history_limit: usize,
+    /// Days a deleted note/folder stays in the trash (`Config::default_trash_dir`)
+    /// before `App::purge_old_trash` (run once at startup) removes it for
+    /// good. `0` (the default) means never auto-purge — trash is only ever
+    /// cleared by hand today, and this stays that way unless explicitly
+    /// configured otherwise.
+    #[serde(default)]
+    pub trash_retention_days: u32,
+    /// Words-per-minute used for the footer's "N min read" estimate
+    /// (PREVIEW). Defaults to `200`, the same figure Medium/most
+    /// reading-time plugins use.
+    #[serde(default = "default_reading_wpm")]
+    pub reading_wpm: usize,
+    /// How many rows `PageUp`/`PageDown` (and the mouse wheel, where it
+    /// maps to the same delta) move at once, across every scrollable
+    /// list/modal in the TUI. Defaults to `10`.
+    #[serde(default = "default_page_step")]
+    pub page_step: usize,
 }
 
 impl Default for General {
@@ -124,8 +173,40 @@ impl Default for General {
             wikilink_autocomplete: true,
             daily_agenda: true,
             compact_footer: false,
+            status_message_timeout_secs: default_status_message_timeout_secs(),
+            drawer_width: default_drawer_width(),
+            tasks_show_done_default: false,
+            default_note_sort: default_note_sort(),
+            log_history_limit: default_log_history_limit(),
+            trash_retention_days: 0,
+            reading_wpm: default_reading_wpm(),
+            page_step: default_page_step(),
         }
     }
+}
+
+fn default_status_message_timeout_secs() -> u64 {
+    2
+}
+
+fn default_drawer_width() -> u16 {
+    30
+}
+
+fn default_note_sort() -> String {
+    "filename".into()
+}
+
+fn default_log_history_limit() -> usize {
+    500
+}
+
+fn default_reading_wpm() -> usize {
+    200
+}
+
+fn default_page_step() -> usize {
+    10
 }
 
 fn default_notebook_name() -> String {
@@ -1365,7 +1446,22 @@ fn section_comment(line: &str) -> Option<&'static str> {
 # - daily_agenda: a new daily note gets a \"## Due today\" section listing
 #   pending tasks across every notebook. Defaults to true.
 # - compact_footer: hides char/word count, reading time, and note-count
-#   detail from the footer, leaving just the essentials."
+#   detail from the footer, leaving just the essentials.
+# - status_message_timeout_secs: how long a footer status message stays
+#   visible before clearing itself. Defaults to 2.
+# - drawer_width: width in columns of the notebook drawer (leader+`b`).
+#   Defaults to 30.
+# - tasks_show_done_default: whether the tasks view starts showing every
+#   task, including done ones, instead of just pending.
+# - default_note_sort: \"filename\", \"title\", or \"date\" — which order the
+#   NOTES list sorts by on launch. Defaults to \"filename\".
+# - log_history_limit: max entries kept in the logs modal and log file.
+#   Defaults to 500.
+# - trash_retention_days: days a deleted note/folder stays in the trash
+#   before being auto-purged at startup. 0 (the default) means never.
+# - reading_wpm: words-per-minute for the footer's \"N min read\" estimate.
+#   Defaults to 200.
+# - page_step: how many rows PageUp/PageDown move at once. Defaults to 10."
         }
         "[keybindings]" => {
             "\

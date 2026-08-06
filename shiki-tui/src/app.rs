@@ -17,18 +17,6 @@ use crate::keybindings::{Action, KeyMaps};
 use crate::render::hex_to_color;
 use crate::{confirm, layout, panel_preview};
 
-/// How many rows/lines `PageUp`/`PageDown` move by, across every scrollable
-/// list and the PREVIEW scroll — one consistent "big jump" step everywhere
-/// instead of matching whatever's currently visible on screen (not knowable
-/// from most of this code without threading the render area through).
-pub(crate) const PAGE_STEP: isize = 10;
-
-/// How long a status-bar message stays visible before clearing itself —
-/// it's always still in `log_history` (leader+`l`) regardless, so nothing
-/// is lost by clearing the footer quickly instead of leaving it there until
-/// the next action happens to overwrite it.
-pub(crate) const STATUS_MESSAGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Normal,
@@ -115,6 +103,22 @@ impl NoteSort {
             NoteSort::Filename => "filename",
             NoteSort::TitleAz => "title A-Z",
             NoteSort::DateNewest => "date (newest first)",
+        }
+    }
+
+    /// Parses `config.general.default_note_sort` — case-insensitive,
+    /// substring-tolerant match against each variant's own label, falling
+    /// back to `Filename` (the existing default) for anything
+    /// unrecognized, same leniency `pdf_theme` already has for a typo'd
+    /// theme name rather than refusing to start.
+    fn from_config_str(s: &str) -> Self {
+        let s = s.trim().to_lowercase();
+        if s.starts_with("title") {
+            NoteSort::TitleAz
+        } else if s.starts_with("date") {
+            NoteSort::DateNewest
+        } else {
+            NoteSort::Filename
         }
     }
 }
@@ -422,9 +426,10 @@ pub struct App {
     pub outline_selected: usize,
     pub status_message: Option<String>,
     /// When `status_message` was last set — the footer only shows it for
-    /// `STATUS_MESSAGE_TIMEOUT`, after which `expire_status_message` (called
-    /// once per `run()` loop iteration) clears it. It's always still in
-    /// `log_history` regardless (leader+`l`), so nothing is actually lost.
+    /// `config.general.status_message_timeout_secs`, after which
+    /// `expire_status_message` (called once per `run()` loop iteration)
+    /// clears it. It's always still in `log_history` regardless
+    /// (leader+`l`), so nothing is actually lost.
     status_message_set_at: Option<std::time::Instant>,
     /// Branch/dirty/ahead-behind for the selected notebook — refreshed
     /// whenever the notebook, folder, or notes change (`refresh_git_status`).
@@ -863,21 +868,22 @@ fn parse_log_line(line: &str) -> Option<LogEntry> {
 }
 
 /// Reads whatever `log_path` already has from previous sessions, capped to
-/// the same 500-entry window `log_history` keeps in memory — the file
-/// itself isn't capped (that's what the logs modal's `x`/clear is for), but
-/// there's no reason to load more than the in-memory view will ever show.
-/// Missing file, unreadable file, or unparseable lines are all silently
-/// tolerated here (an empty prior history is the correct fallback, not a
-/// startup error) — malformed *individual* lines are just skipped rather
-/// than failing the whole read, same "one bad file doesn't blank out
-/// everything" spirit as `Notebook::list_notes`.
-fn load_log_history(path: &std::path::Path) -> Vec<LogEntry> {
+/// the same `limit`-entry window `log_history` keeps in memory
+/// (`config.general.log_history_limit`) — the file itself isn't capped
+/// (that's what the logs modal's `x`/clear is for), but there's no reason
+/// to load more than the in-memory view will ever show. Missing file,
+/// unreadable file, or unparseable lines are all silently tolerated here
+/// (an empty prior history is the correct fallback, not a startup error) —
+/// malformed *individual* lines are just skipped rather than failing the
+/// whole read, same "one bad file doesn't blank out everything" spirit as
+/// `Notebook::list_notes`.
+fn load_log_history(path: &std::path::Path, limit: usize) -> Vec<LogEntry> {
     let Ok(contents) = std::fs::read_to_string(path) else {
         return Vec::new();
     };
     let mut entries: Vec<LogEntry> = contents.lines().filter_map(parse_log_line).collect();
-    if entries.len() > 500 {
-        entries.drain(..entries.len() - 500);
+    if entries.len() > limit {
+        entries.drain(..entries.len() - limit);
     }
     entries
 }
@@ -886,6 +892,7 @@ impl App {
     pub fn new(config: Config, store: NotebookStore) -> shiki_core::Result<Self> {
         let theme = config.theme.resolve();
         let show_dates = config.general.show_dates;
+        let note_sort = NoteSort::from_config_str(&config.general.default_note_sort);
         let keymaps = KeyMaps::from_config(&config.keybindings);
         let notebooks = store.list()?;
         let (folders, notes) = notebooks
@@ -901,12 +908,16 @@ impl App {
             .first()
             .and_then(|nb| shiki_core::git::file_statuses(&nb.path).ok())
             .unwrap_or_default();
+        let log_history_limit = config.general.log_history_limit;
         let log_path = Config::default_log_path().ok();
         let log_history = log_path
             .as_deref()
-            .map(load_log_history)
+            .map(|p| load_log_history(p, log_history_limit))
             .unwrap_or_default();
         let trash_root = Config::default_trash_dir().ok();
+        if let Some(root) = &trash_root {
+            shiki_core::trash::purge_older_than(root, config.general.trash_retention_days);
+        }
         let available_themes = shiki_config::themes::all();
         let theme_index = available_themes
             .iter()
@@ -1003,7 +1014,7 @@ impl App {
             available_themes,
             theme_index,
             theme_picker_index: theme_index,
-            note_sort: NoteSort::default(),
+            note_sort,
             pending_input: None,
             pending_input_title: None,
             pending_delete: None,
@@ -1093,6 +1104,15 @@ impl App {
         }
     }
 
+    /// How many rows/lines `PageUp`/`PageDown` move by, across every
+    /// scrollable list and the PREVIEW scroll (`config.general.page_step`)
+    /// — one consistent "big jump" step everywhere instead of matching
+    /// whatever's currently visible on screen (not knowable from most call
+    /// sites without threading the render area through). Signed since
+    /// several call sites negate it directly for the "up" direction.
+    pub(crate) fn page_step(&self) -> isize {
+        self.config.general.page_step as isize
+    }
     /// Sets the status-bar message and records it in `log_history`, so an
     /// error isn't lost once the footer clears it — see the logs modal
     /// (leader+`l`) for the permanent record.
@@ -1103,7 +1123,7 @@ impl App {
         };
         self.persist_log_entry(&entry);
         self.log_history.push(entry);
-        if self.log_history.len() > 500 {
+        if self.log_history.len() > self.config.general.log_history_limit {
             self.log_history.remove(0);
         }
         self.status_message = Some(message);
@@ -1160,13 +1180,15 @@ impl App {
     }
 
     /// Clears the footer's status message once it's been showing for
-    /// `STATUS_MESSAGE_TIMEOUT` — called once per `run()` loop iteration.
-    /// It stays in `log_history` regardless, so this only shortens how long
-    /// it sits in the footer pushing other segments around, not how long
-    /// it's actually retrievable.
+    /// `config.general.status_message_timeout_secs` — called once per
+    /// `run()` loop iteration. It stays in `log_history` regardless, so
+    /// this only shortens how long it sits in the footer pushing other
+    /// segments around, not how long it's actually retrievable.
     fn expire_status_message(&mut self) {
         if let Some(set_at) = self.status_message_set_at {
-            if set_at.elapsed() >= STATUS_MESSAGE_TIMEOUT {
+            let timeout =
+                std::time::Duration::from_secs(self.config.general.status_message_timeout_secs);
+            if set_at.elapsed() >= timeout {
                 self.status_message = None;
                 self.status_message_set_at = None;
             }
@@ -2028,21 +2050,21 @@ pub fn centered_rect(area: Rect, width: u16, height: u16) -> Rect {
     area
 }
 
-/// Fixed width of the notebook drawer (`leader+b`) — narrow enough to leave
-/// most of the screen for the 3-column layout underneath, wide enough for a
-/// notebook name plus `↑3 ↓2 +5` worth of status.
-pub const DRAWER_WIDTH: u16 = 30;
-
 /// The notebook drawer's rect — left-anchored, not center-flexed like every
 /// other popup here, since it's meant to read as a persistent sidebar
 /// rather than a centered dialog. Excludes the bottom status-bar row so it
 /// never paints over it. Shared by rendering and mouse hit-testing, same
-/// reason `global_search_popup_area` is.
-pub fn drawer_area(frame_area: Rect) -> Rect {
+/// reason `global_search_popup_area` is. `width` is
+/// `config.general.drawer_width` — narrow enough by default to leave most
+/// of the screen for the 3-column layout underneath, wide enough for a
+/// notebook name plus `↑3 ↓2 +5` worth of status — clamped against the
+/// frame's actual width regardless of what's configured, so an overly
+/// large value on a narrow terminal can't push the drawer off-screen.
+pub fn drawer_area(frame_area: Rect, width: u16) -> Rect {
     Rect {
         x: frame_area.x,
         y: frame_area.y,
-        width: DRAWER_WIDTH.min(frame_area.width),
+        width: width.min(frame_area.width),
         height: frame_area.height.saturating_sub(1),
     }
 }

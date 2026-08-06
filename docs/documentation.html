@@ -733,6 +733,14 @@ Content in **markdown**.
           <tr><td><code>wikilink_autocomplete</code></td><td><code>true</code></td><td>Typing <code>[[</code> in the inline editor opens the wikilink autocomplete menu; off falls through to a literal <code>[[</code></td></tr>
           <tr><td><code>daily_agenda</code></td><td><code>true</code></td><td>A new daily note gets a "## Due today" section listing pending tasks across every notebook</td></tr>
           <tr><td><code>compact_footer</code></td><td><code>false</code></td><td>Hides char/word count, reading time, and note-count detail from the footer, leaving just the essentials</td></tr>
+          <tr><td><code>status_message_timeout_secs</code></td><td><code>2</code></td><td>How long a footer status message stays visible before clearing itself (the full message is always in the logs modal regardless)</td></tr>
+          <tr><td><code>drawer_width</code></td><td><code>30</code></td><td>Width in columns of the notebook drawer (<code>leader</code> then <code>b</code>); clamped against the frame's actual width at render time</td></tr>
+          <tr><td><code>tasks_show_done_default</code></td><td><code>false</code></td><td>Whether the tasks view starts showing every task, including done ones, instead of just pending</td></tr>
+          <tr><td><code>default_note_sort</code></td><td><code>"filename"</code></td><td>Which order the NOTES list sorts by on a fresh launch — <code>"filename"</code>, <code>"title"</code>, or <code>"date"</code>; the notes-scope <code>o</code> cycle still changes it for the rest of the session</td></tr>
+          <tr><td><code>log_history_limit</code></td><td><code>500</code></td><td>Max entries kept in the logs modal and the persisted log file</td></tr>
+          <tr><td><code>trash_retention_days</code></td><td><code>0</code></td><td>Days a deleted note/folder stays in the trash before being permanently purged at startup — <code>0</code> means never auto-purge</td></tr>
+          <tr><td><code>reading_wpm</code></td><td><code>200</code></td><td>Words-per-minute used for the footer's "N min read" estimate</td></tr>
+          <tr><td><code>page_step</code></td><td><code>10</code></td><td>How many rows <code>PageUp</code>/<code>PageDown</code> (and the mouse wheel) move at once, across every scrollable list/modal</td></tr>
         </tbody>
       </table>
       <div class="doc-callout">
@@ -1008,6 +1016,28 @@ daily_agenda = true
 # Hides char/word count, reading time, and note-count detail from the
 # footer, leaving just the essentials.
 compact_footer = false
+# How long a footer status message stays visible before clearing itself.
+status_message_timeout_secs = 2
+# Width in columns of the notebook drawer (leader+`b`). Clamped against
+# the frame's actual width at render time regardless of this value.
+drawer_width = 30
+# Whether the tasks view (leader+`t`) starts showing every task, including
+# already-done ones, instead of just pending.
+tasks_show_done_default = false
+# "filename", "title", or "date" — which order the NOTES list sorts by on
+# a fresh launch.
+default_note_sort = "filename"
+# Max entries kept in the logs modal (leader+`l`) and the persisted log
+# file.
+log_history_limit = 500
+# Days a deleted note/folder stays in the trash before being permanently
+# purged at startup. 0 (the default) means never auto-purge.
+trash_retention_days = 0
+# Words-per-minute used for the footer's "N min read" estimate.
+reading_wpm = 200
+# How many rows PageUp/PageDown (and the mouse wheel) move at once, across
+# every scrollable list/modal in the TUI.
+page_step = 10
 
 [keybindings]
 leader = "space"

@@ -160,7 +160,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     }
 
     if app.show_drawer {
-        let drawer_rect = drawer_area(frame.area());
+        let drawer_rect = drawer_area(frame.area(), app.config.general.drawer_width);
         frame.render_widget(Clear, drawer_rect);
         panel_drawer::render(frame, drawer_rect, app);
     }

@@ -6,7 +6,7 @@ use crate::app::{
     drawer_area, global_search_layout, global_search_popup_area, is_notebook_git_action,
     looks_like_git_url, looks_like_path, relative_folder, shift, App, BatchOp, DeleteTarget,
     EditorFindState, FindField, Focus, Mode, PendingInput, PreviewSelection, QuickCommand,
-    SelectedEntry, TrashedEntry, UpdateMsg, UpdateState, PAGE_STEP,
+    SelectedEntry, TrashedEntry, UpdateMsg, UpdateState,
 };
 use crate::editor::InlineEditor;
 use crate::icons;
@@ -218,10 +218,12 @@ impl App {
             KeyCode::PageDown => {
                 let len = self.settings_row_count();
                 self.settings_selected =
-                    (self.settings_selected + PAGE_STEP as usize).min(len.saturating_sub(1));
+                    (self.settings_selected + self.page_step() as usize).min(len.saturating_sub(1));
             }
             KeyCode::PageUp => {
-                self.settings_selected = self.settings_selected.saturating_sub(PAGE_STEP as usize);
+                self.settings_selected = self
+                    .settings_selected
+                    .saturating_sub(self.page_step() as usize);
             }
             KeyCode::Home => self.settings_selected = 0,
             KeyCode::End => self.settings_selected = self.settings_row_count().saturating_sub(1),
@@ -374,6 +376,16 @@ impl App {
             ));
             return;
         }
+        if field == GeneralField::TasksShowDoneDefault {
+            self.config.general.tasks_show_done_default =
+                !self.config.general.tasks_show_done_default;
+            self.save_config();
+            self.set_status(format!(
+                "tasks_show_done_default -> {}",
+                self.config.general.tasks_show_done_default
+            ));
+            return;
+        }
         let (label, prefill) = match field {
             GeneralField::DefaultNotebook => (
                 "default_notebook",
@@ -383,6 +395,29 @@ impl App {
             GeneralField::DailyTemplate => {
                 ("daily_template", self.config.general.daily_template.clone())
             }
+            GeneralField::StatusMessageTimeoutSecs => (
+                "status_message_timeout_secs",
+                self.config.general.status_message_timeout_secs.to_string(),
+            ),
+            GeneralField::DrawerWidth => {
+                ("drawer_width", self.config.general.drawer_width.to_string())
+            }
+            GeneralField::DefaultNoteSort => (
+                "default_note_sort",
+                self.config.general.default_note_sort.clone(),
+            ),
+            GeneralField::LogHistoryLimit => (
+                "log_history_limit",
+                self.config.general.log_history_limit.to_string(),
+            ),
+            GeneralField::TrashRetentionDays => (
+                "trash_retention_days",
+                self.config.general.trash_retention_days.to_string(),
+            ),
+            GeneralField::ReadingWpm => {
+                ("reading_wpm", self.config.general.reading_wpm.to_string())
+            }
+            GeneralField::PageStep => ("page_step", self.config.general.page_step.to_string()),
             GeneralField::UseFavoriteEditor
             | GeneralField::MouseDragSelection
             | GeneralField::ShowHints
@@ -392,7 +427,8 @@ impl App {
             | GeneralField::ShowDates
             | GeneralField::WikilinkAutocomplete
             | GeneralField::DailyAgenda
-            | GeneralField::CompactFooter => unreachable!(),
+            | GeneralField::CompactFooter
+            | GeneralField::TasksShowDoneDefault => unreachable!(),
         };
         self.show_settings = false;
         self.pending_input_title = Some(format!(" {label} "));
@@ -850,11 +886,11 @@ impl App {
                 self.logs_selected = self.logs_selected.saturating_sub(1);
             }
             KeyCode::PageDown => {
-                self.logs_selected = (self.logs_selected + PAGE_STEP as usize)
+                self.logs_selected = (self.logs_selected + self.page_step() as usize)
                     .min(self.log_history.len().saturating_sub(1));
             }
             KeyCode::PageUp => {
-                self.logs_selected = self.logs_selected.saturating_sub(PAGE_STEP as usize);
+                self.logs_selected = self.logs_selected.saturating_sub(self.page_step() as usize);
             }
             KeyCode::Home => self.logs_selected = 0,
             KeyCode::End => self.logs_selected = self.log_history.len().saturating_sub(1),
@@ -1129,11 +1165,13 @@ impl App {
                 self.outline_selected = self.outline_selected.saturating_sub(1);
             }
             KeyCode::PageDown => {
-                self.outline_selected = (self.outline_selected + PAGE_STEP as usize)
+                self.outline_selected = (self.outline_selected + self.page_step() as usize)
                     .min(self.outline_headings.len().saturating_sub(1));
             }
             KeyCode::PageUp => {
-                self.outline_selected = self.outline_selected.saturating_sub(PAGE_STEP as usize);
+                self.outline_selected = self
+                    .outline_selected
+                    .saturating_sub(self.page_step() as usize);
             }
             KeyCode::Home => self.outline_selected = 0,
             KeyCode::End => {
@@ -1180,11 +1218,13 @@ impl App {
                 self.history_selected = self.history_selected.saturating_sub(1);
             }
             KeyCode::PageDown => {
-                self.history_selected = (self.history_selected + PAGE_STEP as usize)
+                self.history_selected = (self.history_selected + self.page_step() as usize)
                     .min(self.history_entries.len().saturating_sub(1));
             }
             KeyCode::PageUp => {
-                self.history_selected = self.history_selected.saturating_sub(PAGE_STEP as usize);
+                self.history_selected = self
+                    .history_selected
+                    .saturating_sub(self.page_step() as usize);
             }
             KeyCode::Home => self.history_selected = 0,
             KeyCode::End => self.history_selected = self.history_entries.len().saturating_sub(1),
@@ -1279,11 +1319,11 @@ impl App {
                 self.tree_selected = self.tree_selected.saturating_sub(1);
             }
             KeyCode::PageDown => {
-                self.tree_selected = (self.tree_selected + PAGE_STEP as usize)
+                self.tree_selected = (self.tree_selected + self.page_step() as usize)
                     .min(self.tree_note_count().saturating_sub(1));
             }
             KeyCode::PageUp => {
-                self.tree_selected = self.tree_selected.saturating_sub(PAGE_STEP as usize);
+                self.tree_selected = self.tree_selected.saturating_sub(self.page_step() as usize);
             }
             KeyCode::Home => self.tree_selected = 0,
             KeyCode::End => self.tree_selected = self.tree_note_count().saturating_sub(1),
@@ -1351,11 +1391,11 @@ impl App {
                 self.link_selected = self.link_selected.saturating_sub(1);
             }
             KeyCode::PageDown => {
-                self.link_selected = (self.link_selected + PAGE_STEP as usize)
+                self.link_selected = (self.link_selected + self.page_step() as usize)
                     .min(self.link_selectable_count().saturating_sub(1));
             }
             KeyCode::PageUp => {
-                self.link_selected = self.link_selected.saturating_sub(PAGE_STEP as usize);
+                self.link_selected = self.link_selected.saturating_sub(self.page_step() as usize);
             }
             KeyCode::Home => self.link_selected = 0,
             KeyCode::End => self.link_selected = self.link_selectable_count().saturating_sub(1),
@@ -1461,10 +1501,11 @@ impl App {
 
     /// Opens the global tasks view: every checkbox task across every
     /// notebook (`NotebookStore::all_notes`, the same walk global search
-    /// does on open), pending-only by default. Built fresh every time it
-    /// opens, same as the tags/links modals.
+    /// does on open), pending-only unless `config.general.tasks_show_done_default`
+    /// says otherwise. Built fresh every time it opens, same as the
+    /// tags/links modals.
     fn open_tasks(&mut self) {
-        self.tasks_show_done = false;
+        self.tasks_show_done = self.config.general.tasks_show_done_default;
         self.task_selected = 0;
         self.rebuild_task_rows();
         if self.task_rows.is_empty() {
@@ -1492,11 +1533,11 @@ impl App {
                 self.task_selected = self.task_selected.saturating_sub(1);
             }
             KeyCode::PageDown => {
-                self.task_selected = (self.task_selected + PAGE_STEP as usize)
+                self.task_selected = (self.task_selected + self.page_step() as usize)
                     .min(self.task_selectable_count().saturating_sub(1));
             }
             KeyCode::PageUp => {
-                self.task_selected = self.task_selected.saturating_sub(PAGE_STEP as usize);
+                self.task_selected = self.task_selected.saturating_sub(self.page_step() as usize);
             }
             KeyCode::Home => self.task_selected = 0,
             KeyCode::End => self.task_selected = self.task_selectable_count().saturating_sub(1),
@@ -1687,13 +1728,14 @@ impl App {
                 self.global_search_selected = self.global_search_selected.saturating_sub(1)
             }
             KeyCode::PageDown => {
-                self.global_search_selected = (self.global_search_selected + PAGE_STEP as usize)
+                self.global_search_selected = (self.global_search_selected
+                    + self.page_step() as usize)
                     .min(self.global_search_results.len().saturating_sub(1));
             }
             KeyCode::PageUp => {
                 self.global_search_selected = self
                     .global_search_selected
-                    .saturating_sub(PAGE_STEP as usize);
+                    .saturating_sub(self.page_step() as usize);
             }
             KeyCode::Home => self.global_search_selected = 0,
             KeyCode::End => {
@@ -1899,7 +1941,7 @@ impl App {
             return;
         }
         if self.show_drawer {
-            let area = drawer_area(self.last_frame_area);
+            let area = drawer_area(self.last_frame_area, self.config.general.drawer_width);
             let hit = panel_drawer::drawer_hit_at(self.drawer_statuses.len(), area, column, row);
             match hit {
                 Some(panel_drawer::DrawerHit::Notebook(index)) => {
@@ -3307,10 +3349,36 @@ impl App {
             Some(PendingInput::SettingsGeneralText) => {
                 use crate::panel_settings::GeneralField;
                 self.show_settings = true;
-                if value.is_empty() {
-                    self.set_status("unchanged (empty)".into());
-                } else {
-                    let label = match GeneralField::ALL[self.settings_selected] {
+                let field = GeneralField::ALL[self.settings_selected];
+                // default_note_sort is free text ("filename"/"title"/"date",
+                // tolerantly parsed — see NoteSort::from_config_str), so an
+                // empty value here isn't "cancelled" the way it is for
+                // every other field; it just resolves to the fallback.
+                //
+                // A labeled block (not an early `return`) so a parse error
+                // still reaches this arm's shared tail below, which is
+                // itself just the very end of this match arm — but more
+                // importantly so it can't ever skip the *function's* own
+                // tail after the outer `match kind` closes
+                // (`pending_input_title = None; mode = Mode::Normal;`),
+                // which an early `return` from inside a nested macro would.
+                let label: Option<&'static str> = 'field: {
+                    if value.is_empty() && field != GeneralField::DefaultNoteSort {
+                        self.set_status("unchanged (empty)".into());
+                        break 'field None;
+                    }
+                    macro_rules! parse_or_report {
+                        ($ty:ty) => {
+                            match value.parse::<$ty>() {
+                                Ok(n) => n,
+                                Err(_) => {
+                                    self.set_status(format!("'{value}' isn't a whole number"));
+                                    break 'field None;
+                                }
+                            }
+                        };
+                    }
+                    Some(match field {
                         GeneralField::DefaultNotebook => {
                             self.config.general.default_notebook = value.clone();
                             "default_notebook"
@@ -3323,6 +3391,34 @@ impl App {
                             self.config.general.daily_template = value.clone();
                             "daily_template"
                         }
+                        GeneralField::StatusMessageTimeoutSecs => {
+                            self.config.general.status_message_timeout_secs = parse_or_report!(u64);
+                            "status_message_timeout_secs"
+                        }
+                        GeneralField::DrawerWidth => {
+                            self.config.general.drawer_width = parse_or_report!(u16);
+                            "drawer_width"
+                        }
+                        GeneralField::DefaultNoteSort => {
+                            self.config.general.default_note_sort = value.clone();
+                            "default_note_sort"
+                        }
+                        GeneralField::LogHistoryLimit => {
+                            self.config.general.log_history_limit = parse_or_report!(usize);
+                            "log_history_limit"
+                        }
+                        GeneralField::TrashRetentionDays => {
+                            self.config.general.trash_retention_days = parse_or_report!(u32);
+                            "trash_retention_days"
+                        }
+                        GeneralField::ReadingWpm => {
+                            self.config.general.reading_wpm = parse_or_report!(usize);
+                            "reading_wpm"
+                        }
+                        GeneralField::PageStep => {
+                            self.config.general.page_step = parse_or_report!(usize);
+                            "page_step"
+                        }
                         GeneralField::UseFavoriteEditor => "use_favorite_editor",
                         GeneralField::MouseDragSelection => "mouse_drag_selection",
                         GeneralField::ShowHints => "show_hints",
@@ -3333,7 +3429,10 @@ impl App {
                         GeneralField::WikilinkAutocomplete => "wikilink_autocomplete",
                         GeneralField::DailyAgenda => "daily_agenda",
                         GeneralField::CompactFooter => "compact_footer",
-                    };
+                        GeneralField::TasksShowDoneDefault => "tasks_show_done_default",
+                    })
+                };
+                if let Some(label) = label {
                     self.save_config();
                     self.set_status(format!("{label} -> '{value}'"));
                 }
@@ -3955,8 +4054,8 @@ impl App {
             // Always replaces the generic forward for these two — see
             // `editor_scroll_cursor`'s own doc comment for why forwarding
             // them to `ratatui-textarea` does nothing in this editor.
-            KeyCode::PageDown => self.editor_scroll_cursor(PAGE_STEP),
-            KeyCode::PageUp => self.editor_scroll_cursor(-PAGE_STEP),
+            KeyCode::PageDown => self.editor_scroll_cursor(self.page_step()),
+            KeyCode::PageUp => self.editor_scroll_cursor(-self.page_step()),
             // Smart Home (no modifiers): toggles between the first
             // non-whitespace character and column 0, instead of always
             // column 0 — the common modern-editor convention (VS Code,
@@ -4767,7 +4866,7 @@ impl App {
     }
     /// Moves the editor's cursor `delta` logical rows (clamped to the
     /// buffer), preserving column as closely as the target row allows —
-    /// drives both `PageUp`/`PageDown` (`delta = ±PAGE_STEP`) and mouse
+    /// drives both `PageUp`/`PageDown` (`delta = ±self.page_step()`) and mouse
     /// wheel scrolling. This exists because forwarding `PageUp`/`PageDown`
     /// to `ratatui-textarea` (as the generic catch-all does for every other
     /// key) does nothing at all in this editor: verified live.
@@ -5315,8 +5414,8 @@ impl App {
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => self.move_selection(1),
             KeyCode::Char('k') | KeyCode::Up => self.move_selection(-1),
-            KeyCode::PageDown => self.move_selection(PAGE_STEP),
-            KeyCode::PageUp => self.move_selection(-PAGE_STEP),
+            KeyCode::PageDown => self.move_selection(self.page_step()),
+            KeyCode::PageUp => self.move_selection(-self.page_step()),
             KeyCode::Home => self.jump_to_start(),
             KeyCode::End => self.jump_to_end(),
             KeyCode::Esc if self.mode == Mode::Visual => self.mode = Mode::Normal,

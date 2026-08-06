@@ -77,10 +77,18 @@ pub enum GeneralField {
     WikilinkAutocomplete,
     DailyAgenda,
     CompactFooter,
+    StatusMessageTimeoutSecs,
+    DrawerWidth,
+    TasksShowDoneDefault,
+    DefaultNoteSort,
+    LogHistoryLimit,
+    TrashRetentionDays,
+    ReadingWpm,
+    PageStep,
 }
 
 impl GeneralField {
-    pub const ALL: [GeneralField; 13] = [
+    pub const ALL: [GeneralField; 21] = [
         GeneralField::DefaultNotebook,
         GeneralField::Editor,
         GeneralField::DailyTemplate,
@@ -94,6 +102,14 @@ impl GeneralField {
         GeneralField::WikilinkAutocomplete,
         GeneralField::DailyAgenda,
         GeneralField::CompactFooter,
+        GeneralField::StatusMessageTimeoutSecs,
+        GeneralField::DrawerWidth,
+        GeneralField::TasksShowDoneDefault,
+        GeneralField::DefaultNoteSort,
+        GeneralField::LogHistoryLimit,
+        GeneralField::TrashRetentionDays,
+        GeneralField::ReadingWpm,
+        GeneralField::PageStep,
     ];
 }
 
@@ -341,6 +357,38 @@ fn general_rows(app: &App) -> Vec<Line<'static>> {
             "compact_footer",
             cfg.general.compact_footer.to_string(),
         ),
+        row_line(
+            app,
+            "status_message_timeout_secs",
+            cfg.general.status_message_timeout_secs.to_string(),
+        ),
+        row_line(app, "drawer_width", cfg.general.drawer_width.to_string()),
+        row_line(
+            app,
+            "tasks_show_done_default",
+            cfg.general.tasks_show_done_default.to_string(),
+        ),
+        row_line(
+            app,
+            "default_note_sort",
+            cfg.general.default_note_sort.clone(),
+        ),
+        row_line(
+            app,
+            "log_history_limit",
+            cfg.general.log_history_limit.to_string(),
+        ),
+        row_line(
+            app,
+            "trash_retention_days",
+            if cfg.general.trash_retention_days == 0 {
+                "never".to_string()
+            } else {
+                cfg.general.trash_retention_days.to_string()
+            },
+        ),
+        row_line(app, "reading_wpm", cfg.general.reading_wpm.to_string()),
+        row_line(app, "page_step", cfg.general.page_step.to_string()),
     ]
 }
 

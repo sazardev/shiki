@@ -32,6 +32,14 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   toggle instead of resetting every launch), `wikilink_autocomplete` (disable the `[[` menu),
   `daily_agenda` (skip the "Due today" section on new daily notes), and `compact_footer` (hide
   char/word count and reading time, leaving just the essentials).
+- Eight more `[general]` tuning knobs, all editable from the GENERAL tab in Settings:
+  `status_message_timeout_secs` (how long a footer message stays visible), `drawer_width` (the
+  notebook drawer's width in columns), `tasks_show_done_default` (whether the tasks view starts
+  showing done tasks too), `default_note_sort` (which order NOTES sorts by on launch —
+  `"filename"`/`"title"`/`"date"`), `log_history_limit` (max entries kept in the logs modal/file),
+  `trash_retention_days` (auto-purge trash older than N days at startup — `0` means never),
+  `reading_wpm` (words-per-minute for the "N min read" estimate), and `page_step` (how many rows
+  `PageUp`/`PageDown` move at once, everywhere).
 
 ## [0.9.0] - 2026-08-04
 

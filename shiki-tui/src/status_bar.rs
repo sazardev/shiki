@@ -15,15 +15,16 @@ fn word_count(body: &str) -> usize {
     body.split_whitespace().count()
 }
 
-/// Rounded up to the nearest minute at the common 200wpm estimate (the
-/// same figure Medium/most reading-time plugins use), with a floor of 1
-/// for any non-empty note — "0 min read" reads as broken, not as "very
-/// short".
-fn reading_time_minutes(words: usize) -> usize {
+/// Rounded up to the nearest minute at `wpm` (`config.general.reading_wpm`,
+/// defaulting to 200 — the same figure Medium/most reading-time plugins
+/// use), with a floor of 1 for any non-empty note — "0 min read" reads as
+/// broken, not as "very short". A configured `0` is treated the same as
+/// "not set" (falls back to 1 word/minute rather than dividing by zero).
+fn reading_time_minutes(words: usize, wpm: usize) -> usize {
     if words == 0 {
         return 0;
     }
-    words.div_ceil(200).max(1)
+    words.div_ceil(wpm.max(1)).max(1)
 }
 
 /// Only worth announcing when it's not the default — a "NORMAL" label on
@@ -153,7 +154,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                     "{}{} chars · {words} words · {} min read",
                     icons::NOTE,
                     note.body.chars().count(),
-                    reading_time_minutes(words)
+                    reading_time_minutes(words, app.config.general.reading_wpm)
                 )
             }
             _ => format!("{}{} notes", icons::NOTE, app.notes.len()),
@@ -312,10 +313,18 @@ mod tests {
 
     #[test]
     fn reading_time_rounds_up_at_200_words_per_minute() {
-        assert_eq!(reading_time_minutes(0), 0);
-        assert_eq!(reading_time_minutes(1), 1);
-        assert_eq!(reading_time_minutes(200), 1);
-        assert_eq!(reading_time_minutes(201), 2);
-        assert_eq!(reading_time_minutes(500), 3);
+        assert_eq!(reading_time_minutes(0, 200), 0);
+        assert_eq!(reading_time_minutes(1, 200), 1);
+        assert_eq!(reading_time_minutes(200, 200), 1);
+        assert_eq!(reading_time_minutes(201, 200), 2);
+        assert_eq!(reading_time_minutes(500, 200), 3);
+    }
+
+    #[test]
+    fn reading_time_respects_a_configured_wpm() {
+        assert_eq!(reading_time_minutes(100, 100), 1);
+        assert_eq!(reading_time_minutes(101, 100), 2);
+        // A configured 0 doesn't divide by zero — treated as 1wpm instead.
+        assert_eq!(reading_time_minutes(3, 0), 3);
     }
 }
