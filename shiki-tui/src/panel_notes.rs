@@ -35,7 +35,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 if app.is_visually_selected(idx) {
                     style = style.bg(visual_bg);
                 }
-                ListItem::new(format!("{}  {name}/", icons::NOTEBOOK)).style(style)
+                ListItem::new(format!("{}{name}/", icons::NOTEBOOK)).style(style)
             })
             .chain(app.notes.iter().enumerate().map(|(note_idx, note)| {
                 let idx = app.folders.len() + note_idx;
@@ -52,7 +52,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                     None => fg,
                 };
                 let mut spans = vec![ratatui::text::Span::styled(
-                    format!("{}  {}", icons::NOTE, note.frontmatter.title),
+                    format!("{}{}", icons::NOTE, note.frontmatter.title),
                     Style::default().fg(title_color),
                 )];
                 if app.show_dates {
@@ -76,12 +76,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .map(|b| format!(" {b}"))
         .unwrap_or_default();
     let title = format!(
-        " {}  Notes{breadcrumb} [{}]  {}  [/] search ",
+        " {}Notes{breadcrumb} [{}]  {}[/] search ",
         icons::NOTE,
         app.notes.len(),
         icons::SEARCH
     );
-    let highlight_symbol = format!("{} ", icons::ARROW);
+    let highlight_symbol = format!("{}", icons::ARROW);
     let list = List::new(items)
         .block(panel_block(Line::from(title), focused, &app.theme))
         .highlight_style(

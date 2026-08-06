@@ -89,7 +89,7 @@ pub fn render(frame: &mut Frame, frame_area: Rect, app: &App) {
             let task = &row.task;
             let (marker, marker_style) = if task.done {
                 (
-                    format!(" [{}] ", icons::CHECK),
+                    format!(" [{}] ", icons::CHECK.bare()),
                     Style::default().fg(success),
                 )
             } else {
@@ -108,12 +108,12 @@ pub fn render(frame: &mut Frame, frame_area: Rect, app: &App) {
             ];
             if let Some(due) = task.due {
                 spans.push(Span::styled(
-                    format!("  {} {due}", icons::CALENDAR),
+                    format!("  {}{due}", icons::CALENDAR),
                     Style::default().fg(due_color(due, today, task.done, muted, warning, error)),
                 ));
             }
             spans.push(Span::styled(
-                format!("  {} {}", icons::NOTE, row.location),
+                format!("  {}{}", icons::NOTE, row.location),
                 Style::default().fg(muted),
             ));
             ListItem::new(Line::from(spans))
@@ -121,11 +121,11 @@ pub fn render(frame: &mut Frame, frame_area: Rect, app: &App) {
         .collect();
 
     let title = format!(
-        " {}  Tasks [{} pending]  \u{2014}  enter/space toggle \u{B7} l jump \u{B7} a show done \u{B7} esc close ",
+        " {}Tasks [{} pending]  \u{2014}  enter/space toggle \u{B7} l jump \u{B7} a show done \u{B7} esc close ",
         icons::CHECK,
         pending_count(&app.task_rows),
     );
-    let highlight_symbol = format!("{} ", icons::ARROW);
+    let highlight_symbol = format!("{}", icons::ARROW);
     let list = List::new(items)
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(

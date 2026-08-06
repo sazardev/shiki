@@ -329,7 +329,7 @@ impl WhichKeyRow {
         }
     }
 
-    pub fn icon(&self) -> char {
+    pub fn icon(&self) -> crate::icons::Icon {
         match self {
             WhichKeyRow::Bound { action, .. } => action_icon(*action),
             WhichKeyRow::Nav { .. } => crate::icons::ARROW,
@@ -393,7 +393,7 @@ pub fn action_label(action: Action) -> &'static str {
     }
 }
 
-pub fn action_icon(action: Action) -> char {
+pub fn action_icon(action: Action) -> crate::icons::Icon {
     match action {
         Action::ThemePicker => crate::icons::EYE,
         Action::GlobalSearch | Action::JumpSearch => crate::icons::SEARCH,

@@ -19,7 +19,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         app.notebooks
             .iter()
             .map(|nb| {
-                ListItem::new(format!("{}  {}", icons::NOTEBOOK, nb.name))
+                ListItem::new(format!("{}{}", icons::NOTEBOOK, nb.name))
                     .style(Style::default().fg(fg))
             })
             .collect()
@@ -27,15 +27,15 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let count = app.notebooks.len();
     let title = if count == 0 {
-        format!(" {}  Notebooks ", icons::NOTEBOOK)
+        format!(" {}Notebooks ", icons::NOTEBOOK)
     } else {
         format!(
-            " {}  Notebooks [{}/{count}] ",
+            " {}Notebooks [{}/{count}] ",
             icons::NOTEBOOK,
             app.selected_notebook + 1
         )
     };
-    let highlight_symbol = format!("{} ", icons::ARROW);
+    let highlight_symbol = format!("{}", icons::ARROW);
     let list = List::new(items)
         .block(panel_block(Line::from(title), focused, &app.theme))
         .highlight_style(

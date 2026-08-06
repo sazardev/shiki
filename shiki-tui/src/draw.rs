@@ -16,6 +16,7 @@ use ratatui::widgets::{Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 
 pub fn draw(frame: &mut Frame, app: &App) {
+    icons::set_enabled(app.config.theme.icons);
     let background = ratatui::widgets::Block::default()
         .style(ratatui::style::Style::default().bg(hex_to_color(&app.theme.bg)));
     frame.render_widget(background, frame.area());
@@ -88,8 +89,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
                 .iter()
                 .map(|cmd| ListItem::new(cmd.display()))
                 .collect();
-            let highlight_symbol = format!("{} ", icons::ARROW);
-            let list_title = format!(" {}  Quick template ", icons::CALENDAR);
+            let highlight_symbol = format!("{}", icons::ARROW);
+            let list_title = format!(" {}Quick template ", icons::CALENDAR);
             let list = List::new(items)
                 .block(panel_block(Line::from(list_title), true, &app.theme))
                 .highlight_style(
@@ -245,8 +246,8 @@ fn render_theme_picker(frame: &mut Frame, frame_area: Rect, app: &App) {
         .iter()
         .map(|t| ListItem::new(t.name.clone()))
         .collect();
-    let highlight_symbol = format!("{} ", icons::ARROW);
-    let title = format!(" {}  Pick a theme ", icons::EYE);
+    let highlight_symbol = format!("{}", icons::ARROW);
+    let title = format!(" {}Pick a theme ", icons::EYE);
     let list = List::new(items)
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
@@ -276,8 +277,8 @@ fn render_template_picker(frame: &mut Frame, frame_area: Rect, app: &App) {
             None => ListItem::new("(blank, no template)"),
         })
         .collect();
-    let highlight_symbol = format!("{} ", icons::ARROW);
-    let title = format!(" {}  Pick a template ", icons::NOTE);
+    let highlight_symbol = format!("{}", icons::ARROW);
+    let title = format!(" {}Pick a template ", icons::NOTE);
     let list = List::new(items)
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
@@ -301,7 +302,7 @@ fn render_global_search(frame: &mut Frame, frame_area: Rect, app: &App) {
     app.global_search_input.render(
         frame,
         input_area,
-        &format!(" {}  Search all notes ", icons::SEARCH),
+        &format!(" {}Search all notes ", icons::SEARCH),
         hex_to_color(&app.theme.accent),
     );
 
@@ -311,14 +312,14 @@ fn render_global_search(frame: &mut Frame, frame_area: Rect, app: &App) {
         .filter_map(|hit| {
             let (nb, note) = app.global_search_pool.get(hit.index)?;
             Some(ListItem::new(format!(
-                "{}  {} \u{203A} {}",
+                "{}{} \u{203A} {}",
                 icons::NOTE,
                 nb.name,
                 note.frontmatter.title
             )))
         })
         .collect();
-    let highlight_symbol = format!("{} ", icons::ARROW);
+    let highlight_symbol = format!("{}", icons::ARROW);
     let count = app.global_search_results.len();
     let title = format!(" Results [{count}] ");
     let list = List::new(items)
@@ -349,7 +350,7 @@ fn render_update(frame: &mut Frame, frame_area: Rect, app: &App) {
             "Checking GitHub Releases\u{2026}".to_string(),
         ),
         Some(UpdateState::Available(version)) => (
-            format!(" {}  Update available ", icons::DOWNLOAD),
+            format!(" {} Update available ", icons::DOWNLOAD),
             format!("v{current} \u{2192} v{version}\n\n[enter] Download & install    [esc] Cancel"),
         ),
         Some(UpdateState::UpToDate) => (
@@ -393,9 +394,9 @@ fn render_logs(frame: &mut Frame, frame_area: Rect, app: &App) {
             ))
         })
         .collect();
-    let highlight_symbol = format!("{} ", icons::ARROW);
+    let highlight_symbol = format!("{}", icons::ARROW);
     let title = format!(
-        " {}  Logs [{}]  \u{2014}  y/c copy all \u{B7} esc/q close ",
+        " {}Logs [{}]  \u{2014}  y/c copy all \u{B7} esc/q close ",
         icons::LIST,
         app.log_history.len()
     );
@@ -429,13 +430,13 @@ fn render_tree(frame: &mut Frame, frame_area: Rect, app: &App) {
         .map(|row| match row {
             crate::tree::TreeRow::Folder { depth, name } => {
                 ListItem::new(Line::from(Span::styled(
-                    format!("{}{} {name}/", "  ".repeat(*depth), icons::NOTEBOOK),
+                    format!("{}{}{name}/", "  ".repeat(*depth), icons::NOTEBOOK),
                     Style::default().fg(muted).add_modifier(Modifier::BOLD),
                 )))
             }
             crate::tree::TreeRow::Note { depth, note } => ListItem::new(Line::from(Span::styled(
                 format!(
-                    "{}{} {}",
+                    "{}{}{}",
                     "  ".repeat(*depth),
                     icons::NOTE,
                     note.frontmatter.title
@@ -444,9 +445,9 @@ fn render_tree(frame: &mut Frame, frame_area: Rect, app: &App) {
             ))),
         })
         .collect();
-    let highlight_symbol = format!("{} ", icons::ARROW);
+    let highlight_symbol = format!("{}", icons::ARROW);
     let title = format!(
-        " {}  Tree [{} notes]  \u{2014}  enter open \u{B7} esc/q close ",
+        " {}Tree [{} notes]  \u{2014}  enter open \u{B7} esc/q close ",
         icons::TREE,
         app.tree_note_count()
     );
@@ -485,19 +486,19 @@ fn render_links(frame: &mut Frame, frame_area: Rect, app: &App) {
                 text,
                 resolved: Some(_),
             } => ListItem::new(Line::from(Span::styled(
-                format!("  {} {text}", icons::LINK),
+                format!("  {}{text}", icons::LINK),
                 Style::default().fg(fg),
             ))),
             crate::links_panel::LinkRow::Outgoing {
                 text,
                 resolved: None,
             } => ListItem::new(Line::from(Span::styled(
-                format!("  {} {text}  (no matching note)", icons::WARNING),
+                format!("  {}{text}  (no matching note)", icons::WARNING),
                 Style::default().fg(error),
             ))),
             crate::links_panel::LinkRow::Backlink { note } => {
                 ListItem::new(Line::from(Span::styled(
-                    format!("  {} {}", icons::NOTE, note.frontmatter.title),
+                    format!("  {}{}", icons::NOTE, note.frontmatter.title),
                     Style::default().fg(fg),
                 )))
             }
@@ -505,15 +506,15 @@ fn render_links(frame: &mut Frame, frame_area: Rect, app: &App) {
             // so it reads as weaker than a real backlink at a glance.
             crate::links_panel::LinkRow::Mention { note } => {
                 ListItem::new(Line::from(Span::styled(
-                    format!("  {} {}", icons::SEARCH, note.frontmatter.title),
+                    format!("  {}{}", icons::SEARCH, note.frontmatter.title),
                     Style::default().fg(muted),
                 )))
             }
         })
         .collect();
-    let highlight_symbol = format!("{} ", icons::ARROW);
+    let highlight_symbol = format!("{}", icons::ARROW);
     let title = format!(
-        " {}  Links  \u{2014}  enter jump \u{B7} c link mention \u{B7} esc/q close ",
+        " {}Links  \u{2014}  enter jump \u{B7} c link mention \u{B7} esc/q close ",
         icons::LINK
     );
     let list = List::new(items)
@@ -545,7 +546,7 @@ fn render_history(frame: &mut Frame, frame_area: Rect, app: &App) {
     if let Some((commit_id, content)) = &app.history_viewing {
         let short = commit_id.chars().take(7).collect::<String>();
         let title = format!(
-            " {}  Revision {short}  \u{2014}  r revert \u{B7} esc back ",
+            " {}Revision {short}  \u{2014}  r revert \u{B7} esc back ",
             icons::HISTORY
         );
         let paragraph = ratatui::widgets::Paragraph::new(content.as_str())
@@ -570,9 +571,9 @@ fn render_history(frame: &mut Frame, frame_area: Rect, app: &App) {
             ]))
         })
         .collect();
-    let highlight_symbol = format!("{} ", icons::ARROW);
+    let highlight_symbol = format!("{}", icons::ARROW);
     let title = format!(
-        " {}  History [{} revisions]  \u{2014}  enter view \u{B7} r revert \u{B7} esc/q close ",
+        " {}History [{} revisions]  \u{2014}  enter view \u{B7} r revert \u{B7} esc/q close ",
         icons::HISTORY,
         app.history_entries.len()
     );
@@ -633,8 +634,8 @@ fn render_slash_menu(
         .iter()
         .map(|cmd| ListItem::new(format!("/{}  {}", cmd.trigger, cmd.label)))
         .collect();
-    let highlight_symbol = format!("{} ", icons::ARROW);
-    let title = format!(" {}  Slash menu ", icons::PENCIL);
+    let highlight_symbol = format!("{}", icons::ARROW);
+    let title = format!(" {}Slash menu ", icons::PENCIL);
     let list = List::new(items)
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
@@ -714,8 +715,8 @@ fn render_wikilink_menu(
             })
             .collect()
     };
-    let highlight_symbol = format!("{} ", icons::ARROW);
-    let title = format!(" {}  Link to note ", icons::LINK);
+    let highlight_symbol = format!("{}", icons::ARROW);
+    let title = format!(" {}Link to note ", icons::LINK);
     let list = List::new(items)
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(

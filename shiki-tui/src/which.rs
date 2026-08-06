@@ -33,7 +33,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         frame,
         input_area,
         &format!(
-            " {}  Which Key  —  type to filter · enter run · esc close ",
+            " {}Which Key  —  type to filter · enter run · esc close ",
             icons::KEYBOARD
         ),
         hex_to_color(&app.theme.accent),
@@ -67,19 +67,19 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 format!("{:>8} ", row.key()),
                 Style::default().fg(accent).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(format!("{} ", row.icon()), Style::default().fg(accent)),
+            Span::styled(format!("{}", row.icon()), Style::default().fg(accent)),
             Span::styled(row.label().to_string(), Style::default().fg(fg)),
         ])));
     }
 
     let title = format!(
-        " {}  {} of {} bindings — leader is {} ",
+        " {}{} of {} bindings — leader is {} ",
         icons::KEYBOARD,
         entries.len(),
         app.keymaps().entries().len(),
         describe_key(app.keymaps().leader_key())
     );
-    let highlight_symbol = format!("{} ", icons::ARROW);
+    let highlight_symbol = format!("{}", icons::ARROW);
     let list = List::new(items)
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(

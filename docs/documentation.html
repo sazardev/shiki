@@ -771,11 +771,13 @@ Content in **markdown**.
         <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
         <tbody>
           <tr><td><code>name</code></td><td><code>"gruvbox-dark"</code></td><td>Which built-in theme to use as the base (<code>shiki theme list</code> shows every name)</td></tr>
+          <tr><td><code>icons</code></td><td><code>true</code></td><td>When false, every Nerd Font glyph (notebook/note icons, git status, the list-selection marker, …) falls back to plain text — for a terminal font that isn't Nerd-Fonts-patched</td></tr>
           <tr><td><code>[theme.overrides]</code></td><td>all unset</td><td>Override any of the 19 color slots (see <a href="#themes-ref">Included themes</a>) individually — anything left unset falls back to <code>name</code>'s own value for that slot</td></tr>
         </tbody>
       </table>
       <pre class="code">[theme]
 name = "gruvbox-dark"
+icons = true
 
 [theme.overrides]
 accent = "blue"
@@ -818,6 +820,15 @@ bg = "#1e1e2e"</pre>
           <tr><td><code>select_all_ctrl_a</code></td><td><code>false</code></td><td><code>Ctrl+A</code> selects the whole buffer instead of moving to the start of the line</td></tr>
           <tr><td><code>line_numbers</code></td><td><code>false</code></td><td>Shows a line-number gutter in the editor</td></tr>
           <tr><td><code>multi_cursor</code></td><td><code>false</code></td><td><code>Alt+Click</code> adds a cursor, <code>Ctrl+D</code> adds the next occurrence of the current word/selection — full multi-cursor editing</td></tr>
+          <tr><td><code>auto_list_continue</code></td><td><code>true</code></td><td><code>Enter</code> on a list/checkbox/ordered-list line continues the same prefix on the next line; an empty item exits the list instead; also gates <code>Tab</code>/<code>Shift+Tab</code> nesting a list line one level deeper/shallower</td></tr>
+          <tr><td><code>format_shortcuts</code></td><td><code>true</code></td><td><code>Ctrl+B</code> wraps the selection in <code>**bold**</code>, <code>Ctrl+Alt+I</code> in <code>_italic_</code></td></tr>
+          <tr><td><code>auto_pair_brackets</code></td><td><code>true</code></td><td>Typing <code>(</code>, <code>`</code>, or <code>"</code> wraps the current selection in the matching pair (deliberately excludes <code>[</code> so it doesn't interfere with <code>[[wikilink]]</code> autocomplete)</td></tr>
+          <tr><td><code>paste_url_as_link</code></td><td><code>true</code></td><td>Pasting a bare URL over a selection wraps it as <code>[selected text](url)</code></td></tr>
+          <tr><td><code>snippet_expand_tab</code></td><td><code>true</code></td><td><code>Tab</code> expands a matching snippet trigger into its body instead of inserting a literal tab</td></tr>
+          <tr><td><code>typewriter_scroll</code></td><td><code>false</code></td><td>Keeps the cursor's line vertically centered in the editor viewport while typing</td></tr>
+          <tr><td><code>move_line</code></td><td><code>true</code></td><td><code>Alt+↑</code>/<code>Alt+↓</code> move the current line past its neighbor</td></tr>
+          <tr><td><code>duplicate_line</code></td><td><code>true</code></td><td><code>Alt+D</code> duplicates the current line directly below itself</td></tr>
+          <tr><td><code>block_indent_select</code></td><td><code>true</code></td><td><code>Tab</code>/<code>Shift+Tab</code> with an active selection indent/outdent every line the selection spans</td></tr>
         </tbody>
       </table>
       <pre class="code">[editor]
@@ -826,7 +837,16 @@ find_replace = true
 os_clipboard = false
 select_all_ctrl_a = false
 line_numbers = false
-multi_cursor = false</pre>
+multi_cursor = false
+auto_list_continue = true
+format_shortcuts = true
+auto_pair_brackets = true
+paste_url_as_link = true
+snippet_expand_tab = true
+typewriter_scroll = false
+move_line = true
+duplicate_line = true
+block_indent_select = true</pre>
       <p style="max-width:70ch;">
         <code>[[wikilink]]</code> autocomplete is always on too, not gated by <code>[editor]</code>:
         typing <code>[[</code> opens an Obsidian-style fuzzy note picker (the same fuzzy matching
@@ -1019,6 +1039,7 @@ links = "L"
 
 [theme]
 name = "gruvbox-dark"
+icons = true  # false falls back to plain text — no Nerd Font glyphs anywhere
 # Every one of a theme's 19 color slots can be overridden individually —
 # accent, bg, fg, selection, border, statusbar, highlight, error, warning,
 # success, inactive, scrollbar, tab_active, tab_inactive, panel_title,
@@ -1061,6 +1082,15 @@ os_clipboard = false
 select_all_ctrl_a = false
 line_numbers = false
 multi_cursor = false
+auto_list_continue = true
+format_shortcuts = true
+auto_pair_brackets = true
+paste_url_as_link = true
+snippet_expand_tab = true
+typewriter_scroll = false
+move_line = true
+duplicate_line = true
+block_indent_select = true
 
 # PDF export (`shiki publish`, leader+`P`) — pdf_theme picks one of
 # go-pretty-pdf's 17 built-in themes: default, minimal, modern, classic,

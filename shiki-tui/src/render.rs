@@ -236,9 +236,9 @@ fn inline_spans(text: &str, base: Style, link: Style) -> Vec<Span<'static>> {
                 flush(&mut plain, &mut spans, base);
                 let alt: String = chars[i + 2..close_bracket].iter().collect();
                 let label = if alt.is_empty() {
-                    format!("{} image", crate::icons::IMAGE)
+                    format!("{}image", crate::icons::IMAGE)
                 } else {
-                    format!("{} {alt}", crate::icons::IMAGE)
+                    format!("{}{alt}", crate::icons::IMAGE)
                 };
                 spans.push(Span::styled(label, link));
                 i = close_paren + 1;
@@ -562,7 +562,7 @@ pub fn markdown_to_lines_indexed(
         } else if let Some(rest) = line.strip_prefix("- [x] ").or(line.strip_prefix("- [X] ")) {
             Line::from(vec![
                 Span::styled(
-                    format!("{} ", crate::icons::CHECK),
+                    format!("{}", crate::icons::CHECK),
                     Style::default().fg(accent),
                 ),
                 Span::styled(

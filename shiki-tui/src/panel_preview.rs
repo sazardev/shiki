@@ -14,14 +14,14 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let title: Line = match (app.selected_note(), app.selected_folder()) {
         (Some(n), _) => Line::from(vec![
-            Span::raw(format!(" {}  {}  ", icons::EYE, n.frontmatter.title)),
+            Span::raw(format!(" {}{}  ", icons::EYE, n.frontmatter.title)),
             Span::styled(
                 format!("({}) ", n.frontmatter.date.format("%Y-%m-%d")),
                 Style::default().fg(muted),
             ),
         ]),
-        (None, Some(folder)) => Line::from(format!(" {}  {folder}/ ", icons::NOTEBOOK)),
-        (None, None) => Line::from(format!(" {}  Preview ", icons::EYE)),
+        (None, Some(folder)) => Line::from(format!(" {}{folder}/ ", icons::NOTEBOOK)),
+        (None, None) => Line::from(format!(" {}Preview ", icons::EYE)),
     };
     let block = if focused && app.selected_note().is_some() {
         panel_block_reading(title, &app.theme)
@@ -147,13 +147,13 @@ pub(crate) fn format_folder_entries(
     let mut lines = Vec::with_capacity(subfolders.len() + note_titles.len());
     for name in subfolders {
         lines.push(Line::from(Span::styled(
-            format!("{}  {name}/", icons::NOTEBOOK),
+            format!("{}{name}/", icons::NOTEBOOK),
             Style::default().fg(accent).add_modifier(Modifier::BOLD),
         )));
     }
     for title in note_titles {
         lines.push(Line::from(Span::styled(
-            format!("{}  {title}", icons::NOTE),
+            format!("{}{title}", icons::NOTE),
             Style::default().fg(fg),
         )));
     }

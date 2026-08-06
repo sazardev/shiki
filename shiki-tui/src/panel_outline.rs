@@ -33,12 +33,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             .collect()
     };
 
-    let title = format!(
-        " {}  Outline [{}] ",
-        icons::TREE,
-        app.outline_headings.len()
-    );
-    let highlight_symbol = format!("{} ", icons::ARROW);
+    let title = format!(" {}Outline [{}] ", icons::TREE, app.outline_headings.len());
+    let highlight_symbol = format!("{}", icons::ARROW);
     let list = List::new(items)
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(

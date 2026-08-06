@@ -348,12 +348,13 @@ fn main() -> Result<()> {
         }) => {
             let notebook = ctx.notebook_name(notebook);
             let theme = theme.unwrap_or_else(|| ctx.config.export.pdf_theme.clone());
-            let out = out.unwrap_or(
-                ctx.store
-                    .root
-                    .join("exports")
-                    .join(format!("{notebook}.pdf")),
-            );
+            let export_dir = ctx.config.export.export_dir.trim();
+            let export_dir = if export_dir.is_empty() {
+                ctx.store.root.join("exports")
+            } else {
+                std::path::PathBuf::from(export_dir)
+            };
+            let out = out.unwrap_or(export_dir.join(format!("{notebook}.pdf")));
             let cache_dir = ctx.store.root.join("bin");
             commands::publish::run(&ctx.store, &notebook, &out, &theme, &cache_dir)
         }

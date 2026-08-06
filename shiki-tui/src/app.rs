@@ -170,6 +170,16 @@ pub(crate) enum PendingInput {
     /// including the prefilled `.html`, -> HTML) rather than a separate
     /// format-picker step, so one prompt is enough.
     ExportNotebook,
+    /// Save path for the PDF publish (`shiki_core::publish`) — only ever
+    /// opened when `[export].ask_export_path` is on; see
+    /// `App::start_publish_path_prompt`.
+    PublishPath,
+    /// Generic single-line text field for the EXPORT tab in Settings
+    /// (`export_dir`) — same shape as `SettingsGeneralText`/`SettingsGitText`:
+    /// which field it's editing is recovered at confirm time via
+    /// `ExportField::ALL[self.settings_selected]`, not carried on this
+    /// variant.
+    SettingsExportText,
 }
 
 impl PendingInput {
@@ -189,11 +199,14 @@ impl PendingInput {
             PendingInput::SetRemote => " Git remote (URL or local path) ",
             PendingInput::SettingsNotebookRemote => " Git remote (URL or local path) ",
             PendingInput::SettingsNotebookAutoSyncEvery => " Auto-sync every N changes ",
-            PendingInput::SettingsGeneralText | PendingInput::SettingsGitText => " Edit value ",
+            PendingInput::SettingsGeneralText
+            | PendingInput::SettingsGitText
+            | PendingInput::SettingsExportText => " Edit value ",
             PendingInput::SettingsSnippetTrigger => " New snippet trigger ",
             PendingInput::SettingsSnippetLabel => " Snippet label ",
             PendingInput::MoveOrCopy => " Move/copy to ",
             PendingInput::ExportNotebook => " Export path (.html or .md) ",
+            PendingInput::PublishPath => " Save PDF as ",
         }
     }
 

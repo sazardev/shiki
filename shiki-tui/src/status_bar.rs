@@ -67,10 +67,10 @@ pub const COFFEE_URL: &str = "https://buymeacoffee.com/sazarcode";
 /// actually is, the same reasoning `git_status_color`/`git_status_suffix`
 /// being shared between the footer and the drawer was already built on.
 fn right_text() -> (String, std::ops::Range<usize>) {
-    let coffee = format!("{} Support", icons::COFFEE);
+    let coffee = format!("{}Support", icons::COFFEE);
     let prefix = "  ";
     let suffix = format!(
-        "   {} ? help   v{}  ",
+        "   {}? help   v{}  ",
         icons::KEYBOARD,
         env!("CARGO_PKG_VERSION")
     );
@@ -128,7 +128,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .map(|nb| nb.name.as_str())
         .unwrap_or("-");
     spans.push(Span::styled(
-        format!("{} {notebook_name}", icons::NOTEBOOK),
+        format!("{}{notebook_name}", icons::NOTEBOOK),
         plain.fg(fg),
     ));
     spans.push(sep.clone());
@@ -140,13 +140,13 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Some(note) if matches!(app.focus, Focus::Notes | Focus::Preview) => {
             let words = word_count(&note.body);
             format!(
-                "{} {} chars · {words} words · {} min read",
+                "{}{} chars · {words} words · {} min read",
                 icons::NOTE,
                 note.body.chars().count(),
                 reading_time_minutes(words)
             )
         }
-        _ => format!("{} {} notes", icons::NOTE, app.notes.len()),
+        _ => format!("{}{} notes", icons::NOTE, app.notes.len()),
     };
     spans.push(Span::styled(meta, plain.fg(fg)));
 
@@ -157,7 +157,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         if let Some(count) = app.note_revision_count() {
             spans.push(sep.clone());
             spans.push(Span::styled(
-                format!("{} {count} changes", icons::HISTORY),
+                format!("{}{count} changes", icons::HISTORY),
                 plain.fg(muted),
             ));
         }
@@ -183,7 +183,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         let extras = crate::render::git_status_suffix(gs);
         let color = crate::render::git_status_color(&app.theme, gs);
         spans.push(Span::styled(
-            format!("{} {branch}{extras}", icons::GIT),
+            format!("{}{branch}{extras}", icons::GIT),
             plain.fg(color),
         ));
     }
@@ -195,14 +195,14 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         muted
     };
     spans.push(Span::styled(
-        format!("{} {}", icons::PENCIL, app.editor_status_label()),
+        format!("{}{}", icons::PENCIL, app.editor_status_label()),
         plain.fg(editor_color),
     ));
 
     if app.leader_pending {
         spans.push(sep.clone());
         spans.push(Span::styled(
-            format!("{} leader…", icons::KEYBOARD),
+            format!("{}leader…", icons::KEYBOARD),
             plain.fg(accent).add_modifier(Modifier::BOLD),
         ));
     }

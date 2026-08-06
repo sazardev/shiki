@@ -342,6 +342,12 @@ The rest of the editor's mouse/keyboard UX is opt-in via `[editor]` (Settings' E
   inserting a literal tab.
 - `typewriter_scroll` (off by default): keeps the cursor's line vertically centered in the editor
   viewport while typing, instead of only scrolling once the cursor reaches the edge.
+- `move_line` (on by default): `Alt+↑`/`Alt+↓` move the current line past its neighbor.
+- `duplicate_line` (on by default): `Alt+D` duplicates the current line directly below itself.
+- `block_indent_select` (on by default): `Tab`/`Shift+Tab` with an active selection indent/outdent
+  every line the selection spans — a plain block-indent, not list-specific. With this off, `Tab`
+  on a selection falls through to whatever else applies (snippet expansion, list nesting, or a
+  literal tab).
 
 `[[wikilink]]` autocomplete is always on too, not gated by `[editor]`: typing `[[` opens an
 Obsidian-style fuzzy note picker (same fuzzy matching as `/` and global search), showing each
@@ -357,9 +363,7 @@ column 0 — `End` goes to the end of the current line, `Ctrl+Home`/`Ctrl+End` j
 start/end of the note, and the mouse wheel scrolls too. `PageUp`/`PageDown`/mouse-wheel scrolling
 move the cursor itself (there's no independent scroll offset — the editor's word-wrap support
 means it bypasses `tui-textarea`'s own rendering, and with it, `tui-textarea`'s own viewport-based
-`PageUp`/`PageDown`, which otherwise does nothing here). `Tab`/`Shift+Tab` with an active selection
-indent/outdent every line the selection spans — a plain block-indent, not list-specific, also
-always on regardless of `auto_list_continue`.
+`PageUp`/`PageDown`, which otherwise does nothing here).
 
 ---
 
@@ -607,6 +611,7 @@ outline = "o"
 
 [theme]
 name = "gruvbox-dark"
+icons = true  # false falls back to plain text — no Nerd Font glyphs anywhere
 # Every one of a theme's 19 color slots can be overridden individually —
 # accent, bg, fg, selection, border, statusbar, highlight, error, warning,
 # success, inactive, scrollbar, tab_active, tab_inactive, panel_title,
@@ -656,6 +661,9 @@ auto_pair_brackets = true  # typing ( ` " wraps the selection or inserts an empt
 paste_url_as_link = true   # pasting a URL over a selection wraps it as a markdown link
 snippet_expand_tab = true  # Tab expands a matching snippet trigger
 typewriter_scroll = false  # keeps the cursor's line vertically centered while typing
+move_line = true          # Alt+Up/Alt+Down move the current line past its neighbor
+duplicate_line = true     # Alt+D duplicates the current line
+block_indent_select = true  # Tab/Shift+Tab with a selection indent/outdent every line it spans
 
 # PDF export (`shiki publish`, leader+`P`) — pdf_theme picks one of
 # go-pretty-pdf's 17 built-in themes: default, minimal, modern, classic,

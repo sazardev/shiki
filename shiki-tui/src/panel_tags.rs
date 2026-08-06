@@ -24,7 +24,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 .tags()
                 .map(|tag| {
                     ListItem::new(format!(
-                        "{} {tag} ({})",
+                        "{}{tag} ({})",
                         icons::TAG,
                         tags.notes_for(tag).len()
                     ))
@@ -32,7 +32,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 })
                 .collect();
             (
-                format!(" {}  Tags [{}] ", icons::TAG, tags.len()),
+                format!(" {}Tags [{}] ", icons::TAG, tags.len()),
                 items,
                 app.tags_selected,
             )
@@ -50,20 +50,20 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 notes
                     .iter()
                     .map(|n| {
-                        ListItem::new(format!("{}  {}", icons::NOTE, n.frontmatter.title))
+                        ListItem::new(format!("{}{}", icons::NOTE, n.frontmatter.title))
                             .style(Style::default().fg(fg))
                     })
                     .collect()
             };
             (
-                format!(" {}  {tag} [{}]  (h/esc back) ", icons::TAG, notes.len()),
+                format!(" {}{tag} [{}]  (h/esc back) ", icons::TAG, notes.len()),
                 items,
                 app.tags_notes_selected,
             )
         }
     };
 
-    let highlight_symbol = format!("{} ", icons::ARROW);
+    let highlight_symbol = format!("{}", icons::ARROW);
     let list = List::new(items)
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(

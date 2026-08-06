@@ -341,9 +341,10 @@ impl App {
         self.start_input(PendingInput::SettingsGeneralText, prefill);
     }
     /// THEME — `name` opens the existing theme picker (reusing its
-    /// live-preview/commit logic rather than duplicating it); `overrides`
-    /// is informational only, since 19 individual color slots don't fit a
-    /// single-row edit.
+    /// live-preview/commit logic rather than duplicating it); `icons`
+    /// toggles in place, same "flip and save immediately" shape as
+    /// GIT/EDITOR's booleans; `overrides` is informational only, since 19
+    /// individual color slots don't fit a single-row edit.
     fn handle_theme_field_enter(&mut self) {
         use crate::panel_settings::ThemeField;
         match ThemeField::ALL[self.settings_selected] {
@@ -351,6 +352,11 @@ impl App {
                 self.show_settings = false;
                 self.reopen_settings_after_theme_picker = true;
                 self.open_theme_picker();
+            }
+            ThemeField::Icons => {
+                self.config.theme.icons = !self.config.theme.icons;
+                self.save_config();
+                self.set_status(format!("icons -> {}", self.config.theme.icons));
             }
             ThemeField::Overrides => {
                 self.set_status(
@@ -482,25 +488,61 @@ impl App {
                 self.config.editor.typewriter_scroll = !self.config.editor.typewriter_scroll;
                 ("typewriter_scroll", self.config.editor.typewriter_scroll)
             }
+            EditorField::MoveLine => {
+                self.config.editor.move_line = !self.config.editor.move_line;
+                ("move_line", self.config.editor.move_line)
+            }
+            EditorField::DuplicateLine => {
+                self.config.editor.duplicate_line = !self.config.editor.duplicate_line;
+                ("duplicate_line", self.config.editor.duplicate_line)
+            }
+            EditorField::BlockIndentSelect => {
+                self.config.editor.block_indent_select = !self.config.editor.block_indent_select;
+                (
+                    "block_indent_select",
+                    self.config.editor.block_indent_select,
+                )
+            }
         };
         self.save_config();
         self.set_status(format!("{label} -> {new_val}"));
     }
-    /// EXPORT's only field — cycles `pdf_theme` through `PDF_THEMES`
-    /// (wrapping) and saves immediately, same "advance in place, no prompt"
-    /// shape as `toggle_git_bool`/`toggle_editor_bool`, just over a fixed
-    /// string list instead of a bool.
+    /// EXPORT — `pdf_theme` cycles through `PDF_THEMES` (wrapping) and saves
+    /// immediately, same "advance in place, no prompt" shape as
+    /// `toggle_git_bool`/`toggle_editor_bool`; `ask_export_path` toggles in
+    /// place the same way; `export_dir` opens a text prompt
+    /// (`PendingInput::SettingsExportText`, resolved back via
+    /// `ExportField::ALL[settings_selected]` once confirmed, same pattern as
+    /// `SettingsGeneralText`/`SettingsGitText`).
     fn handle_export_field_enter(&mut self) {
-        use crate::panel_settings::PDF_THEMES;
-        let current = self.config.export.pdf_theme.as_str();
-        let next_index = PDF_THEMES
-            .iter()
-            .position(|t| *t == current)
-            .map(|i| (i + 1) % PDF_THEMES.len())
-            .unwrap_or(0);
-        self.config.export.pdf_theme = PDF_THEMES[next_index].to_string();
-        self.save_config();
-        self.set_status(format!("pdf_theme -> {}", self.config.export.pdf_theme));
+        use crate::panel_settings::{ExportField, PDF_THEMES};
+        match ExportField::ALL[self.settings_selected] {
+            ExportField::PdfTheme => {
+                let current = self.config.export.pdf_theme.as_str();
+                let next_index = PDF_THEMES
+                    .iter()
+                    .position(|t| *t == current)
+                    .map(|i| (i + 1) % PDF_THEMES.len())
+                    .unwrap_or(0);
+                self.config.export.pdf_theme = PDF_THEMES[next_index].to_string();
+                self.save_config();
+                self.set_status(format!("pdf_theme -> {}", self.config.export.pdf_theme));
+            }
+            ExportField::AskExportPath => {
+                self.config.export.ask_export_path = !self.config.export.ask_export_path;
+                self.save_config();
+                self.set_status(format!(
+                    "ask_export_path -> {}",
+                    self.config.export.ask_export_path
+                ));
+            }
+            ExportField::ExportDir => {
+                let prefill = self.config.export.export_dir.clone();
+                self.show_settings = false;
+                self.pending_input_title = Some(" export_dir ".to_string());
+                self.start_input(PendingInput::SettingsExportText, prefill);
+            }
+        }
     }
     /// SNIPPETS level 1's `a` — prompts for a brand-new trigger; the
     /// snippet itself (empty label/body) is created once that's confirmed
@@ -567,7 +609,7 @@ impl App {
                         .map(|s| s.body.clone())
                         .unwrap_or_default();
                     let mut editor = InlineEditor::from_contents(&body);
-                    let title = format!(" {}  Editing snippet body — '{trigger}' ", icons::GEAR);
+                    let title = format!(" {}Editing snippet body — '{trigger}' ", icons::GEAR);
                     self.style_inline_editor(&mut editor, title);
                     self.editor = Some(editor);
                     self.editing_snippet = Some(trigger);
@@ -2410,6 +2452,22 @@ impl App {
             .into_owned();
         self.start_input(PendingInput::ExportNotebook, prefill);
     }
+    /// Opens when `[export].ask_export_path` is on — prefilled with the same
+    /// path `publish_notebook` would otherwise silently use
+    /// (`App::resolved_export_dir`), so accepting it as-is behaves exactly
+    /// like the setting being off.
+    pub(crate) fn start_publish_path_prompt(&mut self) {
+        let Some(nb) = self.selected_notebook() else {
+            self.set_status("no notebook selected".into());
+            return;
+        };
+        let prefill = self
+            .resolved_export_dir()
+            .join(format!("{}.pdf", nb.name))
+            .to_string_lossy()
+            .into_owned();
+        self.start_input(PendingInput::PublishPath, prefill);
+    }
     fn create_daily_note(&mut self) {
         let Some(nb) = self.selected_notebook().cloned() else {
             self.set_status("no notebook selected".into());
@@ -2688,7 +2746,7 @@ impl App {
     fn start_edit_inline(&mut self) {
         if let Some(note) = self.selected_note() {
             let mut editor = InlineEditor::from_contents(&note.body);
-            let title = format!(" {}  Editing: {} ", icons::PENCIL, note.frontmatter.title);
+            let title = format!(" {}Editing: {} ", icons::PENCIL, note.frontmatter.title);
             self.style_inline_editor(&mut editor, title);
             // Only ever rendered while the note is completely empty (see
             // `InlineEditor::render`'s placeholder branch) — the `/`-menu
@@ -2711,7 +2769,7 @@ impl App {
             return;
         }
         let mut editor = InlineEditor::from_contents("");
-        self.style_inline_editor(&mut editor, format!(" {}  Scratchpad ", icons::PENCIL));
+        self.style_inline_editor(&mut editor, format!(" {}Scratchpad ", icons::PENCIL));
         editor
             .textarea
             .set_placeholder_text("Scratchpad — Ctrl+S saves as a note; Esc discards");
@@ -2736,7 +2794,7 @@ impl App {
         };
         let contents = std::fs::read_to_string(&path).unwrap_or_default();
         let mut editor = InlineEditor::from_contents(&contents);
-        let title = format!(" {}  Editing: config.toml ", icons::GEAR);
+        let title = format!(" {}Editing: config.toml ", icons::GEAR);
         self.style_inline_editor(&mut editor, title);
         self.editor = Some(editor);
         self.editing_config = true;
@@ -3113,6 +3171,13 @@ impl App {
                     }
                 }
             }
+            Some(PendingInput::PublishPath) => {
+                if value.is_empty() {
+                    self.set_status("publish cancelled (empty path)".into());
+                } else if let Some(nb) = self.selected_notebook().cloned() {
+                    self.publish_notebook_to(nb, std::path::PathBuf::from(&value));
+                }
+            }
             Some(PendingInput::SettingsNotebookRemote) => {
                 self.show_settings = true;
                 if let Some(name) = self.settings_notebook_drill.clone() {
@@ -3236,6 +3301,14 @@ impl App {
                     | GitField::SignCommits
                     | GitField::AutoSync => {}
                 }
+            }
+            Some(PendingInput::SettingsExportText) => {
+                // Empty is meaningful here too ("use the default location"),
+                // same as GitField::RemoteTemplate above — not "cancelled".
+                self.show_settings = true;
+                self.config.export.export_dir = value.clone();
+                self.save_config();
+                self.set_status(format!("export_dir -> '{value}'"));
             }
             Some(PendingInput::SettingsSnippetTrigger) => {
                 self.show_settings = true;
@@ -3571,6 +3644,7 @@ impl App {
                         | Some(PendingInput::SettingsNotebookAutoSyncEvery)
                         | Some(PendingInput::SettingsGeneralText)
                         | Some(PendingInput::SettingsGitText)
+                        | Some(PendingInput::SettingsExportText)
                         | Some(PendingInput::SettingsSnippetTrigger)
                         | Some(PendingInput::SettingsSnippetLabel)
                 ) {
@@ -3734,25 +3808,26 @@ impl App {
                 self.editor_add_cursor_vertical(1);
             }
             // Alt+Up/Alt+Down move the current line past its neighbor;
-            // Alt+D duplicates it. Always on, like Ctrl+Home/Ctrl+End below
-            // — none of these three combos are used for anything else in
-            // the editor. Excludes Ctrl so it can't shadow the
+            // Alt+D duplicates it. Excludes Ctrl so it can't shadow the
             // Ctrl+Alt+Up/Down multi-cursor bindings above.
             KeyCode::Up
                 if key.modifiers.contains(KeyModifiers::ALT)
-                    && !key.modifiers.contains(KeyModifiers::CONTROL) =>
+                    && !key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.config.editor.move_line =>
             {
                 self.editor_move_line(-1);
             }
             KeyCode::Down
                 if key.modifiers.contains(KeyModifiers::ALT)
-                    && !key.modifiers.contains(KeyModifiers::CONTROL) =>
+                    && !key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.config.editor.move_line =>
             {
                 self.editor_move_line(1);
             }
             KeyCode::Char('d')
                 if key.modifiers.contains(KeyModifiers::ALT)
-                    && !key.modifiers.contains(KeyModifiers::CONTROL) =>
+                    && !key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.config.editor.duplicate_line =>
             {
                 self.editor_duplicate_line();
             }
@@ -3765,10 +3840,11 @@ impl App {
             // reverse (outdent), with no snippet step — there's nothing to
             // "un-expand".
             KeyCode::Tab => {
-                let has_selection = self
-                    .editor
-                    .as_ref()
-                    .is_some_and(|e| e.textarea.selection_range().is_some());
+                let has_selection = self.config.editor.block_indent_select
+                    && self
+                        .editor
+                        .as_ref()
+                        .is_some_and(|e| e.textarea.selection_range().is_some());
                 if has_selection {
                     self.indent_selected_lines(1);
                 } else if self.config.editor.snippet_expand_tab && self.try_expand_snippet_on_tab()
@@ -3779,10 +3855,11 @@ impl App {
                 }
             }
             KeyCode::BackTab => {
-                let has_selection = self
-                    .editor
-                    .as_ref()
-                    .is_some_and(|e| e.textarea.selection_range().is_some());
+                let has_selection = self.config.editor.block_indent_select
+                    && self
+                        .editor
+                        .as_ref()
+                        .is_some_and(|e| e.textarea.selection_range().is_some());
                 if has_selection {
                     self.indent_selected_lines(-1);
                 } else if !(self.config.editor.auto_list_continue && self.try_indent_list_line(-1))

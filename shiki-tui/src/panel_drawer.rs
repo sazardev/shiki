@@ -42,7 +42,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 let color = git_status_color(&app.theme, gs);
                 let suffix = git_status_suffix(gs);
                 ListItem::new(Line::from(Span::styled(
-                    format!("{}  {name}{suffix}", icons::NOTEBOOK),
+                    format!("{}{name}{suffix}", icons::NOTEBOOK),
                     Style::default().fg(color),
                 )))
             })
@@ -50,11 +50,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     let title = format!(
-        " {}  Notebooks [{}] ",
+        " {}Notebooks [{}] ",
         icons::NOTEBOOK,
         app.drawer_statuses.len()
     );
-    let highlight_symbol = format!("{} ", icons::ARROW);
+    let highlight_symbol = format!("{}", icons::ARROW);
     let list = List::new(items)
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(

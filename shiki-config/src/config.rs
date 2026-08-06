@@ -582,6 +582,13 @@ fn default_links_key() -> String {
 pub struct ThemeConfig {
     #[serde(default = "default_theme_name")]
     pub name: String,
+    /// When false, every Nerd Font glyph in the TUI (notebook/note icons,
+    /// git status, the list-selection marker, …) falls back to plain text
+    /// instead — for a terminal font that isn't Nerd-Fonts-patched. On by
+    /// default: the app has always shipped with icons on, so this only
+    /// changes anything for someone who explicitly opts out.
+    #[serde(default = "default_true")]
+    pub icons: bool,
     #[serde(flatten)]
     pub overrides: ThemeOverrides,
 }
@@ -686,6 +693,7 @@ impl Default for ThemeConfig {
     fn default() -> Self {
         Self {
             name: default_theme_name(),
+            icons: default_true(),
             overrides: ThemeOverrides::default(),
         }
     }
@@ -914,6 +922,22 @@ pub struct EditorConfig {
     /// not a pure addition, so it needs an explicit opt-in.
     #[serde(default)]
     pub typewriter_scroll: bool,
+    /// Alt+Up/Alt+Down moves the current line (or selected block) up/down
+    /// past its neighbor. Defaults to `true`: purely additive, doesn't touch
+    /// any existing binding.
+    #[serde(default = "default_true")]
+    pub move_line: bool,
+    /// Alt+D duplicates the current line (or selected block) directly below
+    /// itself. Defaults to `true`: purely additive, doesn't touch any
+    /// existing binding.
+    #[serde(default = "default_true")]
+    pub duplicate_line: bool,
+    /// Tab/Shift+Tab indent/outdent every line touched by an active
+    /// selection, instead of Tab inserting a literal tab and Shift+Tab doing
+    /// nothing. Defaults to `true`: purely additive, only changes behavior
+    /// when there's a selection to act on.
+    #[serde(default = "default_true")]
+    pub block_indent_select: bool,
 }
 
 impl Default for EditorConfig {
@@ -931,6 +955,9 @@ impl Default for EditorConfig {
             paste_url_as_link: true,
             snippet_expand_tab: true,
             typewriter_scroll: false,
+            move_line: true,
+            duplicate_line: true,
+            block_indent_select: true,
         }
     }
 }
@@ -950,12 +977,28 @@ pub struct ExportConfig {
     /// publish time.
     #[serde(default = "default_pdf_theme")]
     pub pdf_theme: String,
+    /// Directory PDFs are saved into, e.g. `{data_dir}/exports/{notebook}.pdf`
+    /// on Linux. Empty (the default) means "use the app's own data dir" —
+    /// see `App::resolved_export_dir` (shiki-tui) / the equivalent inline
+    /// resolution in `shiki publish` (shiki-cli). Set this to point exports
+    /// somewhere else instead (a synced folder, Desktop, etc).
+    #[serde(default)]
+    pub export_dir: String,
+    /// When true, publishing always opens a prompt asking exactly where to
+    /// save the PDF (prefilled with the resolved default path), instead of
+    /// silently writing to `export_dir`/the default location every time.
+    /// Off by default: this changes existing behavior (an extra prompt on
+    /// every publish) rather than being a pure addition.
+    #[serde(default)]
+    pub ask_export_path: bool,
 }
 
 impl Default for ExportConfig {
     fn default() -> Self {
         Self {
             pdf_theme: default_pdf_theme(),
+            export_dir: String::new(),
+            ask_export_path: false,
         }
     }
 }
@@ -1285,7 +1328,9 @@ fn section_comment(line: &str) -> Option<&'static str> {
 # tab_inactive, panel_title, cursor, link, tag, muted. Anything left unset
 # falls back to `name`'s own value for that slot. `shiki theme create
 # [--from <theme>]` scaffolds all 19 here at once from a real palette,
-# instead of hand-typing hex codes with no example to copy from."
+# instead of hand-typing hex codes with no example to copy from.
+# - icons: when false, every Nerd Font glyph falls back to plain text —
+#   for a terminal font that isn't Nerd-Fonts-patched. Defaults to true."
         }
         "[git]" => {
             "\
@@ -1325,7 +1370,12 @@ fn section_comment(line: &str) -> Option<&'static str> {
 # - snippet_expand_tab: Tab expands a matching snippet trigger instead of
 #   inserting a literal tab. Defaults to true.
 # - typewriter_scroll: keeps the cursor's line vertically centered while
-#   typing. Defaults to false."
+#   typing. Defaults to false.
+# - move_line: Alt+Up/Alt+Down move the current line past its neighbor.
+#   Defaults to true.
+# - duplicate_line: Alt+D duplicates the current line. Defaults to true.
+# - block_indent_select: Tab/Shift+Tab with a selection indent/outdent every
+#   line it spans. Defaults to true."
         }
         "[export]" => {
             "\
@@ -1334,7 +1384,11 @@ fn section_comment(line: &str) -> Option<&'static str> {
 # corporate, dark, academic, editorial, sepia, terminal, blueprint, ivy,
 # government, resume, legal, latex, gruvbox. The `pretty-pdf` binary this
 # feature shells out to is fetched automatically on first use if it isn't
-# already on $PATH — see `shiki doctor`."
+# already on $PATH — see `shiki doctor`.
+# - export_dir: directory PDFs are saved into, e.g. \"{data_dir}/exports\".
+#   Empty (the default) means the app's own data dir.
+# - ask_export_path: when true, publishing always prompts for the exact
+#   save path instead of silently writing to export_dir. Defaults to false."
         }
         "[notebooks]" => {
             "\
@@ -1526,6 +1580,7 @@ mod tests {
         let overrides = ThemeOverrides::from_theme(&base);
         let config = ThemeConfig {
             name: "nord".into(),
+            icons: true,
             overrides,
         };
         // Every one of `Theme`'s 19 color fields — including the 14 that
@@ -1543,6 +1598,7 @@ mod tests {
         };
         let config = ThemeConfig {
             name: "nord".into(),
+            icons: true,
             overrides,
         };
         let base = crate::themes::by_name("nord").unwrap();

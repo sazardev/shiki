@@ -6,6 +6,27 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- Writing-comfort improvements to the native note editor (`Mode::Edit`), each independently
+  toggleable from the EDITOR tab in Settings (`leader` then `s`): list/checkbox auto-continuation
+  on `Enter` (with ordered-list auto-increment, empty-item exit, and `Backspace` cleanup),
+  bold/italic wrap shortcuts (`Ctrl+B`/`Ctrl+Alt+I`), bracket/quote auto-pairing
+  (`(`, `` ` ``, `"`), pasting a bare URL over a selection as a markdown link, move line
+  (`Alt+↑`/`Alt+↓`), duplicate line (`Alt+D`), block indent/outdent on a selection
+  (`Tab`/`Shift+Tab`), snippet expansion via trigger + `Tab`, and opt-in typewriter scrolling.
+- Zen mode (`leader` then `z`): forces the full-screen single-panel layout for distraction-free
+  writing.
+- Outline modal (PREVIEW `o`, or `Ctrl+O` while editing): jump to any heading in the note.
+- `[editor]` config gained `move_line`, `duplicate_line`, and `block_indent_select` toggles (all
+  on by default) so the move/duplicate/block-indent behaviors above can be turned off the same
+  way every other editor convenience already can.
+- `[export]` gained `export_dir` (where PDFs are saved — empty means the app's own data dir) and
+  `ask_export_path` (prompt for the exact save path on every publish instead of using it
+  silently), both editable from the EXPORT tab in Settings.
+- `[theme].icons` (Settings, THEME tab): turn off to fall back to plain text everywhere instead
+  of Nerd Font glyphs, for a terminal font that isn't Nerd-Fonts-patched.
+
 ## [0.9.0] - 2026-08-04
 
 ### Added

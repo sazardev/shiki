@@ -326,21 +326,50 @@ impl App {
         });
     }
 
+    /// The directory a PDF is saved into absent an explicit path — respects
+    /// `[export].export_dir` when set, otherwise `{data_dir}/exports`
+    /// (deliberately not inside the notebook's own git-tracked directory,
+    /// so the rendered PDF never shows up as a stray untracked file for
+    /// auto-sync to pick up).
+    pub(crate) fn resolved_export_dir(&self) -> std::path::PathBuf {
+        let configured = self.config.export.export_dir.trim();
+        if configured.is_empty() {
+            self.store.root.join("exports")
+        } else {
+            std::path::PathBuf::from(configured)
+        }
+    }
+
     /// leader+`P` — renders the selected notebook to a themed PDF via
     /// `pretty-pdf` (downloaded/cached automatically on first use, see
     /// `shiki_core::publish::ensure_binary`) and opens the result. Reuses
     /// `spawn_git_op`'s single-job-at-a-time guard and footer spinner rather
     /// than inventing a second "something's running" indicator — a publish
     /// and a sync are both "one background job at a time" from the user's
-    /// point of view. Output always goes to `{data_dir}/exports/{notebook}.pdf`,
-    /// deliberately not inside the notebook's own (git-tracked) directory,
-    /// so the rendered PDF never shows up as a stray untracked file for
-    /// auto-sync to pick up.
+    /// point of view. When `[export].ask_export_path` is on, prompts for the
+    /// exact save path first (`App::start_publish_path_prompt`) instead of
+    /// silently resolving one here.
     pub(crate) fn publish_notebook(&mut self) {
+        if self.config.export.ask_export_path {
+            self.start_publish_path_prompt();
+            return;
+        }
         let Some(nb) = self.selected_notebook().cloned() else {
             self.set_status("no notebook selected".into());
             return;
         };
+        let out = self.resolved_export_dir().join(format!("{}.pdf", nb.name));
+        self.publish_notebook_to(nb, out);
+    }
+
+    /// Shared tail of `publish_notebook` and the `PendingInput::PublishPath`
+    /// confirm handler — both end up here once the output path is decided,
+    /// one way (silent default) or the other (typed prompt).
+    pub(crate) fn publish_notebook_to(
+        &mut self,
+        nb: shiki_core::Notebook,
+        out: std::path::PathBuf,
+    ) {
         let mut notes = match nb.all_notes_recursive() {
             Ok(notes) => notes,
             Err(e) => {
@@ -356,11 +385,6 @@ impl App {
         });
         let theme = self.config.export.pdf_theme.clone();
         let cache_dir = self.store.root.join("bin");
-        let out = self
-            .store
-            .root
-            .join("exports")
-            .join(format!("{}.pdf", nb.name));
         let nb_name = nb.name.clone();
         self.spawn_git_op(nb_name.clone(), move || {
             let message = match shiki_core::publish::publish(&notes, &theme, &cache_dir, &out) {

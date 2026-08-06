@@ -87,15 +87,17 @@ impl GeneralField {
 
 /// THEME's rows — `Name` opens the existing theme picker (leader+`c`)
 /// rather than duplicating theme-switching logic; `Overrides` is left
-/// informational (19 individual color slots don't fit a single-row edit).
+/// informational (19 individual color slots don't fit a single-row edit);
+/// `Icons` toggles in place, same shape as GIT/EDITOR's booleans.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThemeField {
     Name,
+    Icons,
     Overrides,
 }
 
 impl ThemeField {
-    pub const ALL: [ThemeField; 2] = [ThemeField::Name, ThemeField::Overrides];
+    pub const ALL: [ThemeField; 3] = [ThemeField::Name, ThemeField::Icons, ThemeField::Overrides];
 }
 
 /// GIT's rows (the global `[git]` defaults, not a notebook's own overrides
@@ -145,10 +147,13 @@ pub enum EditorField {
     PasteUrlAsLink,
     SnippetExpandTab,
     TypewriterScroll,
+    MoveLine,
+    DuplicateLine,
+    BlockIndentSelect,
 }
 
 impl EditorField {
-    pub const ALL: [EditorField; 12] = [
+    pub const ALL: [EditorField; 15] = [
         EditorField::MouseSelection,
         EditorField::FindReplace,
         EditorField::OsClipboard,
@@ -161,6 +166,9 @@ impl EditorField {
         EditorField::PasteUrlAsLink,
         EditorField::SnippetExpandTab,
         EditorField::TypewriterScroll,
+        EditorField::MoveLine,
+        EditorField::DuplicateLine,
+        EditorField::BlockIndentSelect,
     ];
 }
 
@@ -190,15 +198,24 @@ pub const PDF_THEMES: [&str; 17] = [
     "gruvbox",
 ];
 
-/// EXPORT's rows — a single cyclable field (see `PDF_THEMES`), same flat
-/// shape as GIT/EDITOR's boolean toggles.
+/// EXPORT's rows — `PdfTheme` cycles (see `PDF_THEMES`); `ExportDir` opens a
+/// text prompt showing where PDFs actually land, resolved (not just the raw
+/// config string) since empty is a valid value meaning "the app's own data
+/// dir"; `AskExportPath` toggles in place, same flat shape as GIT/EDITOR's
+/// booleans.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportField {
     PdfTheme,
+    ExportDir,
+    AskExportPath,
 }
 
 impl ExportField {
-    pub const ALL: [ExportField; 1] = [ExportField::PdfTheme];
+    pub const ALL: [ExportField; 3] = [
+        ExportField::PdfTheme,
+        ExportField::ExportDir,
+        ExportField::AskExportPath,
+    ];
 }
 
 /// One editable row within a drilled-into notebook (NOTEBOOKS section, level
@@ -298,6 +315,7 @@ fn theme_rows(app: &App) -> Vec<Line<'static>> {
     let set = cfg.theme.overrides.set_count();
     vec![
         row_line(app, "name", cfg.theme.name.clone()),
+        row_line(app, "icons", cfg.theme.icons.to_string()),
         row_line(
             app,
             "overrides",
@@ -380,15 +398,31 @@ fn editor_rows(app: &App) -> Vec<Line<'static>> {
             "typewriter_scroll",
             cfg.editor.typewriter_scroll.to_string(),
         ),
+        row_line(app, "move_line", cfg.editor.move_line.to_string()),
+        row_line(app, "duplicate_line", cfg.editor.duplicate_line.to_string()),
+        row_line(
+            app,
+            "block_indent_select",
+            cfg.editor.block_indent_select.to_string(),
+        ),
     ]
 }
 
 fn export_rows(app: &App) -> Vec<Line<'static>> {
-    vec![row_line(
-        app,
-        "pdf_theme",
-        app.config.export.pdf_theme.clone(),
-    )]
+    let export_dir = if app.config.export.export_dir.trim().is_empty() {
+        format!("(default) {}", app.resolved_export_dir().to_string_lossy())
+    } else {
+        app.config.export.export_dir.clone()
+    };
+    vec![
+        row_line(app, "pdf_theme", app.config.export.pdf_theme.clone()),
+        row_line(app, "export_dir", export_dir),
+        row_line(
+            app,
+            "ask_export_path",
+            app.config.export.ask_export_path.to_string(),
+        ),
+    ]
 }
 
 /// NOTEBOOKS level 1 — one row per real notebook, showing its git remote
@@ -577,7 +611,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         "←/→ section · j/k move · enter edit/toggle · esc/q close"
     };
-    let title = format!(" {} Settings{breadcrumb} — {hint} ", icons::GEAR);
+    let title = format!(" {}Settings{breadcrumb} — {hint} ", icons::GEAR);
 
     let block = panel_block(Line::from(title), true, &app.theme);
     let inner = block.inner(popup_area);
