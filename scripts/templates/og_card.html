@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<!--
+  Per-version OG card template, rendered offscreen at exactly 1200x630 by
+  `scripts/generate_release_pages.py` via headless Chromium (the same
+  chromium-screenshot approach CLAUDE.md documents for the site's original,
+  hand-built og-image.png — this is that process turned into a repeatable
+  script instead of a one-off manual render). Every {{PLACEHOLDER}} below is
+  a plain string substitution done by the generator script, not a real
+  templating engine — consistent with the rest of this static, no-build-step
+  site. THEME_BG/THEME_FG/THEME_ACCENT are copied from docs/css/styles.css's
+  `[data-theme="..."]` blocks by the generator's own THEME_COLORS table; if a
+  theme's palette changes there, update THEME_COLORS in the generator too.
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+    background: {{THEME_BG}};
+    font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  }
+  .card {
+    width: 1200px;
+    height: 630px;
+    display: flex;
+    padding: 60px;
+    color: {{THEME_FG}};
+  }
+  .left {
+    width: 460px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .kanji {
+    font-size: 60px;
+    font-weight: 800;
+    color: {{THEME_ACCENT}};
+    line-height: 1;
+  }
+  .brand {
+    font-size: 32px;
+    font-weight: 800;
+    margin-top: 10px;
+    letter-spacing: 0.02em;
+  }
+  .version-pill {
+    display: inline-block;
+    margin-top: 30px;
+    padding: 10px 22px;
+    border: 2px solid {{THEME_ACCENT}};
+    color: {{THEME_ACCENT}};
+    border-radius: 8px;
+    font-size: 26px;
+    font-weight: 700;
+    width: fit-content;
+  }
+  .date {
+    margin-top: 12px;
+    font-size: 17px;
+    opacity: 0.65;
+  }
+  .tagline {
+    margin-top: 26px;
+    font-size: 19px;
+    line-height: 1.55;
+    max-width: 400px;
+    opacity: 0.92;
+  }
+  .right {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .screenshot-frame {
+    width: 640px;
+    border: 3px solid {{THEME_ACCENT}};
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  }
+  .screenshot-frame img {
+    display: block;
+    width: 100%;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="left">
+      <div>
+        <div class="kanji">私記</div>
+        <div class="brand">shiki</div>
+        <div class="version-pill">v{{VERSION}}</div>
+        <div class="date">{{DATE}}</div>
+        <div class="tagline">{{TAGLINE}}</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="screenshot-frame"><img src="{{SCREENSHOT_PATH}}" /></div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!--
+  Per-version release page template. `scripts/generate_release_pages.py`
+  fills in every {{PLACEHOLDER}} with plain string substitution and writes
+  the result to docs/changelog/0.8.3.html. Paths inside are written
+  relative to that output location (one level under docs/), i.e. `../css/`,
+  `../assets/`, `../index.html` etc. — not relative to this template file.
+
+  Unlike changelog.html (which fetches CHANGELOG.md live via JS so it can
+  never drift, see docs/js/main.js), this page's changelog body is baked in
+  statically at generation time — it has to be, since link-unfurlers (the
+  actual point of this page existing) read the raw HTML and never execute
+  JS, so the og:title/og:description/og:image and the visible content must
+  already be correct in the file as committed.
+-->
+<!DOCTYPE html>
+<html lang="en" data-theme="gruvbox-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>shiki v0.8.3 — Release notes</title>
+  <meta name="description" content="/-menu in the inline editor: typing / as the first character of a line opens a small searchable menu (filters as you keep typing, ↑/↓ navigates, Enter insert…" />
+  <meta name="keywords" content="shiki changelog, shiki v0.8.3, shiki release notes" />
+  <meta name="author" content="sazardev" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://sazardev.github.io/shiki/changelog/0.8.3.html" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://sazardev.github.io/shiki/changelog/0.8.3.html" />
+  <meta property="og:site_name" content="shiki" />
+  <meta property="og:title" content="shiki v0.8.3 — Release notes" />
+  <meta property="og:description" content="/-menu in the inline editor: typing / as the first character of a line opens a small searchable menu (filters as you keep typing, ↑/↓ navigates, Enter insert…" />
+  <meta property="og:image" content="https://sazardev.github.io/shiki/assets/og/0.8.3.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="shiki v0.8.3 — release card" />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="shiki v0.8.3 — Release notes" />
+  <meta name="twitter:description" content="/-menu in the inline editor: typing / as the first character of a line opens a small searchable menu (filters as you keep typing, ↑/↓ navigates, Enter insert…" />
+  <meta name="twitter:image" content="https://sazardev.github.io/shiki/assets/og/0.8.3.png" />
+  <meta name="twitter:image:alt" content="shiki v0.8.3 — release card" />
+
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/documentation.css" />
+</head>
+<body class="doc-page">
+
+  <header class="topbar">
+    <div class="brand"><a href="../index.html" style="color:inherit;text-decoration:none;">shiki (私記)</a><span class="cursor"></span></div>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
+    <nav id="site-nav">
+      <a href="../index.html#themes">Themes</a>
+      <a href="../index.html#features">Features</a>
+      <a href="../index.html#install">Install</a>
+      <a href="../documentation.html">Docs</a>
+      <a href="../changelog.html" class="active">Changelog</a>
+      <a href="https://github.com/sazardev/shiki">GitHub</a>
+      <span class="version-chip-wrap" id="version-chip-wrap">
+        <button type="button" class="pill pill-button" id="version-pill" hidden></button>
+        <div class="version-popover" id="version-popover" role="dialog" aria-label="What's new" hidden>
+          <div class="version-popover-header">
+            <strong>What's new</strong>
+            <a href="../changelog.html">Full changelog →</a>
+          </div>
+          <div class="version-popover-body changelog-body" id="version-popover-content">
+            <p class="changelog-loading">Loading changelog…</p>
+          </div>
+        </div>
+      </span>
+    </nav>
+  </header>
+
+  <section class="doc-hero">
+    <div class="container">
+      <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
+      <h1>shiki v0.8.3</h1>
+      <p class="muted" style="max-width: 66ch;">Released 2026-07-27.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="container release-layout">
+      <div class="release-shot">
+        <div class="release-shot-frame">
+          <img src="../assets/screenshots/gruvbox-dark.png" alt="shiki v0.8.3, running in a terminal" loading="lazy" />
+        </div>
+      </div>
+      <div class="changelog-body release-notes">
+<h4>Added</h4>
+<ul>
+<li><code>/</code>-menu in the inline editor: typing <code>/</code> as the first character of a line opens a small searchable menu (filters as you keep typing, <code>↑</code>/<code>↓</code> navigates, <code>Enter</code> inserts, <code>Esc</code> closes the menu without leaving edit mode) with ready-to-insert blocks — <code>h1</code>/<code>h2</code>/<code>h3</code>, a code fence, a math block, a table, a checklist item, a quote, a divider, today&#x27;s date, a tags line, and a YAML frontmatter block. <code>/</code> anywhere else on the line (a URL, a fraction) is still a plain character.</li>
+<li><code>/</code>-menu commands are fully customizable via <code>[snippets.&lt;trigger&gt;]</code> in <code>config.toml</code> — each entry can add a new block or redefine an existing one (same trigger, case-insensitive). Supports <code>{{title}}</code>/<code>{{date}}</code> (same as note templates) and a <code>{{cursor}}</code> marker for where the cursor lands after insertion.</li>
+<li><code>@</code> dropdown in the new-note title prompt (<code>a</code>): typing <code>@</code> after the title (or alone, with no title) opens a dropdown with <code>today</code>/<code>yesterday</code>/<code>tomorrow</code> (a computed date, no template) plus every available template — filters as you type, <code>Enter</code> creates the note and jumps straight to editing, skipping the normal &quot;title → Enter → pick a template&quot; flow.</li>
+<li>9 new templates alongside the existing 3 (<code>default</code>/<code>daily</code>/<code>meeting</code>): <code>bug</code>, <code>spec</code>, <code>review</code>, <code>postmortem</code> (dev), <code>standup</code>, <code>retro</code>, <code>1on1</code>, <code>weekly</code> (productivity/meetings), and <code>brainstorm</code> (general) — generated automatically in <code>~/.config/shiki/templates/</code> on next launch, without touching any template you&#x27;ve already customized.</li>
+<li>The inline editor shows a placeholder (&quot;Type &#x27;/&#x27; for quick blocks...&quot;) when the note is empty, so the <code>/</code>-menu is discoverable without reading the docs.</li>
+</ul>
+<h4>Fixed</h4>
+<ul>
+<li>The inline editor now wraps long lines to the panel&#x27;s width (same as PREVIEW) instead of scrolling them off-screen horizontally — <code>tui-textarea</code> has no wrap support in any published version, so the editor&#x27;s rendering is now computed by hand (the same wrap math is reused both to draw the text and to place the cursor, so the two can never disagree), while all real editing (insert/delete/undo/selection) still goes through <code>tui-textarea</code> unchanged.</li>
+</ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="release-nav">
+    <div class="container release-nav-row">
+      <a href="0.8.2.html" class="release-nav-link">← v0.8.2</a>
+      <a href="../changelog.html" class="release-nav-link">All releases</a>
+      <a href="0.8.4.html" class="release-nav-link">v0.8.4 →</a>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/sazardev/shiki">GitHub</a>
+        <a href="https://github.com/sazardev/shiki/releases/tag/v0.8.3">GitHub Release</a>
+        <a href="https://github.com/sazardev/shiki/issues">Issues</a>
+        <a href="https://github.com/sazardev/shiki/blob/main/LICENSE">MIT License</a>
+        <a class="coffee-link" href="https://buymeacoffee.com/sazarcode">☕ Buy me a coffee</a>
+      </div>
+      <small>shiki (私記) — built by <a href="https://github.com/sazardev">sazardev</a>. Free and open source, forever.</small>
+    </div>
+  </footer>
+
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<!--
+  Per-version release page template. `scripts/generate_release_pages.py`
+  fills in every {{PLACEHOLDER}} with plain string substitution and writes
+  the result to docs/changelog/0.1.0.html. Paths inside are written
+  relative to that output location (one level under docs/), i.e. `../css/`,
+  `../assets/`, `../index.html` etc. — not relative to this template file.
+
+  Unlike changelog.html (which fetches CHANGELOG.md live via JS so it can
+  never drift, see docs/js/main.js), this page's changelog body is baked in
+  statically at generation time — it has to be, since link-unfurlers (the
+  actual point of this page existing) read the raw HTML and never execute
+  JS, so the og:title/og:description/og:image and the visible content must
+  already be correct in the file as committed.
+-->
+<!DOCTYPE html>
+<html lang="en" data-theme="gruvbox-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>shiki v0.1.0 — Release notes</title>
+  <meta name="description" content="Three-pane TUI (Notebooks / Notes / Preview), Yazi-inspired: collapsing Miller-columns layout, modal navigation (hjkl/arrows, tab, leader key), no exterior p…" />
+  <meta name="keywords" content="shiki changelog, shiki v0.1.0, shiki release notes" />
+  <meta name="author" content="sazardev" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://sazardev.github.io/shiki/changelog/0.1.0.html" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://sazardev.github.io/shiki/changelog/0.1.0.html" />
+  <meta property="og:site_name" content="shiki" />
+  <meta property="og:title" content="shiki v0.1.0 — Release notes" />
+  <meta property="og:description" content="Three-pane TUI (Notebooks / Notes / Preview), Yazi-inspired: collapsing Miller-columns layout, modal navigation (hjkl/arrows, tab, leader key), no exterior p…" />
+  <meta property="og:image" content="https://sazardev.github.io/shiki/assets/og/0.1.0.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="shiki v0.1.0 — release card" />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="shiki v0.1.0 — Release notes" />
+  <meta name="twitter:description" content="Three-pane TUI (Notebooks / Notes / Preview), Yazi-inspired: collapsing Miller-columns layout, modal navigation (hjkl/arrows, tab, leader key), no exterior p…" />
+  <meta name="twitter:image" content="https://sazardev.github.io/shiki/assets/og/0.1.0.png" />
+  <meta name="twitter:image:alt" content="shiki v0.1.0 — release card" />
+
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/documentation.css" />
+</head>
+<body class="doc-page">
+
+  <header class="topbar">
+    <div class="brand"><a href="../index.html" style="color:inherit;text-decoration:none;">shiki (私記)</a><span class="cursor"></span></div>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
+    <nav id="site-nav">
+      <a href="../index.html#themes">Themes</a>
+      <a href="../index.html#features">Features</a>
+      <a href="../index.html#install">Install</a>
+      <a href="../documentation.html">Docs</a>
+      <a href="../changelog.html" class="active">Changelog</a>
+      <a href="https://github.com/sazardev/shiki">GitHub</a>
+      <span class="version-chip-wrap" id="version-chip-wrap">
+        <button type="button" class="pill pill-button" id="version-pill" hidden></button>
+        <div class="version-popover" id="version-popover" role="dialog" aria-label="What's new" hidden>
+          <div class="version-popover-header">
+            <strong>What's new</strong>
+            <a href="../changelog.html">Full changelog →</a>
+          </div>
+          <div class="version-popover-body changelog-body" id="version-popover-content">
+            <p class="changelog-loading">Loading changelog…</p>
+          </div>
+        </div>
+      </span>
+    </nav>
+  </header>
+
+  <section class="doc-hero">
+    <div class="container">
+      <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
+      <h1>shiki v0.1.0</h1>
+      <p class="muted" style="max-width: 66ch;">Released 2026-07-22.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="container release-layout">
+      <div class="release-shot">
+        <div class="release-shot-frame">
+          <img src="../assets/screenshots/gruvbox-dark.png" alt="shiki v0.1.0, running in a terminal" loading="lazy" />
+        </div>
+      </div>
+      <div class="changelog-body release-notes">
+<h4>Added</h4>
+<ul>
+<li>Three-pane TUI (Notebooks / Notes / Preview), Yazi-inspired: collapsing Miller-columns layout, modal navigation (<code>hjkl</code>/arrows, <code>tab</code>, leader key), no exterior padding.</li>
+<li>Notes are plain Markdown with YAML frontmatter; notebooks are directories, each its own git repo, nestable in folders to any depth (like <code>nb</code>).</li>
+<li>Frontmatter is optional on read: a <code>.md</code> file with no (or malformed) frontmatter — from <code>nb</code>, an imported repo, or a manual edit — still shows up, with title/date synthesized instead of being skipped.</li>
+<li>Config-driven keybindings, scoped by focus (<code>[keybindings.global/notebooks/notes/preview]</code> in <code>config.toml</code>), with a leader key for actions that aren&#x27;t tied to one panel.</li>
+<li>Six built-in themes (catppuccin, tokyo-night, gruvbox, nord, solarized, and a terminal-native default that inherits the terminal&#x27;s own colors) with a live-preview picker modal (leader+<code>c</code>).</li>
+<li>Nerd Font icon set throughout the UI.</li>
+<li>Per-notebook git integration: sync (commit + optional push), pull (fast-forward only, safe against local commits), pull-all, and set-remote — plus a fast path where pasting a git URL as the new-notebook name clones and imports it in one step.</li>
+<li>Robust git authentication (SSH agent or the system&#x27;s own credential store, so it reuses whatever <code>git</code>/<code>gh</code> already have cached) and automatic fallback to the remote&#x27;s actual default branch when it isn&#x27;t the one configured.</li>
+<li>Global fuzzy search across every notebook (leader+<code>g</code>) and in-notebook fuzzy jump (<code>/</code>).</li>
+<li>Tags panel, daily notes, moving a note between notebooks, cycling sort order.</li>
+<li>Notebook tree view (<code>T</code>): every folder and note in a notebook, fully expanded in one overview, with jump-to-note.</li>
+<li>Logs modal (leader+<code>l</code>): a scrollback of every status-bar message (so errors aren&#x27;t lost the instant the next one overwrites the status bar), with a clipboard-copy shortcut.</li>
+<li>Inline editor (inside the TUI) and external-editor integration (<code>$EDITOR</code>, or the OS-detected favorite editor).</li>
+<li>CLI commands alongside the TUI: <code>new</code>, <code>list</code>, <code>edit</code>, <code>show</code>, <code>search</code>, <code>daily</code>, <code>sync</code>, <code>config</code>, <code>notebook</code>, <code>theme</code>.</li>
+<li>App version shown in the status bar footer.</li>
+</ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="release-nav">
+    <div class="container release-nav-row">
+      <a href="../changelog.html" class="release-nav-link release-nav-link--disabled">← No earlier release</a>
+      <a href="../changelog.html" class="release-nav-link">All releases</a>
+      <a href="0.2.0.html" class="release-nav-link">v0.2.0 →</a>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/sazardev/shiki">GitHub</a>
+        <a href="https://github.com/sazardev/shiki/releases/tag/v0.1.0">GitHub Release</a>
+        <a href="https://github.com/sazardev/shiki/issues">Issues</a>
+        <a href="https://github.com/sazardev/shiki/blob/main/LICENSE">MIT License</a>
+        <a class="coffee-link" href="https://buymeacoffee.com/sazarcode">☕ Buy me a coffee</a>
+      </div>
+      <small>shiki (私記) — built by <a href="https://github.com/sazardev">sazardev</a>. Free and open source, forever.</small>
+    </div>
+  </footer>
+
+  <script src="../js/main.js"></script>
+</body>
+</html>

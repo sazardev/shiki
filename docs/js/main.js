@@ -170,6 +170,18 @@ function renderInline(text) {
   return out;
 }
 
+// The per-version pages this links to live at docs/changelog/{version}.html
+// — from every other page (index.html, changelog.html, documentation.html,
+// all at the docs/ root) that's reached via a "changelog/" prefix, but from
+// *inside* one of those pages itself it has to be a same-directory link
+// instead, or the browser would resolve it to a nonexistent
+// changelog/changelog/{version}.html. main.js is shared verbatim across all
+// of these pages, so this has to be resolved from the live URL rather than
+// hardcoded one way.
+function changelogPermalinkPrefix() {
+  return /\/changelog\/[^/]+\.html$/.test(window.location.pathname) ? "" : "changelog/";
+}
+
 function renderChangelog(markdown, maxVersions = CHANGELOG_MAX_VERSIONS) {
   const lines = markdown.split("\n");
   let html = "";
@@ -229,7 +241,14 @@ function renderChangelog(markdown, maxVersions = CHANGELOG_MAX_VERSIONS) {
       }
       skipping = false;
       const date = versionMatch[3] ? `<span class="cl-date"> — ${escapeHtml(versionMatch[3])}</span>` : "";
-      pendingHeaderHtml = `<h3>${escapeHtml(versionMatch[1])}${date}</h3>`;
+      // "Unreleased" has no generated share page (scripts/generate_release_pages.py
+      // only ever runs against real, tagged versions) — no permalink for it.
+      const versionName = versionMatch[1];
+      const permalink =
+        versionName.toLowerCase() === "unreleased"
+          ? ""
+          : ` <a class="cl-permalink" href="${changelogPermalinkPrefix()}${encodeURIComponent(versionName)}.html" title="Permalink to this release">#</a>`;
+      pendingHeaderHtml = `<h3>${escapeHtml(versionName)}${date}${permalink}</h3>`;
       continue;
     }
 
@@ -271,6 +290,44 @@ function renderChangelog(markdown, maxVersions = CHANGELOG_MAX_VERSIONS) {
   return html || "<p>No changelog entries found.</p>";
 }
 
+// changelog.html's full history is a long scroll (22+ versions and growing) —
+// this builds the "Jump to version" <select> next to the hero so a visitor
+// looking for one specific release doesn't have to scroll past every other
+// one to find it. Only changelog.html has the #version-jump container (the
+// homepage teaser and the popover are both short enough not to need it), so
+// this is a no-op everywhere else, same guard-on-existence convention every
+// other per-page init function here already follows.
+//
+// It jumps straight to that version's dedicated permalink page
+// (changelog/{version}.html — see scripts/generate_release_pages.py) rather
+// than an in-page anchor: those pages already exist and are the one
+// "canonical" place for a single version, so this doesn't need a second,
+// parallel in-page-anchor navigation scheme alongside them.
+function renderVersionJump(markdown) {
+  const wrap = document.getElementById("version-jump");
+  const select = document.getElementById("version-jump-select");
+  if (!wrap || !select) return;
+
+  const versions = [];
+  const re = /^##\s+\[([^\]]+)\]\s*(?:-\s*(.+))?$/gm;
+  let match;
+  while ((match = re.exec(markdown))) {
+    const name = match[1];
+    if (name.toLowerCase() === "unreleased") continue;
+    versions.push({ name, date: match[2] || "" });
+  }
+  if (versions.length === 0) return;
+
+  const options = versions.map(
+    (v) => `<option value="${escapeHtml(v.name)}">v${escapeHtml(v.name)}${v.date ? ` — ${escapeHtml(v.date)}` : ""}</option>`
+  );
+  select.innerHTML = `<option value="">Jump to version…</option>${options.join("")}`;
+  select.addEventListener("change", () => {
+    if (select.value) window.location.href = `changelog/${encodeURIComponent(select.value)}.html`;
+  });
+  wrap.hidden = false;
+}
+
 async function loadChangelog() {
   const container = document.getElementById("changelog-content");
   if (!container) return; // this script is shared across pages — not every page has a changelog
@@ -280,6 +337,7 @@ async function loadChangelog() {
   try {
     const text = await fetchChangelogMarkdown();
     container.innerHTML = renderChangelog(text, maxVersions);
+    renderVersionJump(text);
   } catch (err) {
     container.innerHTML = `<p class="changelog-error">Couldn't load the live changelog right now. See it directly on <a href="https://github.com/sazardev/shiki/blob/main/CHANGELOG.md">GitHub</a>.</p>`;
   }

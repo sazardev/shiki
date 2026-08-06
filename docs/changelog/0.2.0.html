@@ -1,0 +1,156 @@
+<!--
+  Per-version release page template. `scripts/generate_release_pages.py`
+  fills in every {{PLACEHOLDER}} with plain string substitution and writes
+  the result to docs/changelog/0.2.0.html. Paths inside are written
+  relative to that output location (one level under docs/), i.e. `../css/`,
+  `../assets/`, `../index.html` etc. — not relative to this template file.
+
+  Unlike changelog.html (which fetches CHANGELOG.md live via JS so it can
+  never drift, see docs/js/main.js), this page's changelog body is baked in
+  statically at generation time — it has to be, since link-unfurlers (the
+  actual point of this page existing) read the raw HTML and never execute
+  JS, so the og:title/og:description/og:image and the visible content must
+  already be correct in the file as committed.
+-->
+<!DOCTYPE html>
+<html lang="en" data-theme="gruvbox-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>shiki v0.2.0 — Release notes</title>
+  <meta name="description" content="Note version history (PREVIEW-scope H): every commit that changed the specific note being read, newest first — real git history, not a separate versioning sy…" />
+  <meta name="keywords" content="shiki changelog, shiki v0.2.0, shiki release notes" />
+  <meta name="author" content="sazardev" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://sazardev.github.io/shiki/changelog/0.2.0.html" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://sazardev.github.io/shiki/changelog/0.2.0.html" />
+  <meta property="og:site_name" content="shiki" />
+  <meta property="og:title" content="shiki v0.2.0 — Release notes" />
+  <meta property="og:description" content="Note version history (PREVIEW-scope H): every commit that changed the specific note being read, newest first — real git history, not a separate versioning sy…" />
+  <meta property="og:image" content="https://sazardev.github.io/shiki/assets/og/0.2.0.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="shiki v0.2.0 — release card" />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="shiki v0.2.0 — Release notes" />
+  <meta name="twitter:description" content="Note version history (PREVIEW-scope H): every commit that changed the specific note being read, newest first — real git history, not a separate versioning sy…" />
+  <meta name="twitter:image" content="https://sazardev.github.io/shiki/assets/og/0.2.0.png" />
+  <meta name="twitter:image:alt" content="shiki v0.2.0 — release card" />
+
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/documentation.css" />
+</head>
+<body class="doc-page">
+
+  <header class="topbar">
+    <div class="brand"><a href="../index.html" style="color:inherit;text-decoration:none;">shiki (私記)</a><span class="cursor"></span></div>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
+    <nav id="site-nav">
+      <a href="../index.html#themes">Themes</a>
+      <a href="../index.html#features">Features</a>
+      <a href="../index.html#install">Install</a>
+      <a href="../documentation.html">Docs</a>
+      <a href="../changelog.html" class="active">Changelog</a>
+      <a href="https://github.com/sazardev/shiki">GitHub</a>
+      <span class="version-chip-wrap" id="version-chip-wrap">
+        <button type="button" class="pill pill-button" id="version-pill" hidden></button>
+        <div class="version-popover" id="version-popover" role="dialog" aria-label="What's new" hidden>
+          <div class="version-popover-header">
+            <strong>What's new</strong>
+            <a href="../changelog.html">Full changelog →</a>
+          </div>
+          <div class="version-popover-body changelog-body" id="version-popover-content">
+            <p class="changelog-loading">Loading changelog…</p>
+          </div>
+        </div>
+      </span>
+    </nav>
+  </header>
+
+  <section class="doc-hero">
+    <div class="container">
+      <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
+      <h1>shiki v0.2.0</h1>
+      <p class="muted" style="max-width: 66ch;">Released 2026-07-22.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="container release-layout">
+      <div class="release-shot">
+        <div class="release-shot-frame">
+          <img src="../assets/screenshots/gruvbox-dark.png" alt="shiki v0.2.0, running in a terminal" loading="lazy" />
+        </div>
+      </div>
+      <div class="changelog-body release-notes">
+<h4>Added</h4>
+<ul>
+<li>Note version history (PREVIEW-scope <code>H</code>): every commit that changed the specific note being read, newest first — real git history, not a separate versioning system. <code>Enter</code> views a revision&#x27;s full content, <code>r</code> reverts to it (behind a confirmation). A revert doesn&#x27;t commit by itself; it becomes a normal pending change picked up by <code>s</code>/<code>u</code>/<code>auto_sync</code> like any other edit. The footer shows the count while reading a note (<code>{n} changes</code>).</li>
+<li><code>D</code> (notes-scope) toggles each note&#x27;s date next to its title in the NOTES list, off by default.</li>
+<li>The 3-panel layout is now responsive to terminal size instead of one fixed arrangement: wide terminals keep the original side-by-side columns; narrow-but-tall or square terminals stack the same panels vertically instead (still full-width, just not side-by-side); very small terminals show only the focused panel, full screen, with no collapsed siblings. Navigation (<code>hjkl</code>/<code>tab</code>) works identically at every size. Verified by resizing an actual terminal from 200×50 down to 20×8 with no crash or broken rendering at any point.</li>
+<li>Footer now shows which editor mode is active — the resolved favorite editor&#x27;s name (e.g. <code>nvim</code>) when <code>general.use_favorite_editor</code> is on, <code>native</code> (the built-in inline editor) when it&#x27;s off — plus a new leader+<code>e</code> shortcut to toggle it on/off and persist the change immediately, instead of hand-editing config.toml.</li>
+<li><code>shiki doctor</code>: an environment health check (config validity, data/templates dirs, <code>git</code>/<code>gh</code> on <code>$PATH</code>, terminal truecolor support, configured editor, notebook/remote summary). Works even when <code>config.toml</code> is malformed — unlike every other command, it diagnoses that instead of failing outright.</li>
+<li><code>README.md</code> and <code>LICENSE</code> (MIT) — install (<code>cargo install --path shiki-cli</code>), update, and verify (<code>shiki --version</code>, <code>shiki doctor</code>) instructions for installing from a clone, since this isn&#x27;t published to crates.io yet. Every crate&#x27;s <code>Cargo.toml</code> now also carries <code>repository</code> (previously only set at the workspace level but never actually inherited by any crate), <code>keywords</code>, <code>categories</code>, and a <code>readme</code> pointing at it.</li>
+<li><code>auto_sync</code>: a notebook can sync itself (commit, + push if <code>auto_push</code>) automatically every <code>auto_sync_every</code> note changes, instead of only on manual <code>s</code>. Push failures (no internet, auth, etc.) never block — the commit already happened locally, and the next attempt just retries.</li>
+<li><code>u</code>: commits and always pushes, regardless of <code>auto_push</code>/<code>auto_sync</code> — the explicit &quot;sync right now&quot; override.</li>
+<li>Which-key (<code>?</code>) is now a near-full-screen searchable list instead of a small centered popup: type to filter by key/action/scope, <code>↑</code>/<code>↓</code>/<code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> to move the selection, <code>Enter</code> runs the highlighted action immediately — doubles as a fast command palette.</li>
+</ul>
+<h4>Changed</h4>
+<ul>
+<li>Selecting a folder (not a note) in NOTES now previews what&#x27;s actually inside it in PREVIEW (subfolders, then notes, or &quot;Empty folder.&quot;) instead of a static &quot;press enter to open this folder&quot; hint — same spirit as selecting a note already showing its content.</li>
+<li>Collapsed (out-of-focus) panels are now 1 column wide instead of 3 — just the border line, since that&#x27;s already enough to show there&#x27;s a collapsed panel there.</li>
+<li>Status bar footer redesigned: no background fill, no &quot;NORMAL&quot; mode label (only INSERT/EDIT/ VISUAL are shown), no theme name. Shows contextual metadata instead (character count of the note being read, or note count while browsing notebooks), the current git branch with a dirty/needs- pull indicator, and groups <code>? help</code> with the version on the right.</li>
+<li>Notebook sync is smarter and per-notebook: commit messages are now auto-built from the diff (e.g. &quot;shiki: 2 updated, 1 added&quot;) instead of a fixed generic message, so nothing needs to be typed by hand. <code>auto_push</code>/<code>auto_sync</code>/<code>auto_sync_every</code> can be overridden per notebook under <code>[notebooks.&lt;name&gt;]</code>, falling back to the global <code>[git]</code> defaults.</li>
+<li>Footer git status now shows actual counts instead of a bare marker: <code>+N</code> uncommitted files, <code>↑N</code> commits not yet pushed, <code>↓N</code> commits not yet pulled in — all three at once if applicable (e.g. a diverged branch), instead of just one dirty/clean indicator.</li>
+<li>The note-preview title no longer shows a <code>[j/k scroll]</code> hint (redundant once scrolling — and now <code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> — is the obvious way to move around); shows the note&#x27;s date in a muted tone instead.</li>
+</ul>
+<h4>Fixed</h4>
+<ul>
+<li>Every theme&#x27;s <code>selection</code> color was defined but never actually rendered anywhere — every list (notebooks, notes, tree, logs, global search, theme picker, which-key) only bold-colored the selected row&#x27;s text, with no highlighted background band, making every theme look flatter/less faithful than it should. Selection now gets a real background highlight in each theme&#x27;s own <code>selection</code> color.</li>
+<li>Notebook-level git shortcuts (<code>s</code> sync, <code>u</code> push, <code>p</code>/<code>P</code> pull, <code>R</code> set remote) previously only worked while the NOTEBOOKS panel had focus — pressing <code>u</code> while reading a note in PREVIEW did nothing at all, with no error or explanation. They now work from any panel, since they act on the selected notebook, not the focused panel.</li>
+<li><code>push</code> failed with &quot;src refspec &#x27;refs/heads/main&#x27; does not match any existing object&quot; on any notebook whose real branch isn&#x27;t the globally configured one (e.g. <code>master</code>, via <code>pull</code>&#x27;s branch-fallback) — it now pushes whatever branch <code>HEAD</code> actually points at instead of a fixed configured name.</li>
+<li><code>push</code> reported success even when a rejection only surfaced through the remote&#x27;s per-ref status (e.g. a rejecting server-side hook) rather than as an outright transport error — now verified via <code>push_update_reference</code> and turned into a real, reported error.</li>
+<li><code>u</code> used to push only, without committing first — repeatedly pressing it on a notebook with uncommitted notes reported &quot;pushed&quot; every time while the dirty count never moved, since nothing had actually been committed. <code>u</code> now commits (same as <code>s</code>) and always pushes; every step (commit outcome, then push outcome including confirmation) is reported explicitly instead of a terse &quot;pushed&quot;.</li>
+<li><code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> didn&#x27;t work anywhere in the app — not while reading a note in PREVIEW, and not in the which-key popup, logs, global search, or tree view. They now work everywhere: a bigger jump (10 at a time) or first/last, using the same list or scroll each modal already navigates with <code>j</code>/<code>k</code>.</li>
+<li>Which-key (<code>?</code>) had no scrolling at all — content that didn&#x27;t fit the small centered popup was silently clipped with no way to see the rest, and any keypress just closed it (so it couldn&#x27;t be typed into either).</li>
+</ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="release-nav">
+    <div class="container release-nav-row">
+      <a href="0.1.0.html" class="release-nav-link">← v0.1.0</a>
+      <a href="../changelog.html" class="release-nav-link">All releases</a>
+      <a href="0.3.0.html" class="release-nav-link">v0.3.0 →</a>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/sazardev/shiki">GitHub</a>
+        <a href="https://github.com/sazardev/shiki/releases/tag/v0.2.0">GitHub Release</a>
+        <a href="https://github.com/sazardev/shiki/issues">Issues</a>
+        <a href="https://github.com/sazardev/shiki/blob/main/LICENSE">MIT License</a>
+        <a class="coffee-link" href="https://buymeacoffee.com/sazarcode">☕ Buy me a coffee</a>
+      </div>
+      <small>shiki (私記) — built by <a href="https://github.com/sazardev">sazardev</a>. Free and open source, forever.</small>
+    </div>
+  </footer>
+
+  <script src="../js/main.js"></script>
+</body>
+</html>

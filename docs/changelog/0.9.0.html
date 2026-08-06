@@ -1,0 +1,180 @@
+<!--
+  Per-version release page template. `scripts/generate_release_pages.py`
+  fills in every {{PLACEHOLDER}} with plain string substitution and writes
+  the result to docs/changelog/0.9.0.html. Paths inside are written
+  relative to that output location (one level under docs/), i.e. `../css/`,
+  `../assets/`, `../index.html` etc. — not relative to this template file.
+
+  Unlike changelog.html (which fetches CHANGELOG.md live via JS so it can
+  never drift, see docs/js/main.js), this page's changelog body is baked in
+  statically at generation time — it has to be, since link-unfurlers (the
+  actual point of this page existing) read the raw HTML and never execute
+  JS, so the og:title/og:description/og:image and the visible content must
+  already be correct in the file as committed.
+-->
+<!DOCTYPE html>
+<html lang="en" data-theme="gruvbox-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>shiki v0.9.0 — Release notes</title>
+  <meta name="description" content="shiki tasks — the tasks view as a scriptable CLI command: pending tasks across every notebook, urgency-sorted, with --overdue/--today/--all/--notebook filter…" />
+  <meta name="keywords" content="shiki changelog, shiki v0.9.0, shiki release notes" />
+  <meta name="author" content="sazardev" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://sazardev.github.io/shiki/changelog/0.9.0.html" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://sazardev.github.io/shiki/changelog/0.9.0.html" />
+  <meta property="og:site_name" content="shiki" />
+  <meta property="og:title" content="shiki v0.9.0 — Release notes" />
+  <meta property="og:description" content="shiki tasks — the tasks view as a scriptable CLI command: pending tasks across every notebook, urgency-sorted, with --overdue/--today/--all/--notebook filter…" />
+  <meta property="og:image" content="https://sazardev.github.io/shiki/assets/og/0.9.0.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="shiki v0.9.0 — release card" />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="shiki v0.9.0 — Release notes" />
+  <meta name="twitter:description" content="shiki tasks — the tasks view as a scriptable CLI command: pending tasks across every notebook, urgency-sorted, with --overdue/--today/--all/--notebook filter…" />
+  <meta name="twitter:image" content="https://sazardev.github.io/shiki/assets/og/0.9.0.png" />
+  <meta name="twitter:image:alt" content="shiki v0.9.0 — release card" />
+
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/documentation.css" />
+</head>
+<body class="doc-page">
+
+  <header class="topbar">
+    <div class="brand"><a href="../index.html" style="color:inherit;text-decoration:none;">shiki (私記)</a><span class="cursor"></span></div>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
+    <nav id="site-nav">
+      <a href="../index.html#themes">Themes</a>
+      <a href="../index.html#features">Features</a>
+      <a href="../index.html#install">Install</a>
+      <a href="../documentation.html">Docs</a>
+      <a href="../changelog.html" class="active">Changelog</a>
+      <a href="https://github.com/sazardev/shiki">GitHub</a>
+      <span class="version-chip-wrap" id="version-chip-wrap">
+        <button type="button" class="pill pill-button" id="version-pill" hidden></button>
+        <div class="version-popover" id="version-popover" role="dialog" aria-label="What's new" hidden>
+          <div class="version-popover-header">
+            <strong>What's new</strong>
+            <a href="../changelog.html">Full changelog →</a>
+          </div>
+          <div class="version-popover-body changelog-body" id="version-popover-content">
+            <p class="changelog-loading">Loading changelog…</p>
+          </div>
+        </div>
+      </span>
+    </nav>
+  </header>
+
+  <section class="doc-hero">
+    <div class="container">
+      <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
+      <h1>shiki v0.9.0</h1>
+      <p class="muted" style="max-width: 66ch;">Released 2026-08-04.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="container release-layout">
+      <div class="release-shot">
+        <div class="release-shot-frame">
+          <img src="../assets/screenshots/gruvbox-dark.png" alt="shiki v0.9.0, running in a terminal" loading="lazy" />
+        </div>
+      </div>
+      <div class="changelog-body release-notes">
+<h4>Added</h4>
+<ul>
+<li><code>shiki tasks</code> — the tasks view as a scriptable CLI command: pending tasks across every notebook, urgency-sorted, with <code>--overdue</code>/<code>--today</code>/<code>--all</code>/<code>--notebook</code> filters, <code>--json</code> for scripting, and <code>--count</code> (just the number) made for waybar/polybar/tmux status modules — e.g. <code>shiki tasks --overdue --count</code> as a &quot;2 overdue&quot; bar widget.</li>
+<li><code>shiki graph</code> — the <code>[[wikilink]]</code> connection graph drawn right in the terminal: a deterministic force-directed layout (Fruchterman–Reingold on a char canvas) where hubs (<code>◉</code>) pull their linked notes around them, edges render as <code>╱╲─│</code> lines, and orphans (<code>○</code>, notes with no links in or out) drift free and are listed below. <code>--notebook</code> scopes it, <code>--width</code> overrides the canvas, <code>--json</code> emits nodes/edges/orphans for graphviz/d3/gephi, and graphs past 60 notes show the most-connected ones rather than an unreadable hairball.</li>
+<li>Daily notes now open with today&#x27;s agenda: on first creation each day, a &quot;## Due today&quot; section is appended after the template listing every pending task due today or overdue across every notebook — plain bullets with a <code>[[wikilink]]</code> back to each task&#x27;s source note (deliberately not checkbox copies, which would double-count in the tasks view). Reopening an existing daily never re-injects or duplicates it. Works in both the TUI (<code>t</code>) and <code>shiki daily</code>.</li>
+<li>Relative due dates: <code>@due(tomorrow)</code>, <code>@due(+3d)</code>, <code>@due(+2w)</code>, <code>@due(fri)</code> (next such weekday) are pinned to their resolved <code>@due(YYYY-MM-DD)</code> form the moment the note is saved — inline or external editor — since a relative spec is relative to the day it was written. ISO dates and unrecognized specs are left byte-for-byte untouched.</li>
+<li><code>c</code> in the links modal on a &quot;Mentions (unlinked)&quot; row repairs the missed link: the mentioning note&#x27;s plain-text mention is wrapped into a real <code>[[wikilink]]</code> in place (preserving its casing, skipping text already inside links), and the row visibly migrates to Backlinks.</li>
+<li><code>shiki publish</code> (also leader+<code>P</code> in the TUI) renders a whole notebook to a themed PDF via <a href="https://github.com/sazardev/go-pretty-pdf" target="_blank" rel="noopener"><code>go-pretty-pdf</code></a>, a separate Go binary shelled out to as an external process — the first run fetches and caches it automatically, so this never needs a manual install step. One of 17 built-in themes, picked via <code>--theme</code> or the new Settings → EXPORT tab&#x27;s <code>pdf_theme</code> field (defaults to <code>&quot;default&quot;</code>).</li>
+<li>Clicking a row in NOTEBOOKS or NOTES now selects it and does exactly what <code>Enter</code>/<code>l</code> would — jumps focus into NOTES (from NOTEBOOKS) or PREVIEW (from a note), or descends into a folder — instead of doing nothing. Restricted to <code>Mode::Normal</code> with no modal open, same guard the existing PREVIEW click-to-edit already uses.</li>
+<li>Global tasks view (leader+<code>t</code>): every <code>- [ ]</code> checkbox task across every notebook in one modal, sorted by urgency (overdue first, then due today, then future, then undated), each row showing its location (<code>notebook/folders…/note title</code>) muted alongside the task so it&#x27;s never lost while scrolling. <code>Enter</code>/<code>space</code> toggles a task directly in its source file (the edit flows through the same git/auto-sync machinery as any other note change), <code>l</code>/<code>o</code> jumps to the note it lives in, <code>a</code> also shows already-completed tasks. Tasks support an optional <code>@due(YYYY-MM-DD)</code> tag — overdue dates render in the theme&#x27;s error color, today&#x27;s in warning, future ones muted.</li>
+<li><code>shiki doctor</code> now includes the new <code>links</code>/<code>tasks_panel</code> global keybindings in its collision check — a config that customized <code>theme_picker = &quot;t&quot;</code> (colliding with the new tasks default) gets flagged instead of one of the two actions silently not working.</li>
+<li>Unlinked mentions in the links modal: notes that mention the current note&#x27;s title in plain text without actually <code>[[linking]]</code> to it get their own &quot;Mentions (unlinked)&quot; section under Backlinks — candidate links you probably meant to make, jumpable like any backlink.</li>
+<li>The links modal is now reachable globally via leader+<code>B</code> from any panel, not only through PREVIEW&#x27;s own <code>L</code> binding.</li>
+<li><code>shiki notebook delete &lt;name&gt; --yes</code> — the CLI had no way to delete a notebook at all, despite the TUI supporting it; <code>--yes</code> is required (mirrors the TUI&#x27;s own confirm dialog) since this permanently removes the notebook&#x27;s directory and every note in it.</li>
+<li><code>shiki doctor</code> now also checks: unrecognized keys anywhere in <code>config.toml</code> (a generic diff against <code>Config::default()</code>&#x27;s own shape, so it can&#x27;t drift out of sync with the struct fields the way a hand-maintained list of &quot;known keys&quot; would); <code>general.default_notebook</code> actually matching an existing notebook; <code>data_dir</code> being a real directory, not just existing; two notebooks resolving to the same path on disk; <code>git.remote_template</code> containing its <code>{notebook}</code> placeholder; and <code>git.sign_commits</code> having an actual signing key configured.</li>
+<li><code>shiki-core</code>/<code>shiki-config</code> test coverage: <code>note.rs</code>, <code>tags.rs</code>, <code>daily.rs</code>, and <code>session.rs</code> had zero tests despite being pure, easily-testable logic — added coverage for frontmatter parsing (including the CRLF and YAML-block-scalar fixes below), slugify, tag indexing, daily-note creation, and session-path sanitization.</li>
+<li>CI: a <code>cargo audit</code> job (with a <code>.cargo/audit.toml</code> ignore-list mechanism for a known, not-yet-fixable transitive advisory) and a real <code>cargo test --workspace</code> job, both missing before.</li>
+<li>Real syntax highlighting for fenced code blocks in the PREVIEW panel (<code>shiki-tui/src/syntax.rs</code>), via <code>syntect</code> — a workspace dependency that, until now, wasn&#x27;t actually used anywhere. Every code fence used to render as flat dimmed text regardless of its language tag; <code> </code>`<code>lang </code> fences with a language <code>syntect</code>&#x27;s bundled syntax defs recognize now get real per-token coloring, picked to match the active theme&#x27;s light/dark bias (<code>render::is_dark_color</code>) so a light theme like catppuccin-latte doesn&#x27;t get a dark-on-dark syntect theme. <code> </code>`<code>mermaid </code> fences render in a distinct accent color (a terminal can&#x27;t render an actual diagram) instead of being visually indistinguishable from a blockquote.</li>
+<li><code>shiki list</code>/<code>shiki search</code>/<code>shiki show</code>/<code>shiki notebook list</code> all gained a <code>--json</code> flag, emitting structured output instead of plain text — none of the CLI&#x27;s read commands had a machine-readable format before, which made them unusable from scripts/other programs without fragile text parsing.</li>
+<li><code>shiki new</code> gained <code>--body &lt;text&gt;</code>/<code>--stdin</code> (reads the note body from stdin) and <code>--tags</code>, so a note can be created fully non-interactively — every content-producing CLI command used to unconditionally spawn <code>$EDITOR</code> and block on it, with no way to script note creation at all.</li>
+<li><code>shiki export --notebook &lt;name&gt; --out &lt;path&gt; --format html|md</code> — a new command bundling every note in a notebook into a single file. <code>--format html</code> (the default) is real Markdown-to-HTML via <code>pulldown-cmark</code> (another previously-declared-but-unused workspace dependency) with a small embedded stylesheet (light/dark aware, no external assets); <code>--format md</code> is a plain concatenated Markdown bundle. There was previously no export path of any kind.</li>
+<li>Notebooks now tolerate <code>.txt</code> and <code>.mdx</code> files alongside <code>.md</code> when listing/reading notes (<code>Notebook::list_dir</code>&#x27;s <code>NOTE_EXTENSIONS</code>) — a notebook pointed at an existing Obsidian vault commonly has both, and they used to be silently invisible to shiki (not deleted, just never listed). New notes are still always created as <code>.md</code>; renaming a <code>.txt</code>/<code>.mdx</code> note now preserves its original extension instead of silently converting it to <code>.md</code>.</li>
+</ul>
+<h4>Changed</h4>
+<ul>
+<li><code>shiki sync</code> (CLI) now resolves <code>auto_push</code>/<code>auto_commit</code> per-notebook (<code>Config::sync_for</code>) instead of always reading the global <code>[git]</code> defaults, matching the TUI&#x27;s <code>s</code>/<code>u</code> behavior; it also now writes the same file-named commit message the TUI does (<code>git::diff_summary</code>) instead of a bare <code>&quot;{prefix}sync&quot;</code>, and gives a clear error instead of a raw libgit2 one when no remote is configured.</li>
+<li><code>shiki search</code>/<code>shiki list</code>/<code>shiki notebook list</code>&#x27;s note counts now walk every folder (<code>all_notes_recursive</code>), not just the notebook root — a note nested in a subfolder used to be invisible to these commands while still being editable by name via <code>shiki edit</code>.</li>
+<li><code>shiki new</code>/<code>shiki edit</code>/<code>shiki daily</code> now respect <code>general.use_favorite_editor</code> the same way the TUI&#x27;s <code>i</code> binding does, instead of always using the plain configured <code>general.editor</code>.</li>
+<li>The self-updater (leader+<code>U</code>) now installs the *exact* version its confirm dialog showed, rather than re-resolving &quot;latest&quot; a second time — a new release landing in the gap between check and confirmation could previously install a different version than what was displayed.</li>
+<li>CI&#x27;s <code>fmt-and-clippy</code> job is now matrixed across all three OSes (fmt itself still only runs once, on Linux) so clippy actually lints the <code>#[cfg(target_os = &quot;macos&quot;/&quot;windows&quot;)]</code> blocks in <code>shiki-core/src/editor.rs</code>; the old separate <code>build</code> job was folded into <code>test</code> (it was paying for close to the same compilation a second time on every push).</li>
+<li>Every workflow job across all 5 <code>.github/workflows/*.yml</code> files now has a <code>timeout-minutes</code>, and <code>release.yml</code>&#x27;s <code>contents: write</code> permission is scoped to just the <code>release</code> job instead of the whole workflow.</li>
+<li>The marketing site: a working hamburger menu below 900px (the nav used to just disappear with no replacement), with a real focus trap and no lingering stale popover state when it closes; <code>.ref-table</code> now scrolls horizontally in its own container instead of the whole page; TOC/search jumps in <code>documentation.html</code> no longer land headings underneath the sticky top bars; the 12 per-theme gallery screenshots no longer double-download (wrong theme, then the right one) on load; the hero GIF respects <code>prefers-reduced-motion</code>; <code>loadLatestRelease</code>&#x27;s fetch has a timeout.</li>
+</ul>
+<h4>Fixed</h4>
+<ul>
+<li>On macOS, <code>NotebookStore::list()</code> could pick up the <code>templates</code> directory as if it were a real notebook. <code>directories::ProjectDirs</code> resolves <code>config_dir()</code> and <code>data_dir()</code> to the exact same path on macOS (unlike Linux/Windows), so <code>default_templates_dir()</code>&#x27;s plain, non-git <code>templates/</code> folder ended up sitting directly inside the data dir alongside real notebooks. Auto-discovered subdirectories of the data dir now require a <code>.git</code> directory to count as a notebook — a real distinction, not a heuristic, since every notebook is git-initialized immediately on creation.</li>
+<li>The empty NOTEBOOKS panel&#x27;s hint said <code>press \</code>A\<code> to create one</code>, but the actual default keybinding for it is lowercase <code>a</code> (found by actually using the freshly-built app, not just reading the diff).</li>
+<li>A note&#x27;s frontmatter parser used to truncate at the *first* line reading exactly <code>---</code> anywhere in the file — a YAML block scalar that legitimately contained such a line lost every field after it. It now requires that line to be the real closing delimiter.</li>
+<li>Frontmatter written with CRLF line endings (round-tripped through an external editor on Windows) used to fail to parse entirely, falling back to a synthesized title as if the note had no frontmatter at all.</li>
+<li><code>create_note_in</code>/<code>rename_note_at</code> could silently overwrite another note whose title slugified to the same filename (e.g. &quot;Q3 Report&quot; vs. &quot;Q3, Report!&quot;); both now dedupe with a <code>-2</code>/<code>-3</code> suffix, and a symbol/emoji-only title falls back to a timestamp-based slug instead of an empty one.</li>
+<li><code>Notebook::collect_notes</code>&#x27;s recursive walk had no guard against a self-referential symlink inside a notebook, which could stack-overflow global search.</li>
+<li><code>Template::render</code> (used by note templates and the <code>/</code>-menu) did naive sequential find-and-replace per placeholder, so a variable&#x27;s value containing another placeholder&#x27;s literal text (e.g. a title like &quot;Meeting {{date}} notes&quot;) got that text substituted again on the next pass. It now does a single left-to-right scan.</li>
+<li><code>editor::command_for</code> split an editor command on plain whitespace with no quoting support, breaking any configured/detected editor whose path contains a space (common on Windows).</li>
+<li><code>git::redact_credentials</code> treated the *first* <code>@</code> anywhere in a URL as credentials to redact — a self-hosted remote with a legitimate <code>@</code> in its path (e.g. <code>.../notes@backup.git</code>) got silently mangled in logs.</li>
+<li><code>general.daily_template</code> was a fully documented, Settings-editable config field that <code>daily::create_or_open</code> never actually read — it always hardcoded <code>&quot;daily&quot;</code> regardless. Both the CLI (<code>shiki daily</code>) and the TUI now pass the configured value through.</li>
+<li><code>copy_folder_to</code>/<code>move_folder_to</code> had no guard against a destination that is the source itself, or nested inside it — reachable through the <code>m</code> (move) prompt&#x27;s prefilled address — which used to recurse forever creating nested copies of the folder inside itself.</li>
+<li><code>git::status()</code> reported a notebook as clean (<code>dirty_count = 0</code>) even when the underlying <code>repo.statuses(None)</code> call itself failed (locked index, permissions, a corrupted repo); the footer and drawer now show a distinct &quot;status?&quot; indicator instead.</li>
+<li>Applying a slash-command or a <code>[[wikilink]]</code> selection while multiple cursors were active only ever edited the primary cursor&#x27;s text, leaving every secondary cursor with its own unconsumed literal text and a desynced position for the rest of the editing session. Both now collapse to a single cursor before applying.</li>
+<li><code>p</code> (pull one notebook) reset the NOTES selection and preview scroll back to the top whenever the pulled notebook was still selected, even if the user had since navigated to a different note/folder within it — same bug already fixed for <code>P</code> (pull all), now fixed for the single-notebook case too.</li>
+<li>A hand-edited or corrupted <code>session.toml</code> with <code>notes_path</code> containing <code>&quot;..&quot;</code> components could make the NOTES panel navigate outside the notebook (and the data directory) on restore; path components are now sanitized on load.</li>
+<li><code>find_note</code> (used by <code>edit</code>/<code>show</code>/<code>daily</code>/<code>new</code>) could silently resolve to the wrong note when two notes in different folders shared a title/slug, a possible ambiguity introduced when note lookup became recursive; it now errors with both folders listed instead of guessing.</li>
+<li><code>TagIndex::build</code> was rebuilt on every draw tick while the tags modal was open, and even after being cached, <code>App::tag_index()</code> still cloned the whole cached index on every draw call — both are now a real cache hit with no per-frame rebuild or clone.</li>
+<li><code>wikilinks::backlinks</code> re-scanned every note (with a fresh <code>slugify</code> call) once per link per note, making it cost O(notes × total links in the notebook); it now builds a title/slug index once.</li>
+<li><code>search_text</code> (global search) allocated a fresh scratch buffer per note on every keystroke instead of reusing one across the scan.</li>
+</ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="release-nav">
+    <div class="container release-nav-row">
+      <a href="0.8.10.html" class="release-nav-link">← v0.8.10</a>
+      <a href="../changelog.html" class="release-nav-link">All releases</a>
+      <a href="../changelog.html" class="release-nav-link release-nav-link--disabled">No newer release →</a>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/sazardev/shiki">GitHub</a>
+        <a href="https://github.com/sazardev/shiki/releases/tag/v0.9.0">GitHub Release</a>
+        <a href="https://github.com/sazardev/shiki/issues">Issues</a>
+        <a href="https://github.com/sazardev/shiki/blob/main/LICENSE">MIT License</a>
+        <a class="coffee-link" href="https://buymeacoffee.com/sazarcode">☕ Buy me a coffee</a>
+      </div>
+      <small>shiki (私記) — built by <a href="https://github.com/sazardev">sazardev</a>. Free and open source, forever.</small>
+    </div>
+  </footer>
+
+  <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!--
+  Per-version release page template. `scripts/generate_release_pages.py`
+  fills in every {{PLACEHOLDER}} with plain string substitution and writes
+  the result to docs/changelog/0.8.4.html. Paths inside are written
+  relative to that output location (one level under docs/), i.e. `../css/`,
+  `../assets/`, `../index.html` etc. — not relative to this template file.
+
+  Unlike changelog.html (which fetches CHANGELOG.md live via JS so it can
+  never drift, see docs/js/main.js), this page's changelog body is baked in
+  statically at generation time — it has to be, since link-unfurlers (the
+  actual point of this page existing) read the raw HTML and never execute
+  JS, so the og:title/og:description/og:image and the visible content must
+  already be correct in the file as committed.
+-->
+<!DOCTYPE html>
+<html lang="en" data-theme="gruvbox-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>shiki v0.8.4 — Release notes</title>
+  <meta name="description" content="Settings screen (leader+s) — a read-only, near-full-screen summary of the current config (general/theme/git/per-notebook overrides/snippets), grouped by sect…" />
+  <meta name="keywords" content="shiki changelog, shiki v0.8.4, shiki release notes" />
+  <meta name="author" content="sazardev" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://sazardev.github.io/shiki/changelog/0.8.4.html" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://sazardev.github.io/shiki/changelog/0.8.4.html" />
+  <meta property="og:site_name" content="shiki" />
+  <meta property="og:title" content="shiki v0.8.4 — Release notes" />
+  <meta property="og:description" content="Settings screen (leader+s) — a read-only, near-full-screen summary of the current config (general/theme/git/per-notebook overrides/snippets), grouped by sect…" />
+  <meta property="og:image" content="https://sazardev.github.io/shiki/assets/og/0.8.4.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="shiki v0.8.4 — release card" />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="shiki v0.8.4 — Release notes" />
+  <meta name="twitter:description" content="Settings screen (leader+s) — a read-only, near-full-screen summary of the current config (general/theme/git/per-notebook overrides/snippets), grouped by sect…" />
+  <meta name="twitter:image" content="https://sazardev.github.io/shiki/assets/og/0.8.4.png" />
+  <meta name="twitter:image:alt" content="shiki v0.8.4 — release card" />
+
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/documentation.css" />
+</head>
+<body class="doc-page">
+
+  <header class="topbar">
+    <div class="brand"><a href="../index.html" style="color:inherit;text-decoration:none;">shiki (私記)</a><span class="cursor"></span></div>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
+    <nav id="site-nav">
+      <a href="../index.html#themes">Themes</a>
+      <a href="../index.html#features">Features</a>
+      <a href="../index.html#install">Install</a>
+      <a href="../documentation.html">Docs</a>
+      <a href="../changelog.html" class="active">Changelog</a>
+      <a href="https://github.com/sazardev/shiki">GitHub</a>
+      <span class="version-chip-wrap" id="version-chip-wrap">
+        <button type="button" class="pill pill-button" id="version-pill" hidden></button>
+        <div class="version-popover" id="version-popover" role="dialog" aria-label="What's new" hidden>
+          <div class="version-popover-header">
+            <strong>What's new</strong>
+            <a href="../changelog.html">Full changelog →</a>
+          </div>
+          <div class="version-popover-body changelog-body" id="version-popover-content">
+            <p class="changelog-loading">Loading changelog…</p>
+          </div>
+        </div>
+      </span>
+    </nav>
+  </header>
+
+  <section class="doc-hero">
+    <div class="container">
+      <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
+      <h1>shiki v0.8.4</h1>
+      <p class="muted" style="max-width: 66ch;">Released 2026-07-27.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="container release-layout">
+      <div class="release-shot">
+        <div class="release-shot-frame">
+          <img src="../assets/screenshots/gruvbox-dark.png" alt="shiki v0.8.4, running in a terminal" loading="lazy" />
+        </div>
+      </div>
+      <div class="changelog-body release-notes">
+<h4>Added</h4>
+<ul>
+<li>Settings screen (leader+<code>s</code>) — a read-only, near-full-screen summary of the current config (general/theme/git/per-notebook overrides/snippets), grouped by section, scrollable with <code>j</code>/<code>k</code>/<code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code>. <code>i</code>/<code>E</code> jump straight to editing <code>config.toml</code> itself (inline or externally, same convention as editing a note); on save the config is re-parsed, applied immediately (theme, keybindings, favorite editor — no restart), and an invalid edit is reported without being written or applied, keeping the previous config running.</li>
+<li>A fresh install&#x27;s <code>config.toml</code> is now fully commented, section by section — generated from the real <code>Config::default()</code> values (never hand-duplicated, so a comment can go stale but a default value never can) with prose explaining each table.</li>
+<li>7 more built-in <code>/</code>-menu commands, so more of it is useful out of the box with zero config: <code>bullet</code>/<code>numbered</code> list items, <code>link</code>, <code>image</code>, <code>note</code>/<code>warning</code> callouts, and a collapsible <code>details</code> section — alongside the existing headers/code/math/table/checklist/quote/divider/ date/tags/frontmatter, for 19 built-ins total.</li>
+<li><code>shiki doctor</code> now flags configuration mistakes that used to fail silently: two keybindings in the same scope bound to the same key (only one ever actually works), a keybinding that collides with <code>leader</code> or <code>quit</code> (always loses to them, so it can never trigger), a keybinding string that doesn&#x27;t parse to any real key, and two <code>/</code>-menu snippet triggers that collide case-insensitively (e.g. <code>[snippets.H1]</code> next to <code>[snippets.h1]</code>).</li>
+<li>3 more built-in themes: <strong>Dracula</strong>, <strong>One Dark</strong>, and <strong>Monokai</strong> — 15 total now. Palettes taken from each project&#x27;s own official/canonical values, same standard as every other included theme.</li>
+</ul>
+<h4>Fixed</h4>
+<ul>
+<li><code>config.toml</code> tables missing an individual key (e.g. <code>[general]</code> with only <code>default_notebook</code> set) used to fail parsing the *entire* config instead of falling back to that one field&#x27;s default — now every field across every table has its own default, so a partial hand-edit (more likely now that Settings invites editing this file directly) never takes down the whole app.</li>
+<li>Two <code>/</code>-menu snippet triggers colliding case-insensitively (<code>[snippets.H1]</code> and <code>[snippets.h1]</code> in the same config) used to resolve to whichever one <code>HashMap</code> iteration happened to visit last — different, unpredictably, between runs of the exact same config. Now sorted deterministically, so the outcome (while still worth fixing — <code>shiki doctor</code> reports it) is at least reproducible.</li>
+<li>PREVIEW&#x27;s Markdown renderer never actually rendered <code><strong>bold</strong></code>/<code>*italic*</code>/`<code> </code>code<code> </code><code> (the asterisks/backticks showed up literally), tables, </code>$$math$$<code> blocks, </code>&lt;details&gt;<code>/</code>&lt;summary&gt;<code>, ordered lists, horizontal rules, or </code><a href="url" target="_blank" rel="noopener">text</a><code>/</code>!<a href="url" target="_blank" rel="noopener">alt</a><code> links/images — so several of the </code>/<code>-menu&#x27;s own blocks (table, math, note/warning callouts, details, link, image) looked broken the moment you left edit mode, since a callout&#x27;s </code>&gt; <strong>Warning:</strong> ...<code> showed the bold markers raw instead of bolding the text. All of the above are now recognized and styled; </code>&lt;details&gt;` is shown fully expanded (a static preview pane has no fold state to toggle against) rather than actually collapsing.</li>
+</ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="release-nav">
+    <div class="container release-nav-row">
+      <a href="0.8.3.html" class="release-nav-link">← v0.8.3</a>
+      <a href="../changelog.html" class="release-nav-link">All releases</a>
+      <a href="0.8.5.html" class="release-nav-link">v0.8.5 →</a>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/sazardev/shiki">GitHub</a>
+        <a href="https://github.com/sazardev/shiki/releases/tag/v0.8.4">GitHub Release</a>
+        <a href="https://github.com/sazardev/shiki/issues">Issues</a>
+        <a href="https://github.com/sazardev/shiki/blob/main/LICENSE">MIT License</a>
+        <a class="coffee-link" href="https://buymeacoffee.com/sazarcode">☕ Buy me a coffee</a>
+      </div>
+      <small>shiki (私記) — built by <a href="https://github.com/sazardev">sazardev</a>. Free and open source, forever.</small>
+    </div>
+  </footer>
+
+  <script src="../js/main.js"></script>
+</body>
+</html>

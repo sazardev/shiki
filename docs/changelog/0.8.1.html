@@ -1,0 +1,139 @@
+<!--
+  Per-version release page template. `scripts/generate_release_pages.py`
+  fills in every {{PLACEHOLDER}} with plain string substitution and writes
+  the result to docs/changelog/0.8.1.html. Paths inside are written
+  relative to that output location (one level under docs/), i.e. `../css/`,
+  `../assets/`, `../index.html` etc. — not relative to this template file.
+
+  Unlike changelog.html (which fetches CHANGELOG.md live via JS so it can
+  never drift, see docs/js/main.js), this page's changelog body is baked in
+  statically at generation time — it has to be, since link-unfurlers (the
+  actual point of this page existing) read the raw HTML and never execute
+  JS, so the og:title/og:description/og:image and the visible content must
+  already be correct in the file as committed.
+-->
+<!DOCTYPE html>
+<html lang="en" data-theme="gruvbox-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>shiki v0.8.1 — Release notes</title>
+  <meta name="description" content="Footer now shows a clickable &quot;☕ Support&quot; link (buymeacoffee.com/sazarcode) — opens in the default browser cross-platform via a new shiki_core::browser::open_…" />
+  <meta name="keywords" content="shiki changelog, shiki v0.8.1, shiki release notes" />
+  <meta name="author" content="sazardev" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://sazardev.github.io/shiki/changelog/0.8.1.html" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://sazardev.github.io/shiki/changelog/0.8.1.html" />
+  <meta property="og:site_name" content="shiki" />
+  <meta property="og:title" content="shiki v0.8.1 — Release notes" />
+  <meta property="og:description" content="Footer now shows a clickable &quot;☕ Support&quot; link (buymeacoffee.com/sazarcode) — opens in the default browser cross-platform via a new shiki_core::browser::open_…" />
+  <meta property="og:image" content="https://sazardev.github.io/shiki/assets/og/0.8.1.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="shiki v0.8.1 — release card" />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="shiki v0.8.1 — Release notes" />
+  <meta name="twitter:description" content="Footer now shows a clickable &quot;☕ Support&quot; link (buymeacoffee.com/sazarcode) — opens in the default browser cross-platform via a new shiki_core::browser::open_…" />
+  <meta name="twitter:image" content="https://sazardev.github.io/shiki/assets/og/0.8.1.png" />
+  <meta name="twitter:image:alt" content="shiki v0.8.1 — release card" />
+
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/documentation.css" />
+</head>
+<body class="doc-page">
+
+  <header class="topbar">
+    <div class="brand"><a href="../index.html" style="color:inherit;text-decoration:none;">shiki (私記)</a><span class="cursor"></span></div>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
+    <nav id="site-nav">
+      <a href="../index.html#themes">Themes</a>
+      <a href="../index.html#features">Features</a>
+      <a href="../index.html#install">Install</a>
+      <a href="../documentation.html">Docs</a>
+      <a href="../changelog.html" class="active">Changelog</a>
+      <a href="https://github.com/sazardev/shiki">GitHub</a>
+      <span class="version-chip-wrap" id="version-chip-wrap">
+        <button type="button" class="pill pill-button" id="version-pill" hidden></button>
+        <div class="version-popover" id="version-popover" role="dialog" aria-label="What's new" hidden>
+          <div class="version-popover-header">
+            <strong>What's new</strong>
+            <a href="../changelog.html">Full changelog →</a>
+          </div>
+          <div class="version-popover-body changelog-body" id="version-popover-content">
+            <p class="changelog-loading">Loading changelog…</p>
+          </div>
+        </div>
+      </span>
+    </nav>
+  </header>
+
+  <section class="doc-hero">
+    <div class="container">
+      <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
+      <h1>shiki v0.8.1</h1>
+      <p class="muted" style="max-width: 66ch;">Released 2026-07-23.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="container release-layout">
+      <div class="release-shot">
+        <div class="release-shot-frame">
+          <img src="../assets/screenshots/gruvbox-dark.png" alt="shiki v0.8.1, running in a terminal" loading="lazy" />
+        </div>
+      </div>
+      <div class="changelog-body release-notes">
+<h4>Added</h4>
+<ul>
+<li>Footer now shows a clickable &quot;☕ Support&quot; link (<code>buymeacoffee.com/sazarcode</code>) — opens in the default browser cross-platform via a new <code>shiki_core::browser::open_url</code>.</li>
+<li>Scripted, reproducible demo GIF (<code>scripts/demo-gif.sh</code>, recorded with VHS) covering global and in-notebook fuzzy search (with a real cross-notebook jump), tags, real multi-select with a batch delete, creating and moving folders, writing a full note from scratch in the inline editor, a git commit, and live theme switching — featured in the hero of the marketing site (playing on page load) and in a dedicated Demo section, plus <code>README.md</code>.</li>
+<li>Links modal (<code>L</code> in PREVIEW) — the selected note&#x27;s outgoing <code>[[wikilinks]]</code> (resolved against every note in the notebook, any folder depth — not just its own directory) plus every other note that links back to it, with <code>Enter</code> jumping straight to either. <code>shiki_core::wikilinks</code> already had <code>extract</code>/<code>resolve</code> written but nothing called them; <code>resolve</code> is also fixed to search the whole notebook recursively instead of only a note&#x27;s own directory.</li>
+<li>Deleting a note or folder now moves it to a trash directory (<code>~/.config/shiki/trash/</code>) instead of removing it permanently; leader+<code>u</code> restores the most recently deleted note/folder (or whole batch, from a Visual-mode delete) — one level of undo, not a full history.</li>
+<li><code>a</code> (new note) now opens a template picker after the title — every <code>.md</code> file in <code>~/.config/shiki/templates/</code> plus a &quot;blank&quot; option — instead of always starting from an empty body. The chosen template&#x27;s name is recorded in the note&#x27;s own <code>template</code> frontmatter field.</li>
+<li>Footer&#x27;s character count (NOTES/PREVIEW, a note selected) now also shows word count and an estimated reading time (200wpm).</li>
+</ul>
+<h4>Changed</h4>
+<ul>
+<li>Fresh installs now default to the <code>gruvbox-dark</code> theme instead of <code>catppuccin-mocha</code>.</li>
+<li>Delete confirmation prompts no longer say &quot;this can&#x27;t be undone&quot; — it can now, via leader+<code>u</code>.</li>
+</ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="release-nav">
+    <div class="container release-nav-row">
+      <a href="0.8.0.html" class="release-nav-link">← v0.8.0</a>
+      <a href="../changelog.html" class="release-nav-link">All releases</a>
+      <a href="0.8.2.html" class="release-nav-link">v0.8.2 →</a>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/sazardev/shiki">GitHub</a>
+        <a href="https://github.com/sazardev/shiki/releases/tag/v0.8.1">GitHub Release</a>
+        <a href="https://github.com/sazardev/shiki/issues">Issues</a>
+        <a href="https://github.com/sazardev/shiki/blob/main/LICENSE">MIT License</a>
+        <a class="coffee-link" href="https://buymeacoffee.com/sazarcode">☕ Buy me a coffee</a>
+      </div>
+      <small>shiki (私記) — built by <a href="https://github.com/sazardev">sazardev</a>. Free and open source, forever.</small>
+    </div>
+  </footer>
+
+  <script src="../js/main.js"></script>
+</body>
+</html>

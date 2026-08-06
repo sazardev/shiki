@@ -494,6 +494,69 @@ jobs:
             git push origin HEAD:main
           fi
 
+  update-release-pages:
+    name: Generate the per-version release page and OG share card
+    # Needs update-screenshots specifically (not just release/resolve-tag),
+    # for two reasons: the OG card picks a theme's screenshot from
+    # docs/assets/screenshots/*.png, which that job just refreshed for this
+    # exact release, and running after it (rather than in parallel) avoids
+    # the same push race update-screenshots itself avoids by depending on
+    # update-packaging-manifests — two jobs racing to push their own commit
+    # to `main` at the same time, one of them rejected as a non-fast-forward.
+    needs: [release, resolve-tag, update-screenshots]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          token: ${{ secrets.RELEASE_TAG_PAT || github.token }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ubuntu-latest's own `chromium-browser` apt package is a snap-only
+      # stub with no snapd available in this container, so it silently fails
+      # to launch — browser-actions/setup-chrome downloads a real, working
+      # Chromium binary instead, the same class of fix documented for the
+      # sandbox's own capped-viewport headless-Chromium render CLAUDE.md
+      # already describes for the original, hand-built og-image.png.
+      - uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
+
+      - name: Generate release page + OG card for this version
+        id: generate
+        run: |
+          set -euo pipefail
+          tag="${{ needs.resolve-tag.outputs.tag }}"
+          version="${tag#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          python3 scripts/generate_release_pages.py --version "$version" \
+            --chromium "${{ steps.setup-chrome.outputs.chrome-path }}"
+
+      - name: Commit and push the generated release page
+        env:
+          HAS_PAT: ${{ secrets.RELEASE_TAG_PAT }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "docs/changelog/${{ steps.generate.outputs.version }}.html" \
+                   "docs/assets/og/${{ steps.generate.outputs.version }}.png" \
+                   docs/sitemap.xml
+          if git diff --cached --quiet; then
+            echo "No release-page changes to commit"
+          elif [ -z "$HAS_PAT" ]; then
+            echo "::error::RELEASE_TAG_PAT secret is not set — main requires a pull" \
+                 "request, so pushing with the default GITHUB_TOKEN would be rejected." \
+                 "Add a repo-scoped personal access token as RELEASE_TAG_PAT."
+            exit 1
+          else
+            git commit -m "docs: add release page and OG card for ${{ needs.resolve-tag.outputs.tag }}"
+            git push origin HEAD:main
+          fi
+
   publish-crates:
     name: Publish to crates.io
     needs: release
