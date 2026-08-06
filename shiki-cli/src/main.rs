@@ -327,6 +327,7 @@ fn main() -> Result<()> {
                 &templates_dir,
                 &editor,
                 &ctx.config.general.daily_template,
+                ctx.config.general.daily_agenda,
             )
         }
         Some(Commands::Sync { notebook }) => {

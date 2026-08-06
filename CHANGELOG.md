@@ -26,6 +26,12 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   silently), both editable from the EXPORT tab in Settings.
 - `[theme].icons` (Settings, THEME tab): turn off to fall back to plain text everywhere instead
   of Nerd Font glyphs, for a terminal font that isn't Nerd-Fonts-patched.
+- Six new `[general]` toggles, all editable from the GENERAL tab in Settings: `show_coffee_link`
+  (hide the footer's Buy Me a Coffee segment), `skip_delete_confirm` (delete a note/folder
+  immediately, still restorable via `leader`+`u`), `show_dates` (persists the notes-scope `D`
+  toggle instead of resetting every launch), `wikilink_autocomplete` (disable the `[[` menu),
+  `daily_agenda` (skip the "Due today" section on new daily notes), and `compact_footer` (hide
+  char/word count and reading time, leaving just the essentials).
 
 ## [0.9.0] - 2026-08-04
 

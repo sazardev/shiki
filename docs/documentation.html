@@ -30,6 +30,7 @@
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
+  <link rel="alternate" type="application/rss+xml" title="shiki changelog" href="feed.xml" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -725,6 +726,12 @@ Content in **markdown**.
           <tr><td><code>data_dir</code></td><td>unset (platform default)</td><td>Point the <em>entire</em> notebooks root somewhere else — an absolute path to an existing folder of markdown notes (an Obsidian vault, for instance) instead of <code>~/.local/share/shiki/</code>. Every notebook without its own <code>path</code> (below) lives as a subdirectory of this</td></tr>
           <tr><td><code>show_hints</code></td><td><code>true</code></td><td>Shows a small muted hint line under the input box for text prompts whose behavior isn't obvious from the title alone — currently just new-notebook, explaining that a git URL clones and a filesystem path adopts an existing directory</td></tr>
           <tr><td><code>remember_last_session</code></td><td><code>true</code></td><td>Quitting saves exactly where you were — notebook, folder, selected note/folder, and which panel had focus — and the next launch restores it instead of always starting at the first notebook's root. A renamed/deleted notebook or moved note is ignored gracefully rather than erroring</td></tr>
+          <tr><td><code>show_coffee_link</code></td><td><code>true</code></td><td>Shows the Buy Me a Coffee segment in the footer (mouse-clickable)</td></tr>
+          <tr><td><code>skip_delete_confirm</code></td><td><code>false</code></td><td>When true, deleting a note/folder skips the confirm dialog and deletes immediately — still restorable via <code>leader</code> then <code>u</code>. Doesn't apply to notebook delete, which asks a real delete-vs-untrack question</td></tr>
+          <tr><td><code>show_dates</code></td><td><code>false</code></td><td>Shows each note's date next to its title in the NOTES list — the persisted default for the notes-scope <code>D</code> toggle</td></tr>
+          <tr><td><code>wikilink_autocomplete</code></td><td><code>true</code></td><td>Typing <code>[[</code> in the inline editor opens the wikilink autocomplete menu; off falls through to a literal <code>[[</code></td></tr>
+          <tr><td><code>daily_agenda</code></td><td><code>true</code></td><td>A new daily note gets a "## Due today" section listing pending tasks across every notebook</td></tr>
+          <tr><td><code>compact_footer</code></td><td><code>false</code></td><td>Hides char/word count, reading time, and note-count detail from the footer, leaving just the essentials</td></tr>
         </tbody>
       </table>
       <div class="doc-callout">
@@ -984,6 +991,22 @@ show_hints = true
 # folder, selected note/folder, and focused panel — and the next launch
 # restores it instead of always starting at the first notebook's root.
 remember_last_session = true
+# Shows the "Buy Me a Coffee" segment in the footer (mouse-clickable).
+show_coffee_link = true
+# When true, deleting a note/folder skips the confirm dialog and deletes
+# immediately — still restorable via leader+`u`. Doesn't apply to notebook
+# delete, which asks a real delete-vs-untrack question.
+skip_delete_confirm = false
+# Shows each note's date next to its title in the NOTES list.
+show_dates = false
+# Typing `[[` in the inline editor opens the wikilink autocomplete menu.
+wikilink_autocomplete = true
+# A new daily note gets a "## Due today" section listing pending tasks
+# across every notebook.
+daily_agenda = true
+# Hides char/word count, reading time, and note-count detail from the
+# footer, leaving just the essentials.
+compact_footer = false
 
 [keybindings]
 leader = "space"

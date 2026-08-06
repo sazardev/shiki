@@ -66,6 +66,45 @@ pub struct General {
     /// missing key to `false`. See `shiki_config::SessionState`.
     #[serde(default = "default_true")]
     pub remember_last_session: bool,
+    /// Shows the "Buy Me a Coffee" segment in the footer (right-aligned,
+    /// mouse-clickable — see `status_bar::coffee_hit_at`). Defaults to
+    /// `true`; off removes the segment entirely rather than leaving a
+    /// disabled/greyed-out placeholder.
+    #[serde(default = "default_true")]
+    pub show_coffee_link: bool,
+    /// When true, deleting a note/folder (notes-scope `d`, including a
+    /// Visual-mode batch delete) skips the "are you sure?" confirm dialog
+    /// and deletes immediately. Off by default — this is a genuine behavior
+    /// change, not a pure addition. Deliberately doesn't apply to notebook
+    /// delete, which asks a real three-way question (delete files / just
+    /// untrack / cancel), not a plain yes/no safety gate; every note/folder
+    /// delete is still restorable via leader+`u` regardless of this setting,
+    /// which is what makes skipping the prompt here reasonable at all.
+    #[serde(default)]
+    pub skip_delete_confirm: bool,
+    /// Shows each note's date next to its title in the NOTES list. Used to
+    /// be a runtime-only `App` field (notes-scope `D`, reset every launch);
+    /// promoted to a real config field so the choice persists. Off by
+    /// default, unchanged from the runtime-only behavior it replaces.
+    #[serde(default)]
+    pub show_dates: bool,
+    /// Typing `[[` in the inline editor opens the wikilink autocomplete
+    /// menu. Defaults to `true`; off falls through to a literal `[[` with
+    /// no menu, for anyone who finds the popup intrusive while typing.
+    #[serde(default = "default_true")]
+    pub wikilink_autocomplete: bool,
+    /// Creating a new daily note appends a "## Due today" section listing
+    /// pending/overdue tasks across every notebook (only on creation, never
+    /// on reopen — see `shiki_core::daily::create_or_open`). Defaults to
+    /// `true`; off creates a daily note with no agenda section at all.
+    #[serde(default = "default_true")]
+    pub daily_agenda: bool,
+    /// Hides the footer's character/word count and reading-time estimate
+    /// (PREVIEW) and note-count breakdown (browsing), leaving just the
+    /// essentials — notebook name, git status, editor mode. Off by default:
+    /// this is a visible reduction, not a pure addition.
+    #[serde(default)]
+    pub compact_footer: bool,
 }
 
 impl Default for General {
@@ -79,6 +118,12 @@ impl Default for General {
             data_dir: None,
             show_hints: true,
             remember_last_session: true,
+            show_coffee_link: true,
+            skip_delete_confirm: false,
+            show_dates: false,
+            wikilink_autocomplete: true,
+            daily_agenda: true,
+            compact_footer: false,
         }
     }
 }
@@ -1308,7 +1353,19 @@ fn section_comment(line: &str) -> Option<&'static str> {
 #   notebook) show a small hint line explaining non-obvious input.
 # - remember_last_session: when true, quitting saves exactly where you were
 #   (notebook, folder, selected note/folder, focused panel) and the next
-#   launch restores it instead of starting at the first notebook's root."
+#   launch restores it instead of starting at the first notebook's root.
+# - show_coffee_link: shows the Buy Me a Coffee segment in the footer.
+#   Defaults to true.
+# - skip_delete_confirm: when true, deleting a note/folder skips the
+#   confirm dialog (still restorable via leader+`u`). Doesn't apply to
+#   notebook delete, which asks a real delete-vs-untrack question.
+# - show_dates: shows each note's date next to its title in the NOTES list.
+# - wikilink_autocomplete: typing `[[` opens the note-picker menu. Defaults
+#   to true.
+# - daily_agenda: a new daily note gets a \"## Due today\" section listing
+#   pending tasks across every notebook. Defaults to true.
+# - compact_footer: hides char/word count, reading time, and note-count
+#   detail from the footer, leaving just the essentials."
         }
         "[keybindings]" => {
             "\

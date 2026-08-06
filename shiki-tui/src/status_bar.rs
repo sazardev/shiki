@@ -66,9 +66,13 @@ pub const COFFEE_URL: &str = "https://buymeacoffee.com/sazarcode";
 /// `coffee_hit_at` can never disagree about where the clickable area
 /// actually is, the same reasoning `git_status_color`/`git_status_suffix`
 /// being shared between the footer and the drawer was already built on.
-fn right_text() -> (String, std::ops::Range<usize>) {
-    let coffee = format!("{}Support", icons::COFFEE);
-    let prefix = "  ";
+fn right_text(show_coffee_link: bool) -> (String, std::ops::Range<usize>) {
+    let coffee = if show_coffee_link {
+        format!("{}Support", icons::COFFEE)
+    } else {
+        String::new()
+    };
+    let prefix = if coffee.is_empty() { "" } else { "  " };
     let suffix = format!(
         "   {}? help   v{}  ",
         icons::KEYBOARD,
@@ -84,12 +88,13 @@ fn right_text() -> (String, std::ops::Range<usize>) {
 /// the same right-alignment math ratatui applies when rendering
 /// `right_text()`'s output into `area` — a plain function of coordinates,
 /// not `&App`, so it's unit-testable the same way `panel_drawer::drawer_hit_at`
-/// is.
-pub fn coffee_hit_at(area: Rect, column: u16, row: u16) -> bool {
+/// is. Always misses when `show_coffee_link` is off, since the segment's
+/// range then collapses to zero width.
+pub fn coffee_hit_at(area: Rect, column: u16, row: u16, show_coffee_link: bool) -> bool {
     if row != area.y {
         return false;
     }
-    let (text, range) = right_text();
+    let (text, range) = right_text(show_coffee_link);
     let content_width = text.chars().count() as u16;
     if content_width > area.width {
         return false; // clipped from the left, same as ratatui would render it
@@ -131,35 +136,42 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         format!("{}{notebook_name}", icons::NOTEBOOK),
         plain.fg(fg),
     ));
-    spans.push(sep.clone());
 
-    // Contextual metadata: character count of the note actually being read
-    // (Notes/Preview, something selected), otherwise how many notes are in
-    // view (e.g. while still browsing NOTEBOOKS).
-    let meta = match app.selected_note() {
-        Some(note) if matches!(app.focus, Focus::Notes | Focus::Preview) => {
-            let words = word_count(&note.body);
-            format!(
-                "{}{} chars · {words} words · {} min read",
-                icons::NOTE,
-                note.body.chars().count(),
-                reading_time_minutes(words)
-            )
-        }
-        _ => format!("{}{} notes", icons::NOTE, app.notes.len()),
-    };
-    spans.push(Span::styled(meta, plain.fg(fg)));
+    // Contextual metadata (char/word count, reading time, note-count
+    // breakdown, revision count) — skipped entirely in compact mode,
+    // leaving just the essentials (notebook, git status, editor mode).
+    if !app.config.general.compact_footer {
+        spans.push(sep.clone());
 
-    // Note version history — how many commits have touched this specific
-    // note, only while actually reading one in PREVIEW (not while just
-    // browsing NOTES, where it'd compete with the char/note count above).
-    if app.focus == Focus::Preview {
-        if let Some(count) = app.note_revision_count() {
-            spans.push(sep.clone());
-            spans.push(Span::styled(
-                format!("{}{count} changes", icons::HISTORY),
-                plain.fg(muted),
-            ));
+        // Character count of the note actually being read (Notes/Preview,
+        // something selected), otherwise how many notes are in view (e.g.
+        // while still browsing NOTEBOOKS).
+        let meta = match app.selected_note() {
+            Some(note) if matches!(app.focus, Focus::Notes | Focus::Preview) => {
+                let words = word_count(&note.body);
+                format!(
+                    "{}{} chars · {words} words · {} min read",
+                    icons::NOTE,
+                    note.body.chars().count(),
+                    reading_time_minutes(words)
+                )
+            }
+            _ => format!("{}{} notes", icons::NOTE, app.notes.len()),
+        };
+        spans.push(Span::styled(meta, plain.fg(fg)));
+
+        // Note version history — how many commits have touched this
+        // specific note, only while actually reading one in PREVIEW (not
+        // while just browsing NOTES, where it'd compete with the char/note
+        // count above).
+        if app.focus == Focus::Preview {
+            if let Some(count) = app.note_revision_count() {
+                spans.push(sep.clone());
+                spans.push(Span::styled(
+                    format!("{}{count} changes", icons::HISTORY),
+                    plain.fg(muted),
+                ));
+            }
         }
     }
 
@@ -207,7 +219,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         ));
     }
 
-    let (right, coffee_range) = right_text();
+    let (right, coffee_range) = right_text(app.config.general.show_coffee_link);
 
     if let Some(status) = &app.status_message {
         // Truncated to whatever room is actually left, so a long message
@@ -249,38 +261,46 @@ mod tests {
 
     #[test]
     fn coffee_hit_at_lands_inside_the_coffee_segment() {
-        let (text, range) = right_text();
+        let (text, range) = right_text(true);
         let width = text.chars().count() as u16;
         let area = Rect::new(0, 5, width, 1);
         let text_start = area.x; // content exactly fills the area here
         let mid_col = text_start + (range.start as u16 + range.end as u16) / 2;
-        assert!(coffee_hit_at(area, mid_col, 5));
+        assert!(coffee_hit_at(area, mid_col, 5, true));
     }
 
     #[test]
     fn coffee_hit_at_misses_outside_the_coffee_segment() {
-        let (text, _range) = right_text();
+        let (text, _range) = right_text(true);
         let width = text.chars().count() as u16;
         let area = Rect::new(0, 5, width, 1);
         // The very first column is inside the leading "  " padding, before
         // the coffee segment starts.
-        assert!(!coffee_hit_at(area, area.x, 5));
+        assert!(!coffee_hit_at(area, area.x, 5, true));
         // Wrong row entirely.
-        assert!(!coffee_hit_at(area, area.x + 3, 6));
+        assert!(!coffee_hit_at(area, area.x + 3, 6, true));
     }
 
     #[test]
     fn coffee_hit_at_shifts_with_wider_area_since_alignment_is_right() {
-        let (text, range) = right_text();
+        let (text, range) = right_text(true);
         let width = text.chars().count() as u16;
         // Extra room on the left — right-aligned text starts further right.
         let area = Rect::new(0, 0, width + 10, 1);
         let text_start = area.x + area.width - width;
         let inside_col = text_start + range.start as u16;
-        assert!(coffee_hit_at(area, inside_col, 0));
+        assert!(coffee_hit_at(area, inside_col, 0, true));
         // The same column that hit when area matched `width` exactly now
         // falls in the extra left-hand gap, so it should miss.
-        assert!(!coffee_hit_at(area, range.start as u16, 0));
+        assert!(!coffee_hit_at(area, range.start as u16, 0, true));
+    }
+
+    #[test]
+    fn coffee_hit_at_always_misses_when_the_link_is_disabled() {
+        let area = Rect::new(0, 0, 40, 1);
+        for col in area.x..area.x + area.width {
+            assert!(!coffee_hit_at(area, col, 0, false));
+        }
     }
 
     #[test]

@@ -885,6 +885,7 @@ fn load_log_history(path: &std::path::Path) -> Vec<LogEntry> {
 impl App {
     pub fn new(config: Config, store: NotebookStore) -> shiki_core::Result<Self> {
         let theme = config.theme.resolve();
+        let show_dates = config.general.show_dates;
         let keymaps = KeyMaps::from_config(&config.keybindings);
         let notebooks = store.list()?;
         let (folders, notes) = notebooks
@@ -1019,7 +1020,7 @@ impl App {
             which_key_input: InputBox::default(),
             which_key_selected: 0,
             favorite_editor: shiki_core::editor::detect_favorite_editor(),
-            show_dates: false,
+            show_dates,
             show_history: false,
             history_entries: Vec::new(),
             history_selected: 0,

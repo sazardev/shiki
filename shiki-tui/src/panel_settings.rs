@@ -71,10 +71,16 @@ pub enum GeneralField {
     MouseDragSelection,
     ShowHints,
     RememberLastSession,
+    ShowCoffeeLink,
+    SkipDeleteConfirm,
+    ShowDates,
+    WikilinkAutocomplete,
+    DailyAgenda,
+    CompactFooter,
 }
 
 impl GeneralField {
-    pub const ALL: [GeneralField; 7] = [
+    pub const ALL: [GeneralField; 13] = [
         GeneralField::DefaultNotebook,
         GeneralField::Editor,
         GeneralField::DailyTemplate,
@@ -82,6 +88,12 @@ impl GeneralField {
         GeneralField::MouseDragSelection,
         GeneralField::ShowHints,
         GeneralField::RememberLastSession,
+        GeneralField::ShowCoffeeLink,
+        GeneralField::SkipDeleteConfirm,
+        GeneralField::ShowDates,
+        GeneralField::WikilinkAutocomplete,
+        GeneralField::DailyAgenda,
+        GeneralField::CompactFooter,
     ];
 }
 
@@ -306,6 +318,28 @@ fn general_rows(app: &App) -> Vec<Line<'static>> {
             app,
             "remember_last_session",
             cfg.general.remember_last_session.to_string(),
+        ),
+        row_line(
+            app,
+            "show_coffee_link",
+            cfg.general.show_coffee_link.to_string(),
+        ),
+        row_line(
+            app,
+            "skip_delete_confirm",
+            cfg.general.skip_delete_confirm.to_string(),
+        ),
+        row_line(app, "show_dates", cfg.general.show_dates.to_string()),
+        row_line(
+            app,
+            "wikilink_autocomplete",
+            cfg.general.wikilink_autocomplete.to_string(),
+        ),
+        row_line(app, "daily_agenda", cfg.general.daily_agenda.to_string()),
+        row_line(
+            app,
+            "compact_footer",
+            cfg.general.compact_footer.to_string(),
         ),
     ]
 }

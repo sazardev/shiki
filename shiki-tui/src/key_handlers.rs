@@ -322,6 +322,58 @@ impl App {
             ));
             return;
         }
+        if field == GeneralField::ShowCoffeeLink {
+            self.config.general.show_coffee_link = !self.config.general.show_coffee_link;
+            self.save_config();
+            self.set_status(format!(
+                "show_coffee_link -> {}",
+                self.config.general.show_coffee_link
+            ));
+            return;
+        }
+        if field == GeneralField::SkipDeleteConfirm {
+            self.config.general.skip_delete_confirm = !self.config.general.skip_delete_confirm;
+            self.save_config();
+            self.set_status(format!(
+                "skip_delete_confirm -> {}",
+                self.config.general.skip_delete_confirm
+            ));
+            return;
+        }
+        if field == GeneralField::ShowDates {
+            self.config.general.show_dates = !self.config.general.show_dates;
+            self.show_dates = self.config.general.show_dates;
+            self.save_config();
+            self.set_status(format!("show_dates -> {}", self.config.general.show_dates));
+            return;
+        }
+        if field == GeneralField::WikilinkAutocomplete {
+            self.config.general.wikilink_autocomplete = !self.config.general.wikilink_autocomplete;
+            self.save_config();
+            self.set_status(format!(
+                "wikilink_autocomplete -> {}",
+                self.config.general.wikilink_autocomplete
+            ));
+            return;
+        }
+        if field == GeneralField::DailyAgenda {
+            self.config.general.daily_agenda = !self.config.general.daily_agenda;
+            self.save_config();
+            self.set_status(format!(
+                "daily_agenda -> {}",
+                self.config.general.daily_agenda
+            ));
+            return;
+        }
+        if field == GeneralField::CompactFooter {
+            self.config.general.compact_footer = !self.config.general.compact_footer;
+            self.save_config();
+            self.set_status(format!(
+                "compact_footer -> {}",
+                self.config.general.compact_footer
+            ));
+            return;
+        }
         let (label, prefill) = match field {
             GeneralField::DefaultNotebook => (
                 "default_notebook",
@@ -334,7 +386,13 @@ impl App {
             GeneralField::UseFavoriteEditor
             | GeneralField::MouseDragSelection
             | GeneralField::ShowHints
-            | GeneralField::RememberLastSession => unreachable!(),
+            | GeneralField::RememberLastSession
+            | GeneralField::ShowCoffeeLink
+            | GeneralField::SkipDeleteConfirm
+            | GeneralField::ShowDates
+            | GeneralField::WikilinkAutocomplete
+            | GeneralField::DailyAgenda
+            | GeneralField::CompactFooter => unreachable!(),
         };
         self.show_settings = false;
         self.pending_input_title = Some(format!(" {label} "));
@@ -1914,7 +1972,7 @@ impl App {
         }
 
         let footer = layout::split(self.last_frame_area, self.focus, self.zen_mode).status_bar;
-        if status_bar::coffee_hit_at(footer, column, row) {
+        if status_bar::coffee_hit_at(footer, column, row, self.config.general.show_coffee_link) {
             self.open_coffee_link();
         }
     }
@@ -2265,10 +2323,15 @@ impl App {
     /// and, in `Mode::Visual`, the whole selected range at once instead of
     /// just the one item under the cursor.
     fn start_delete_note(&mut self) {
+        let skip_confirm = self.config.general.skip_delete_confirm;
         if self.mode == Mode::Visual {
             let entries = self.visual_selected_entries();
             if entries.is_empty() {
                 self.set_status("nothing selected".into());
+                return;
+            }
+            if skip_confirm {
+                self.apply_batch_delete(entries);
                 return;
             }
             let (notes, folders) = entries.iter().fold((0, 0), |(n, f), e| match e {
@@ -2288,7 +2351,11 @@ impl App {
                 note.file_stem()
             );
             self.pending_delete = Some((DeleteTarget::Note, note.path.clone()));
-            self.confirm = Some(confirm::ConfirmDialog::new(message));
+            if skip_confirm {
+                self.handle_confirm_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+            } else {
+                self.confirm = Some(confirm::ConfirmDialog::new(message));
+            }
         } else if let (Some(folder), Some(nb)) = (self.selected_folder(), self.selected_notebook())
         {
             let path = nb.path.join(self.notes_relative_path()).join(folder);
@@ -2296,7 +2363,11 @@ impl App {
                 "Delete folder '{folder}' and everything inside it? Restorable with leader+u."
             );
             self.pending_delete = Some((DeleteTarget::Folder, path));
-            self.confirm = Some(confirm::ConfirmDialog::new(message));
+            if skip_confirm {
+                self.handle_confirm_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+            } else {
+                self.confirm = Some(confirm::ConfirmDialog::new(message));
+            }
         }
     }
     fn start_rename_notebook(&mut self) {
@@ -2485,10 +2556,16 @@ impl App {
         // if the daily is actually being created (an existing one opens
         // untouched — create_or_open ignores the agenda then).
         let agenda = self
-            .store
-            .all_notes()
-            .ok()
-            .and_then(|pool| shiki_core::tasks::agenda_section(&pool, today));
+            .config
+            .general
+            .daily_agenda
+            .then(|| {
+                self.store
+                    .all_notes()
+                    .ok()
+                    .and_then(|pool| shiki_core::tasks::agenda_section(&pool, today))
+            })
+            .flatten();
         match shiki_core::daily::create_or_open(
             &nb,
             today,
@@ -2914,6 +2991,8 @@ impl App {
             Action::ToggleTreeView => self.open_tree(),
             Action::ToggleDates => {
                 self.show_dates = !self.show_dates;
+                self.config.general.show_dates = self.show_dates;
+                self.save_config();
                 self.set_status(format!(
                     "note dates: {}",
                     if self.show_dates { "on" } else { "off" }
@@ -3248,6 +3327,12 @@ impl App {
                         GeneralField::MouseDragSelection => "mouse_drag_selection",
                         GeneralField::ShowHints => "show_hints",
                         GeneralField::RememberLastSession => "remember_last_session",
+                        GeneralField::ShowCoffeeLink => "show_coffee_link",
+                        GeneralField::SkipDeleteConfirm => "skip_delete_confirm",
+                        GeneralField::ShowDates => "show_dates",
+                        GeneralField::WikilinkAutocomplete => "wikilink_autocomplete",
+                        GeneralField::DailyAgenda => "daily_agenda",
+                        GeneralField::CompactFooter => "compact_footer",
                     };
                     self.save_config();
                     self.set_status(format!("{label} -> '{value}'"));
@@ -3977,7 +4062,7 @@ impl App {
         // completes the pair, anywhere in the line — unlike `/`,
         // a wikilink is meaningful mid-sentence ("see [[Some
         // Note]] for details"), not just at line start.
-        if key.code == KeyCode::Char('[') {
+        if key.code == KeyCode::Char('[') && self.config.general.wikilink_autocomplete {
             let opens_wikilink = self.editor.as_ref().is_some_and(|e| {
                 let (row, col) = crate::editor::cursor_tuple(&e.textarea);
                 e.textarea

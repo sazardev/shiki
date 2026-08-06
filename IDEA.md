@@ -247,7 +247,7 @@ sync attempt (manual or automatic) just tries the push again.
 | `i` | Edit inline (or the OS favorite editor if `general.use_favorite_editor`) |
 | `E` | Edit externally ($EDITOR) |
 | `/` | Fuzzy-jump to a note by title anywhere in the current notebook (any folder depth) |
-| `t` | New/open today's daily note. On first creation each day, a "## Due today" section is appended after the template with every pending task due today or overdue, across every notebook — plain bullets with a `[[wikilink]]` back to each task's source note (deliberately not checkbox copies, which would double-count in the tasks view). Reopening later never re-injects or duplicates it |
+| `t` | New/open today's daily note. On first creation each day (and only if `general.daily_agenda` is on, the default), a "## Due today" section is appended after the template with every pending task due today or overdue, across every notebook — plain bullets with a `[[wikilink]]` back to each task's source note (deliberately not checkbox copies, which would double-count in the tasks view). Reopening later never re-injects or duplicates it |
 | `m` | Move the selected note *or* folder — prompts for a `notebook/path/within/it` target, prefilled with the current one; edit the trailing segments to move within the same notebook (missing folders are created), or replace the first segment to move to a different (existing) notebook. In `v` select mode, moves every selected item at once |
 | `o` | Cycle sort order (filename / title A-Z / date newest-first) |
 | `T` | Tree view — every folder and note in the notebook, fully expanded, in one scrollable overview; `j`/`k` move, `enter`/`l` jumps straight to the selected note, `esc`/`q` closes |
@@ -349,12 +349,13 @@ The rest of the editor's mouse/keyboard UX is opt-in via `[editor]` (Settings' E
   on a selection falls through to whatever else applies (snippet expansion, list nesting, or a
   literal tab).
 
-`[[wikilink]]` autocomplete is always on too, not gated by `[editor]`: typing `[[` opens an
-Obsidian-style fuzzy note picker (same fuzzy matching as `/` and global search), showing each
-candidate's folder breadcrumb so notes with duplicate titles in different folders stay
-distinguishable; picking one inserts `[[Title]]`. In PREVIEW, `Ctrl`+click on a rendered
-`[[wikilink]]` jumps straight to the note it resolves to — a plain click still enters edit mode
-everywhere, including on top of a wikilink.
+`[[wikilink]]` autocomplete (gated by `[general].wikilink_autocomplete`, on by default, not by
+`[editor]`): typing `[[` opens an Obsidian-style fuzzy note picker (same fuzzy matching as `/` and
+global search), showing each candidate's folder breadcrumb so notes with duplicate titles in
+different folders stay distinguishable; picking one inserts `[[Title]]`. Off falls through to a
+literal `[[` with no menu. In PREVIEW, `Ctrl`+click on a rendered `[[wikilink]]` jumps straight to
+the note it resolves to — a plain click still enters edit mode everywhere, including on top of a
+wikilink.
 
 Navigation inside the editor is always on, not gated by `[editor]`: `PageUp`/`PageDown` move the
 cursor a page at a time, plain `Home` is "smart" — the first press goes to the line's first
@@ -553,6 +554,24 @@ show_hints = true
 # root. A renamed/deleted notebook or moved note is silently ignored rather
 # than erroring; the app just falls back to the default startup state.
 remember_last_session = true
+# Shows the "Buy Me a Coffee" segment in the footer (mouse-clickable).
+show_coffee_link = true
+# When true, deleting a note/folder (including a Visual-mode batch delete)
+# skips the confirm dialog and deletes immediately — still restorable via
+# leader+`u`. Doesn't apply to notebook delete, which asks a real
+# delete-vs-untrack question, not a plain yes/no safety gate.
+skip_delete_confirm = false
+# Shows each note's date next to its title in the NOTES list (same as the
+# notes-scope `D` toggle — this is just its persisted default).
+show_dates = false
+# Typing `[[` in the inline editor opens the wikilink autocomplete menu.
+wikilink_autocomplete = true
+# Creating a new daily note appends a "## Due today" section listing
+# pending/overdue tasks across every notebook (only on creation).
+daily_agenda = true
+# Hides char/word count, reading time, and note-count detail from the
+# footer, leaving just the essentials — notebook, git status, editor mode.
+compact_footer = false
 
 [keybindings]
 leader = "space"
