@@ -18,8 +18,9 @@ pub enum Action {
     /// Restores the most recently deleted note/folder (or batch) from the
     /// trash — a single level of undo.
     UndoDelete,
-    /// Opens the Settings screen — a read-only summary of the current
-    /// config, with a key to jump straight to editing `config.toml` itself.
+    /// Opens the Settings screen — every config option editable in place,
+    /// grouped by section and paged by tab, with a key to jump straight to
+    /// editing `config.toml` itself for anything not covered.
     ToggleSettings,
     Scratchpad,
     /// Opens the global tasks view: every `- [ ]` checkbox across every

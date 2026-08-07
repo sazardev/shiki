@@ -36,12 +36,11 @@ A single binary that covers all of this, from the start, no phases.
 | **Git bindings** | `git2` |
 | **Markdown parsing** | `comrak` |
 | **Syntax highlighting** | `syntect` (note preview) |
-| **Inline editor** | `tui-textarea` |
-| **Fuzzy search** | `nucleo` (same as Helix) |
+| **Inline editor** | `ratatui-textarea` 0.9 |
+| **Fuzzy search** | `nucleo-matcher` (same as Helix) |
 | **Config / themes** | `serde` + `toml` |
 | **CLI parsing** | `clap` v4 |
 | **Dates** | `chrono` |
-| **File watcher** | `notify` (detect external changes) |
 | **Frontmatter** | `serde_yaml` |
 | **Logging** | `tracing` + `tracing-subscriber` |
 | **Wikilinks** | regex + `pulldown-cmark` |
@@ -63,7 +62,7 @@ shiki/
 │       ├── lib.rs
 │       ├── notebook.rs            # Notebook struct, notebook CRUD
 │       ├── note.rs                # Note struct, frontmatter, body
-│       ├── search.rs              # fuzzy search engine (nucleo)
+│       ├── search.rs              # fuzzy search engine (nucleo-matcher)
 │       ├── git.rs                 # git2: init, commit, push, pull, status
 │       ├── templates.rs           # template system
 │       ├── daily.rs               # daily notes: create by date
@@ -94,7 +93,7 @@ shiki/
 │       ├── panel_notes.rs         # center panel
 │       ├── panel_preview.rs       # right panel (rendered markdown)
 │       ├── panel_tags.rs          # tag filter
-│       ├── editor.rs              # inline editor (tui-textarea)
+│       ├── editor.rs              # inline editor (ratatui-textarea)
 │       ├── status_bar.rs          # bottom status bar
 │       ├── which.rs               # keybindings popup + command palette (like Yazi)
 │       ├── confirm.rs             # confirmation dialog
@@ -164,7 +163,7 @@ This layout is responsive to the terminal's actual size, not just one fixed arra
 |---|---|
 | `NORMAL` | Navigation, single-key shortcuts |
 | `INSERT` | Typing in search / input |
-| `EDIT` | Inline editor active (tui-textarea) |
+| `EDIT` | Inline editor active (ratatui-textarea) |
 | `VISUAL` | Multi-note selection |
 
 ### Keybindings: segmented by focus
@@ -363,8 +362,8 @@ non-whitespace character, pressing it again (or pressing it on a line already at
 column 0 — `End` goes to the end of the current line, `Ctrl+Home`/`Ctrl+End` jump to the very
 start/end of the note, and the mouse wheel scrolls too. `PageUp`/`PageDown`/mouse-wheel scrolling
 move the cursor itself (there's no independent scroll offset — the editor's word-wrap support
-means it bypasses `tui-textarea`'s own rendering, and with it, `tui-textarea`'s own viewport-based
-`PageUp`/`PageDown`, which otherwise does nothing here).
+means it bypasses `ratatui-textarea`'s own rendering, and with it, `ratatui-textarea`'s own
+viewport-based `PageUp`/`PageDown`, which otherwise does nothing here).
 
 ---
 

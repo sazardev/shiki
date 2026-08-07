@@ -310,11 +310,13 @@ pub struct GlobalKeybindings {
     /// `logs`/`toggle_favorite_editor`.
     #[serde(default = "default_undo_delete_key")]
     pub undo_delete: String,
-    /// Opens the Settings screen: a read-only summary of the current
-    /// config (general/theme/git/per-notebook overrides/snippets),
-    /// grouped by section, with `i`/`E` jumping straight to editing
-    /// `config.toml` itself (inline or externally — same convention as
-    /// editing a note) instead of a hand-built form widget per field.
+    /// Opens the Settings screen: every config option editable in place,
+    /// grouped by section and paged by tab (GENERAL/THEME/GIT/EDITOR/
+    /// EXPORT/NOTEBOOKS/SNIPPETS) — true/false fields toggle and save
+    /// immediately, anything else opens a prompt prefilled with its current
+    /// value, and NOTEBOOKS/SNIPPETS drill down a level. `i`/`E` still jump
+    /// straight to editing `config.toml` itself (inline or externally — same
+    /// convention as editing a note) for anything not covered by the tabs.
     /// Field-level default for the same backward-compatibility reason as
     /// `logs`/`toggle_favorite_editor`.
     #[serde(default = "default_settings_key")]
@@ -794,10 +796,10 @@ impl ThemeOverrides {
         }
     }
 
-    /// How many of the 19 slots are actually overridden — used by the
-    /// Settings screen's read-only summary, which shows this count rather
-    /// than dumping all 19 (`shiki theme create`'s job, and already fully
-    /// visible by just opening `config.toml`) so the summary stays short.
+    /// How many of the 19 slots are actually overridden — shown by the
+    /// Settings screen's THEME tab (informational), which displays this count
+    /// rather than dumping all 19 (`shiki theme create`'s job, and already
+    /// fully visible by just opening `config.toml`) so the tab stays short.
     pub fn set_count(&self) -> usize {
         [
             &self.bg,
@@ -998,12 +1000,12 @@ pub struct EditorConfig {
     /// When true, Ctrl+C/X/V inside the editor use the real OS clipboard
     /// (falling back automatically to the existing OSC 52 mechanism when
     /// the OS clipboard can't be reached, e.g. a headless SSH session with
-    /// no `$DISPLAY`/`$WAYLAND_DISPLAY`) instead of tui-textarea's internal
+    /// no `$DISPLAY`/`$WAYLAND_DISPLAY`) instead of ratatui-textarea's internal
     /// yank register. Off by default since it's an environment-dependent
     /// behavior change, not a pure addition.
     #[serde(default)]
     pub os_clipboard: bool,
-    /// When true, Ctrl+A selects the whole buffer instead of tui-textarea's
+    /// When true, Ctrl+A selects the whole buffer instead of ratatui-textarea's
     /// default Emacs-style "move to start of line". Off by default — this
     /// changes existing muscle-memory behavior rather than adding to it.
     #[serde(default)]
@@ -1015,7 +1017,7 @@ pub struct EditorConfig {
     /// Enables Alt+Click (add a cursor) and Ctrl+D (add the next occurrence
     /// of the current word/selection) for multi-cursor editing. Off by
     /// default: it's the most involved of these behaviors, built as a replay
-    /// layer on top of tui-textarea's single-cursor model rather than
+    /// layer on top of ratatui-textarea's single-cursor model rather than
     /// something the library supports natively.
     #[serde(default)]
     pub multi_cursor: bool,
