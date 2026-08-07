@@ -60,6 +60,22 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   un-completing) inserts its next occurrence right below it, unchecked, with `@due` advanced by
   that interval from the task's existing due date (or from today if it had none) — a repeat icon
   plus the raw spec shows next to the task text in the tasks view.
+- Dataview-style queries over note frontmatter: `shiki query 'where status = pending sort due
+  asc'` filters/sorts notes across every notebook from the CLI, and leader+`q` opens the same
+  live-editable query modal in the TUI (type the DSL at the top, matching notes render as a
+  table below). Both share one parser/evaluator (`shiki_core::query`), so a query means the
+  same thing in either place. `--count`/`--json`/`--notebook` are there for status bars and
+  scripting, and DSL strings can be saved by name under `[queries]` and run with `shiki query
+  --saved <name>`.
+- Per-notebook encryption at rest (`age::scrypt`, passphrase-based): `shiki notebook encrypt
+  <name>` re-encrypts every note as an age-armored blob (still plain ASCII text, so `git diff`
+  doesn't flip to "binary files differ") and writes an encrypted `.shiki-encryption` canary used
+  to verify a passphrase attempt without risking a real note; `shiki notebook decrypt <name>`
+  reverses it. The TUI unlocks a locked notebook by sniffing the age armor header and prompting
+  for the passphrase, regardless of what any machine's config says. The passphrase itself is
+  never stored anywhere — not in `config.toml`, not in the repo. Write paths (`shiki new`/`shiki
+  daily`) prompt for it; non-interactive read commands (`list`/`tasks`/`graph`/`show`/`search`)
+  fail with a clear error against a locked notebook instead of printing garbage.
 
 ### Fixed
 

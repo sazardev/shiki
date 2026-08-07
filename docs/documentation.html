@@ -300,10 +300,13 @@
           <tr><td><code>U</code></td><td>Check for updates — modal; checks GitHub Releases in the background (never blocks the UI), shows "update available" if there's a newer version, and Enter downloads, verifies (against GitHub's own per-asset checksum), installs, and automatically relaunches into it</td></tr>
           <tr><td><code>u</code></td><td>Undo the last delete — restores the most recently deleted note/folder (or whole batch, from a Visual-mode delete) from the trash (<code>~/.config/shiki/trash/</code>) back to exactly where it came from. A single level of undo, not a full history: only the <em>most recent</em> delete is restorable this way; an older one is still on disk in the trash, just no longer reachable from here. With nothing to undo, reports that instead of doing anything</td></tr>
           <tr><td><code>s</code></td><td>Settings — near-full-screen, paged by tab. See <a href="#settings-deep-dive">the Settings deep dive</a> below</td></tr>
+          <tr><td><code>z</code></td><td>Zen mode — forces the full-screen single-panel layout (the same one a very small terminal already falls into) regardless of actual terminal size, hiding NOTEBOOKS/NOTES so only the focused panel shows. A true toggle, the same <code>leader z</code> both enters and exits it; purely a view state, not persisted to <code>config.toml</code></td></tr>
           <tr><td><code>p</code></td><td>Scratchpad — open an in-memory editor; <code>Ctrl+S</code> saves its contents through the new-note title/template flow, while <code>Esc</code> discards it</td></tr>
           <tr><td><code>B</code></td><td>Links — the same modal as PREVIEW's <code>L</code> (outgoing wikilinks / backlinks / unlinked mentions for the selected note), reachable from any panel without focusing PREVIEW first</td></tr>
           <tr><td><code>t</code></td><td>Tasks — every <code>- [ ]</code> checkbox task across every notebook in one flat list, pending-only by default, sorted by urgency (overdue → due today → future → undated); every row carries its own muted location (<code>notebook/folders…/note title</code>) so where a task lives is always visible, even mid-scroll. <code>Enter</code>/<code>space</code> toggles the task directly in its source file and updates the row in place; <code>l</code>/<code>o</code> jumps to the note; <code>a</code> also shows completed tasks. An optional <code>@due(YYYY-MM-DD)</code> tag renders the date next to the task: overdue in the theme's error color, due today in warning, future in muted. Relative specs — <code>@due(tomorrow)</code>, <code>@due(+3d)</code>, <code>@due(+2w)</code>, <code>@due(fri)</code> — are pinned to the real date the moment the note is saved. An optional <code>@every(&lt;spec&gt;)</code> tag (<code>day</code>/<code>daily</code>, <code>week</code>/<code>weekly</code>, <code>month</code>/<code>monthly</code>, <code>year</code>/<code>yearly</code>, or <code>Nd</code>/<code>Nw</code>/<code>Nm</code>) marks a task as recurring — completing it inserts its next occurrence right below it, unchecked, with <code>@due</code> advanced by that interval. Also scriptable as <code>shiki tasks</code> (see CLI commands)</td></tr>
+          <tr><td><code>q</code></td><td>Query — Dataview-style filter/sort over frontmatter across every notebook, live-editable: type the DSL at the top (e.g. <code>where status = pending sort due asc</code>), matching notes render as a table below; <code>↑</code>/<code>↓</code>/<code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> move the selection, <code>Enter</code> jumps to the note, <code>Esc</code> closes. Same engine as <code>shiki query</code>; DSL strings can also be saved by name under <code>[queries]</code> and run with <code>shiki query --saved &lt;name&gt;</code> (see CLI commands)</td></tr>
           <tr><td><code>P</code></td><td>Publish the selected notebook to a themed PDF via <code>pretty-pdf</code> (external binary, auto-fetched on first use — see CLI commands), written to <code>{data_dir}/exports/{notebook}.pdf</code>, then opened. Theme comes from <code>export.pdf_theme</code>, cyclable in Settings → EXPORT</td></tr>
+          <tr><td><code>x</code></td><td>Export the selected notebook to HTML/Markdown — prompts for the output path (prefilled with <code>{data_dir}/exports/{notebook}.html</code>); same bundling <code>shiki export</code> does (see CLI commands)</td></tr>
         </tbody>
       </table>
       <div class="doc-shot-grid">
@@ -415,6 +418,7 @@
           <tr><td><code>E</code></td><td>Edit externally ($EDITOR)</td></tr>
           <tr><td><code>H</code></td><td>Note history — every commit that changed this specific note, newest first, real git history (not a separate versioning system). <code>j</code>/<code>k</code>/<code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> move, <code>Enter</code> views a revision's full content (frontmatter included, since that's what's actually in the commit), <code>d</code> views a real unified diff of that revision against its parent instead (colored <code>-</code>/<code>+</code> lines; also works from inside the full-content view to switch straight to the diff), <code>r</code> reverts to the highlighted (or currently-viewed) revision — behind a confirmation, since it overwrites the current content. The revert itself doesn't commit; it shows up as a normal pending change, picked up by <code>s</code>/<code>u</code>/<code>auto_sync</code> like any other edit. The footer shows the count while reading a note (<code>{n} changes</code>)</td></tr>
           <tr><td><code>L</code></td><td>Links — the selected note's outgoing <code>[[wikilinks]]</code> (resolved against every note in the notebook, any folder depth), every other note that links back to it, and notes that <em>mention</em> this note's title in plain text without linking to it ("Outgoing"/"Backlinks"/"Mentions (unlinked)" sections; a section with nothing in it is omitted). <code>j</code>/<code>k</code>/<code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> move, <code>Enter</code> jumps to the selected note (an unresolved outgoing link reports that instead of jumping), <code>c</code> on a mention row <em>repairs</em> the missed link — it wraps that note's plain-text mention into a real <code>[[wikilink]]</code> (preserving its casing) and the row visibly migrates to Backlinks — and <code>Esc</code>/<code>q</code> closes. Also reachable globally via leader+<code>B</code></td></tr>
+          <tr><td><code>o</code></td><td>Outline — every <code>#</code>..<code>######</code> heading in the selected note, indented by level. <code>j</code>/<code>k</code>/<code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> move, <code>Enter</code> scrolls PREVIEW to that heading, <code>Esc</code>/<code>q</code> closes. Also reachable as <code>Ctrl+O</code> from inside <code>Mode::Edit</code> itself — there, <code>Enter</code> moves the editor's own cursor to the heading instead of scrolling PREVIEW, and the headings come from the live, possibly-unsaved buffer rather than the note's last-saved body</td></tr>
           <tr><td><code>Ctrl</code>+click</td><td>Click a rendered <code>[[wikilink]]</code> to jump straight to the note it resolves to — a plain click still enters edit mode everywhere, including on top of a wikilink</td></tr>
         </tbody>
       </table>
@@ -498,6 +502,7 @@ shiki tasks --overdue --count  # just the number — made for waybar/polybar/tmu
 shiki tasks --today --json     # machine-readable, with due/overdue/location per task
 shiki graph               # [[wikilink]] connection graph, force-directed, drawn in the terminal
 shiki graph -n work --json     # nodes/edges/orphans as JSON, for graphviz/d3/gephi
+shiki graph --width 120        # custom canvas width in columns (default: the terminal's own width)
 shiki export -n work --out bundle.html            # every note in "work" as one self-contained HTML file
 shiki export -n work --out bundle.md --format md  # or a plain concatenated Markdown bundle
 shiki publish -n work                     # render "work" to a themed PDF via pretty-pdf (auto-fetched, see below)
@@ -513,6 +518,7 @@ shiki notebook encrypt &lt;name&gt;       # enable encryption at rest (prompts f
 shiki notebook decrypt &lt;name&gt;       # reverse it — decrypts every note back to plain text
 shiki query 'where status = pending sort due asc'   # Dataview-style filter/sort over frontmatter
 shiki query 'where due &lt; today' --count             # for status bars, like `shiki tasks --count`
+shiki query --saved due-soon                        # run a query saved under [queries] in config.toml
 shiki theme list          # list built-in themes, marking the active one
 shiki theme set &lt;name&gt;    # switch theme (persisted to config.toml)
 shiki theme create [--from &lt;name&gt;]  # scaffold all 19 color overrides from a real palette
@@ -963,10 +969,14 @@ block_indent_select = true</pre>
         <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
         <tbody>
           <tr><td><code>pdf_theme</code></td><td><code>"default"</code></td><td>One of go-pretty-pdf's 17 built-in themes: <code>default</code>, <code>minimal</code>, <code>modern</code>, <code>classic</code>, <code>corporate</code>, <code>dark</code>, <code>academic</code>, <code>editorial</code>, <code>sepia</code>, <code>terminal</code>, <code>blueprint</code>, <code>ivy</code>, <code>government</code>, <code>resume</code>, <code>legal</code>, <code>latex</code>, <code>gruvbox</code>. Cyclable from the EXPORT tab in Settings, or overridden per-invocation with <code>--theme</code></td></tr>
+          <tr><td><code>export_dir</code></td><td><code>""</code></td><td>Directory PDFs are saved into (default: the app's own data dir, i.e. <code>{data_dir}/exports/{notebook}.pdf</code>). Empty means "use the app's own data dir"; set it to point exports somewhere else instead — a synced folder, Desktop, etc</td></tr>
+          <tr><td><code>ask_export_path</code></td><td><code>false</code></td><td>When true, publishing always opens a prompt asking exactly where to save the PDF (prefilled with the resolved default path) instead of silently writing to <code>export_dir</code>/the default location every time</td></tr>
         </tbody>
       </table>
       <pre class="code">[export]
-pdf_theme = "default"</pre>
+pdf_theme = "default"
+# export_dir = ""       # save PDFs elsewhere instead of the app's data dir
+# ask_export_path = true  # prompt for the save path on every publish</pre>
 
       <h3 id="config-notebooks"><code>[notebooks.&lt;name&gt;]</code> — per-notebook overrides</h3>
       <p style="max-width:70ch;">
@@ -982,6 +992,7 @@ pdf_theme = "default"</pre>
           <tr><td><code>auto_sync</code></td><td>inherits <code>[git]</code></td><td>Override just for this notebook</td></tr>
           <tr><td><code>auto_sync_every</code></td><td>inherits <code>[git]</code></td><td>Override just for this notebook</td></tr>
           <tr><td><code>path</code></td><td>unset (lives under the data directory)</td><td>An absolute path to an existing directory on disk — this notebook lives there instead of under <code>data_dir</code>/the default data directory. Must be absolute; a relative value is ignored (<code>shiki doctor</code> warns if one is found) rather than silently resolved against whatever directory the process happened to be launched from</td></tr>
+          <tr><td><code>hidden</code></td><td>unset (<code>false</code>)</td><td>Set when "delete notebook" was answered with "just remove the reference" instead of "delete the files" — the directory on disk is left untouched, this only stops the notebook from being listed/tracked. No in-app "un-hide" yet; reversing it means clearing the flag by hand in <code>config.toml</code> and relaunching</td></tr>
           <tr><td><code>encrypt</code></td><td><code>false</code></td><td>Encrypts every note in this notebook at rest with a passphrase — no global default to inherit, opt-in per notebook. Managed via <code>shiki notebook encrypt/decrypt &lt;name&gt;</code> or Settings → NOTEBOOKS, not by hand-editing this value (the passphrase itself is never stored here or anywhere else — see <a href="#encryption">Encryption</a> above)</td></tr>
         </tbody>
       </table>
@@ -990,6 +1001,7 @@ auto_sync = true
 auto_sync_every = 3
 auto_push = true
 # encrypt = true
+# hidden = true  # set by "just remove the reference" on delete; no in-app un-hide yet
 
 [notebooks.alcateia]
 path = "/Users/me/obsidian-vaults/alcateia"
@@ -1028,6 +1040,24 @@ body = "# [{{title}}] {{cursor}}"</pre>
         delete these without ever opening the raw file — see below.
       </p>
 
+      <h3 id="config-queries"><code>[queries]</code> — saved query DSL strings</h3>
+      <p style="max-width:70ch;">
+        Named, saved <code>shiki query</code> DSL strings (the same Dataview-style language the
+        leader+<code>q</code> modal accepts), keyed by name. Run one with
+        <code>shiki query --saved &lt;name&gt;</code> — handy for status bars, since
+        <code>--count</code>/<code>--json</code> work the same as with a literal query. Empty by
+        default.
+      </p>
+      <table class="ref-table config-ref-table">
+        <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>&lt;name&gt;</code></td><td><em>(none — no saved queries)</em></td><td>A query DSL string (e.g. <code>where due &lt; today sort due asc</code>), looked up by name with <code>shiki query --saved &lt;name&gt;</code></td></tr>
+        </tbody>
+      </table>
+      <pre class="code">[queries]
+due-soon = "where due &lt; today sort due asc"
+# ...run it with: shiki query --saved due-soon</pre>
+
       <h3 id="settings-deep-dive">The Settings screen — editing all of the above without touching the file</h3>
       <figure class="doc-shot-card">
         <img data-shot="wide-14-settings" width="1260" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="The Settings screen, GENERAL tab, showing editable config fields" />
@@ -1035,10 +1065,11 @@ body = "# [{{title}}] {{cursor}}"</pre>
       </figure>
       <p style="max-width:70ch;">
         <code>←</code>/<code>→</code> switches between seven tabs — GENERAL, THEME, GIT, EDITOR,
-        EXPORT, NOTEBOOKS, SNIPPETS — mirroring the sections above one for one. EXPORT is a
-        single field, <code>pdf_theme</code>, cycling through <code>pretty-pdf</code>'s 17
-        built-in themes (the default <code>shiki publish</code>/leader+<code>P</code> fall back
-        to). <code>j</code>/<code>k</code> moves
+        EXPORT, NOTEBOOKS, SNIPPETS — mirroring the sections above one for one. EXPORT holds
+        <code>pdf_theme</code> (cycling through <code>pretty-pdf</code>'s 17 built-in themes — the
+        default <code>shiki publish</code>/leader+<code>P</code> fall back to),
+        <code>export_dir</code> (a text prompt showing where PDFs land, resolved against the app's
+        data dir when empty), and <code>ask_export_path</code> (a plain in-place toggle). <code>j</code>/<code>k</code> moves
         within a tab, <code>Enter</code> edits or toggles the highlighted row (a true/false field
         flips immediately and saves; anything else opens a one-line prompt prefilled with its
         current value), and <code>Esc</code>/<code>q</code> closes. NOTEBOOKS and SNIPPETS are two
@@ -1136,6 +1167,13 @@ scratchpad = "p"
 links = "B"
 # Global tasks view — every checkbox task in every notebook.
 tasks_panel = "t"
+# Dataview-style query modal over frontmatter — same engine as `shiki query`.
+query_panel = "q"
+publish = "P"
+# Same HTML/Markdown bundling as `shiki export`.
+export = "x"
+# Full-screen single-panel layout, hiding NOTEBOOKS/NOTES — a true toggle.
+zen_mode = "z"
 
 [keybindings.notebooks]
 new = "a"
@@ -1168,6 +1206,7 @@ edit_inline = "i"
 edit_external = "E"
 history = "H"
 links = "L"
+outline = "o"
 
 [theme]
 name = "gruvbox-dark"
@@ -1231,6 +1270,8 @@ block_indent_select = true
 # in Settings.
 [export]
 pdf_theme = "default"
+# export_dir = ""       # save PDFs elsewhere instead of the app's data dir
+# ask_export_path = true  # prompt for the save path on every publish
 
 # Optional per-notebook overrides of [git] — anything left unset here falls
 # back to the global values above.
@@ -1248,6 +1289,8 @@ auto_sync = true
 auto_sync = true
 auto_sync_every = 3
 auto_push = true
+# encrypt = true
+# hidden = true  # set by "just remove the reference" on delete; no in-app un-hide yet
 
 # Custom entries for the inline editor's `/`-menu, keyed by trigger. Empty by
 # default — the built-in commands (h1/h2/h3/code/math/table/check/quote/
@@ -1264,7 +1307,11 @@ body = "> **Info:** {{cursor}}"
 # Same trigger as a built-in (case-insensitive) replaces it instead of
 # adding a duplicate — every command in the menu is customizable this way.
 [snippets.h1]
-body = "# [{{title}}] {{cursor}}"</pre>
+body = "# [{{title}}] {{cursor}}"
+
+# Named, saved `shiki query` DSL strings — run one with `shiki query --saved <name>`.
+[queries]
+# due-soon = "where due &lt; today sort due asc"</pre>
       <p class="muted" style="font-size:0.9rem;">
         Every default shown above matches the current release — if this page and a fresh
         <code>shiki</code> install ever disagree, trust the install.

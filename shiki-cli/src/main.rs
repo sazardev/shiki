@@ -156,7 +156,7 @@ enum Commands {
     Query {
         /// The query DSL string (quote it). Omit if using `--saved`.
         dsl: Option<String>,
-        /// Runs a query saved under `[queries.<name>]` in config.toml
+        /// Runs a query saved under `[queries]` in config.toml
         /// instead of a literal DSL string.
         #[arg(long, conflicts_with = "dsl")]
         saved: Option<String>,

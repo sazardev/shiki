@@ -1602,6 +1602,13 @@ fn section_comment(line: &str) -> Option<&'static str> {
 # divider/date/tags/frontmatter/bullet/numbered/link/image/note/warning/
 # details) replaces it instead of adding a duplicate."
         }
+        "[queries]" => {
+            "\
+# Named, saved `shiki query` DSL strings, keyed by name, e.g.:
+# due-soon = \"where due < today sort due asc\"
+# Run one with `shiki query --saved <name>`; same Dataview-style language
+# as the leader+`q` modal and the literal CLI arg."
+        }
         _ => return None,
     })
 }

@@ -2,7 +2,7 @@
 // order, same names) — "dot" colors are each theme's own `accent` value
 // (docs/css/styles.css has the full palette per theme; this file only
 // needs enough to build/label the swatches and know which ones have a real
-// screenshot). All 12 now have a captured PNG in docs/assets/screenshots/
+// screenshot). 12 of the 16 have a captured PNG in docs/assets/screenshots/
 // (scripts/screenshots.sh's THEMES array covers every one) — `screenshot`
 // stays a per-theme flag rather than being assumed true for everyone so a
 // future theme added to shiki-config without a matching screenshot yet
@@ -21,12 +21,13 @@ const THEMES = [
   { id: "nord", label: "Nord", dot: "#88c0d0", screenshot: true },
   { id: "solarized-dark", label: "Solarized Dark", dot: "#268bd2", screenshot: true },
   { id: "solarized-light", label: "Solarized Light", dot: "#268bd2", screenshot: true },
-  // No captured screenshot yet — `#term-fallback`'s CSS-only mockup shows
-  // instead until `scripts/screenshots.sh`'s own THEMES array is updated
-  // and a release actually captures these three.
+  // No captured PNG yet for these four — `#term-fallback`'s CSS-only
+  // mockup shows instead until a screenshots release run actually captures
+  // them (scripts/screenshots.sh's THEMES array already covers every one).
   { id: "dracula", label: "Dracula", dot: "#bd93f9", screenshot: false },
   { id: "one-dark", label: "One Dark", dot: "#61afef", screenshot: false },
   { id: "monokai", label: "Monokai", dot: "#f92672", screenshot: false },
+  { id: "default", label: "Default", dot: "#8b949e", screenshot: false },
 ];
 
 const STORAGE_KEY = "shiki-site-theme";

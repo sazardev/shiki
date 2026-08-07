@@ -21,13 +21,15 @@ cargo fmt --all                      # format (run after editing, before checkin
 cargo run -p shiki-cli -- <args>     # run the binary, e.g. `-- new "titulo"`, `-- daily`, no args launches the TUI
 ```
 
-Almost no automated tests yet — `panel_drawer::tests` (`shiki-tui/src/panel_drawer.rs`) are the
-first, covering `drawer_hit_at`'s mouse coordinate math (a plain function of numbers, not `&App`,
-specifically so it's unit-testable without constructing a full app). When adding tests for
-`shiki-core`/`shiki-config` logic, put them as `#[cfg(test)]` modules in the relevant file — those
-two crates have no TUI/terminal dependency, so they're the easiest to unit test. For `shiki-tui`,
-prefer designing the function to not need `&App` in the first place (as `drawer_hit_at` does) over
-constructing a full `App` in a test.
+There are ~220 `#[test]`s: 118 in `shiki-core`, 13 in `shiki-config`, 85 in `shiki-tui`, 3 in
+`shiki-cli` — `cargo test --workspace` is green. They're all inline `#[cfg(test)]` modules inside
+the source files (no `tests/` dirs, no `#[ignore]`, no fixture setup), so the pattern set by
+`panel_drawer::tests` (`shiki-tui/src/panel_drawer.rs`) — covering `drawer_hit_at`'s mouse
+coordinate math as a plain function of numbers, not `&App` — is the norm. When adding tests,
+put them as `#[cfg(test)]` modules in the relevant file; `shiki-core`/`shiki-config` have no
+TUI/terminal dependency, so they're the easiest to unit test. For `shiki-tui`, prefer designing
+the function to not need `&App` in the first place (as `drawer_hit_at` does) over constructing a
+full `App` in a test.
 
 To exercise the CLI without touching the real user config/data, override XDG dirs (used via
 `directories::ProjectDirs::from("", "", "shiki")` in `shiki-config`):

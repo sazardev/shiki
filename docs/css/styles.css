@@ -536,12 +536,13 @@ code, .code {
   display: none;
 }
 
-/* CSS-only fallback mockup, shown instead of a real screenshot for the 7
-   palettes that don't have one captured yet (screenshots/scripts/screenshot.sh
-   only ran for gruvbox-dark, catppuccin-mocha, tokyo-night-storm, nord, and
-   solarized-dark) — showing a *real* screenshot baked with the wrong
-   theme's pixel colors would be more misleading than a simple live mockup
-   that genuinely recolors with the CSS variables above. */
+/* CSS-only fallback mockup, shown instead of a real screenshot for the 4
+   palettes that don't have one captured yet (dracula, one-dark, monokai,
+   default — scripts/screenshots.sh's THEMES array covers all 16, so these
+   just haven't had a screenshots run capture them) — showing a *real*
+   screenshot baked with the wrong theme's pixel colors would be more
+   misleading than a simple live mockup that genuinely recolors with the CSS
+   variables above. */
 .term-fallback {
   display: grid;
   grid-template-columns: 1fr 1.4fr 1.8fr;
