@@ -123,7 +123,18 @@ pub struct GitStatus {
 pub fn init_repo(path: &Path) -> Result<Repository> {
     Ok(match Repository::open(path) {
         Ok(repo) => repo,
-        Err(_) => Repository::init(path)?,
+        Err(_) => {
+            let repo = Repository::init(path)?;
+            // Notes are parsed/written assuming plain `\n` (`Note::split` /
+            // `Note::to_file_contents`); Git for Windows commonly defaults
+            // `core.autocrlf` to `true` globally, which would otherwise
+            // silently rewrite every note to `\r\n` on checkout the moment
+            // this notebook is cloned/pulled on such a machine. Only set on
+            // a genuinely new repo — an existing one may have its own
+            // deliberate setting that shouldn't be overridden.
+            repo.config()?.set_bool("core.autocrlf", false)?;
+            repo
+        }
     })
 }
 
@@ -1006,11 +1017,21 @@ mod tests {
     /// whatever `init.defaultBranch` happens to be configured to on the
     /// machine running the test — pinning it to "main" via
     /// `RepositoryInitOptions` keeps these tests deterministic regardless
-    /// of that config.
+    /// of that config. Explicitly disabling `core.autocrlf` does the same
+    /// for line endings: Git for Windows commonly defaults it to `true`
+    /// globally, which makes libgit2's own checkout rewrite `\n` to `\r\n`
+    /// on disk — these tests assert exact file contents with plain `\n`,
+    /// so without this override they only fail on machines/runners with
+    /// that global default (this is exactly what broke `test
+    /// (windows-latest)` in CI while every other platform stayed green).
     fn init_with_main(path: &Path) {
         let mut opts = git2::RepositoryInitOptions::new();
         opts.initial_head("main");
-        Repository::init_opts(path, &opts).unwrap();
+        let repo = Repository::init_opts(path, &opts).unwrap();
+        repo.config()
+            .unwrap()
+            .set_bool("core.autocrlf", false)
+            .unwrap();
     }
 
     /// Sets up a genuine diverged-history scenario: a bare "origin", two
