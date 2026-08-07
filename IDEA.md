@@ -33,7 +33,6 @@ A single binary that covers all of this, from the start, no phases.
 | Category | Crate |
 |---|---|
 | **TUI framework** | `ratatui` 0.30 + `crossterm` |
-| **Async runtime** | `tokio` |
 | **Git bindings** | `git2` |
 | **Markdown parsing** | `comrak` |
 | **Syntax highlighting** | `syntect` (note preview) |
@@ -851,6 +850,6 @@ body = "# [{{title}}] {{cursor}}"
 2. **Plain text** — notes are `.md` with frontmatter. Nothing proprietary.
 3. **Git native** — each notebook is its own repo. Commit, push, pull from the app.
 4. **No phases** — everything here is implemented in full. There's no "Phase 2".
-5. **Fast** — Rust + async + ratatui. Sub-millisecond renders.
+5. **Fast** — Rust + ratatui. Sub-millisecond renders.
 6. **Configurable** — keybindings, themes, editor, all in TOML.
-7. **Yazi-inspired** — three panels, modal, which-key, async event loop.
+7. **Yazi-inspired** — three panels, modal, which-key, single-threaded event loop.

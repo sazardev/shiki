@@ -15,8 +15,7 @@
 [![GitHub repo size](https://img.shields.io/github/repo-size/sazardev/shiki)](https://github.com/sazardev/shiki)
 
 ![Rust](https://img.shields.io/badge/Rust-2021-CE422B?logo=rust&logoColor=white)
-![ratatui](https://img.shields.io/badge/ratatui-0.29-blue?logo=rust&logoColor=white)
-![tokio](https://img.shields.io/badge/tokio-1.x-blue?logo=rust&logoColor=white)
+![ratatui](https://img.shields.io/badge/ratatui-0.30-blue?logo=rust&logoColor=white)
 ![git2](https://img.shields.io/badge/git2-0.21-orange?logo=git&logoColor=white)
 ![clap](https://img.shields.io/badge/clap-4.x-blue?logo=rust&logoColor=white)
 
@@ -60,7 +59,7 @@ always recorded against that release's own binary — not a workflow from severa
 
 These update automatically after every release (`update-screenshots` job in
 [`release.yml`](.github/workflows/release.yml)), so they always reflect the current version — not
-a screenshot from three releases ago. All 15 built-in themes have a live, interactive preview on
+a screenshot from three releases ago. All 16 built-in themes have a live, interactive preview on
 the [website](https://sazardev.github.io/shiki/#themes).
 
 ## Features
@@ -81,7 +80,7 @@ the [website](https://sazardev.github.io/shiki/#themes).
   automatically every N changes), per-notebook policy overrides, robust HTTPS/SSH auth that
   reuses your system's own git credential store, and automatic fallback to the remote's actual
   default branch.
-- **15 built-in themes** (Catppuccin ×4, Tokyo Night ×3, Gruvbox ×2, Solarized ×2, Nord, Dracula,
+- **16 built-in themes** (Catppuccin ×4, Tokyo Night ×3, Gruvbox ×2, Solarized ×2, Nord, Dracula,
   One Dark, Monokai, and a
   terminal-native default that inherits your terminal's own palette) with a live-preview picker.
 - **Config-driven keybindings**, scoped by focus, fully remappable in `config.toml` — nothing
@@ -102,9 +101,11 @@ the [website](https://sazardev.github.io/shiki/#themes).
   `postmortem`/`standup`/`retro`/`1on1`/`weekly`/`brainstorm`) — pick one from the template picker
   when creating a note, or type `@` in the title prompt for a fast dropdown (`today`/`yesterday`/
   `tomorrow` or any template, fuzzy-filtered) that skips straight to editing.
-- **Settings screen** (leader+`s`) — a read-only summary of the whole config (general/theme/git/
-  per-notebook overrides/snippets), with `i`/`E` jumping straight to editing `config.toml` itself;
-  saved changes apply immediately, no restart needed.
+- **Settings screen** (leader+`s`) — every config option editable in place, paged by tab
+  (GENERAL/THEME/GIT/EDITOR/EXPORT/NOTEBOOKS/SNIPPETS): true/false fields toggle and save
+  immediately, anything else opens a prompt prefilled with its current value; `i`/`E` still jump
+  straight to editing `config.toml` itself for anything not covered. Saved changes apply
+  immediately, no restart needed.
 - **Logs modal** recording every status message (so errors don't get lost), with one-key clipboard
   copy (OSC 52) for pasting elsewhere.
 - **In-TUI self-update** (leader+`U`) — checks GitHub Releases for a newer version, and on
@@ -113,7 +114,8 @@ the [website](https://sazardev.github.io/shiki/#themes).
   flags duplicate/colliding keybindings, `/`-menu snippet triggers, unrecognized `config.toml` keys,
   and colliding notebook paths before they cause confusion.
 - **CLI commands** alongside the TUI (`new`, `list`, `edit`, `show`, `search`, `daily`, `sync`,
-  `notebook`, `theme`, `config`, `doctor`) for quick one-off operations without opening the UI.
+  `export`, `publish`, `tasks`, `graph`, `query`, `notebook`, `theme`, `config`, `doctor`) for
+  quick one-off operations without opening the UI.
 
 ## Install
 
