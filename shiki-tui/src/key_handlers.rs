@@ -3892,6 +3892,12 @@ impl App {
                             .unwrap_or_else(|| self.config.general.editor.clone());
                         self.want_external_edit = Some((note.path.clone(), editor));
                     }
+                } else if self.focus == Focus::Preview
+                    && self
+                        .note_preview_source_line(self.preview_scroll as usize)
+                        .is_some()
+                {
+                    self.enter_edit_at_preview_row(self.preview_scroll as usize);
                 } else {
                     self.start_edit_inline();
                 }
