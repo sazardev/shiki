@@ -1309,7 +1309,7 @@ impl App {
     /// own one-shot reply channel before moving to the next.
     pub(crate) fn poll_capture_channel(&mut self) {
         while let Ok(request) = self.capture_rx.try_recv() {
-            let reply = crate::capture::perform_capture(self, &request.text);
+            let reply = crate::capture::handle_request(self, &request.kind);
             let _ = request.reply_tx.send(reply);
         }
     }

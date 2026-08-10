@@ -21,7 +21,7 @@ cargo fmt --all                      # format (run after editing, before checkin
 cargo run -p shiki-cli -- <args>     # run the binary, e.g. `-- new "titulo"`, `-- daily`, no args launches the TUI
 ```
 
-There are ~234 `#[test]`s: 127 in `shiki-core`, 13 in `shiki-config`, 87 in `shiki-tui`, 7 in
+There are ~256 `#[test]`s: 131 in `shiki-core`, 17 in `shiki-config`, 95 in `shiki-tui`, 13 in
 `shiki-cli` — `cargo test --workspace` is green. They're all inline `#[cfg(test)]` modules inside
 the source files (no `tests/` dirs, no `#[ignore]`, no fixture setup), so the pattern set by
 `panel_drawer::tests` (`shiki-tui/src/panel_drawer.rs`) — covering `drawer_hit_at`'s mouse
@@ -1437,3 +1437,99 @@ the note or confuse the user about which passphrase prompt they're about to hit 
 other daemon error (`daemon disabled`, a timeout, connection refused) as "nothing to connect to"
 and falls through to the direct-write path, where an encrypted notebook prompts interactively via
 the existing `unlock_if_encrypted`, same as `shiki new` always has.
+
+**The wire protocol grew a second request kind (`PING`) and a small text header block on `CAPTURE`,
+once `--daily`/`--tags` and a `--check` health-check flag were added — still no JSON, on purpose.**
+`shiki-tui/src/capture.rs::parse_request` is the single pure/testable parser both request shapes go
+through: `PING\n\n` (no body) and `CAPTURE\n<zero-or-more key=value header lines>\n\n<raw body>` —
+headers end at the *first* blank line, so the body (the capture text itself) is free to contain its
+own blank lines/newlines without confusing the parser, since everything after that first `\n\n` is
+taken verbatim regardless of what it contains. `daily=1`/`tags=a,b,c` are the only two header keys
+today; an absent header just means "false"/"no tags," so the common case (a plain capture, no
+flags) is still just a two-line request. **`PING` is answered directly inside the accept-loop
+thread, without ever touching the `capture_tx`/`App` channel at all** — a health check only needs
+to read the `Arc<AtomicBool>` the thread already holds its own clone of, so routing it through the
+main thread (and its 5s timeout safety net) would just be unnecessary latency for something that's
+supposed to answer "are you there" as fast as the TCP handshake itself. Reply is always `OK
+enabled`/`OK disabled`, never `ERR` — being asked for status isn't itself a failure state, unlike an
+actual capture attempt.
+
+**`--daily` reuses `shiki_core::daily::create_or_open` on both sides of the daemon boundary
+(`shiki-tui/src/capture.rs::capture_into_daily` and `shiki-cli/src/commands/capture.rs::
+capture_into_daily`, two call sites, same underlying primitive)** — same template/agenda-on-
+creation behavior the `t` keybinding and `shiki daily` already have, since a daily note capture is
+just "open or create today's daily the normal way, then append one more line." The agenda section
+is still only injected on first creation, never on an append to an already-existing daily, per
+`create_or_open`'s own existing contract — appending a bullet is not a "recreate the daily" event.
+`--tags` is silently ignored when `--daily` is also given, rather than erroring: an appended bullet
+line has no frontmatter of its own to carry tags on, and rejecting the combination outright would
+be friction for no real benefit (a script that always passes both flags shouldn't need a special
+case for whichever target it happens to be capturing into that day).
+
+**`--check` (`shiki capture --check`) exits `0` the moment *anything* answers the `PING`, regardless
+of whether it says enabled or disabled** — "reachable" means a TUI process exists at all, which is
+the fact a status-bar module actually wants to gate on; "enabled" is separately reported (in the
+`--json` shape or the plain-text parenthetical) for a module that wants to distinguish "no TUI
+running" from "TUI running, daemon toggled off" as two different icons/colors. `--check` never
+reads stdin and never calls `try_daemon` with a `CAPTURE` request — it's a dead-simple three-branch
+function (`run_check`) that exists specifically so composing it in a script (`shiki capture --check
+&& ...`) can't accidentally block waiting on a terminal that isn't there.
+
+**Every daemon-handled capture calls `App::set_status`, not just on success — `perform_capture`'s
+error branches call it too**, so a locked-notebook refusal or a notebook-creation failure that
+happened while nobody was looking at the screen still shows up in the logs modal (`leader` then
+`l`) afterward, not just as a `capture failed: ...` line in the CLI's own stderr that only the
+script/launcher process ever saw. The standalone (no-daemon) fallback path has no equivalent — there
+is no running `App`/log history to write into in that case, which is an accepted, unavoidable gap
+rather than a missed case: a capture with no TUI running has nothing to log into.
+
+**`shiki capture --undo`/`--folder`/content-prefix routing landed together, since undo and folder
+targeting both needed the wire protocol's `CAPTURE` header block extended anyway, and routing
+shares its notebook-resolution call site with both.** `RequestKind` (`shiki-tui/src/capture.rs`)
+replaced the old flat `CaptureRequest{text}` shape with an enum (`Capture{text, daily, tags,
+notebook, folder}` / `Undo`) — `notebook`/`folder` are `Option<String>`, only populated from a
+`notebook=`/`folder=` header line when the client actually sent one, same "absent header means
+default behavior" convention `daily=`/`tags=` already established. A third wire command, `UNDO\n\n`
+(no body), joins `PING`/`CAPTURE`; like `CAPTURE` (and unlike `PING`) it's routed through
+`capture_tx`/`App` rather than answered inline, since undoing needs real `App` state (`trash_root`,
+`resolved_notebook_crypto`, `note_changed`, live refresh) that the listener thread doesn't hold.
+
+**Content-prefix routing (`shiki_core::notebook::route_by_prefix`) lives in `shiki-core`, not
+duplicated per crate, because both `shiki-tui/src/capture.rs::perform_capture` and
+`shiki-cli/src/commands/capture.rs::run`'s standalone fallback need the identical decision — "does
+`text` start with `<real notebook>: `?" — and `shiki-core` is the one crate both already depend on.
+It only ever runs when the caller has no explicit override (`-n`, or the wire's `notebook=` header)
+at all; an explicit target is never second-guessed by trying to parse the text it's about to save.
+`--folder`'s path validation (`shiki_core::notebook::validate_relative_path`) rejects the whole
+path on the first bad segment (`..`, empty, embedded separator) — same per-component rule
+`validate_name` already enforces for a single notebook/folder name, just applied across every `/`-
+separated segment of a multi-level path, so `--folder ../../etc` fails loudly instead of writing
+somewhere outside the notebook.
+
+**`LastCapture` (`shiki-config/src/last_capture.rs`) is a one-slot record, not a stack — undoing
+only ever reverses the single most recent capture, matching the TUI's own `leader+u` (undo delete),
+which is also one level deep.** It's a plain TOML file (`Config::default_last_capture_path()`,
+same collision reasoning as every other fixed file in the config dir), written by *both*
+`perform_capture` (daemon) and the CLI's standalone fallback to the exact same path — this is what
+makes `--undo` work identically regardless of which one performed the original capture, without
+either side needing to know which path the other took. Two variants: `Note { notebook, path }` (a
+whole new note — undo moves it to trash via the existing `shiki_core::trash::move_to_trash`, so
+it's still recoverable by hand afterward, same safety net every other delete in this app already
+has) and `DailyAppend { notebook, path, appended }` (undo re-reads the daily note, verifies its
+body still ends with `appended` *verbatim*, and only then truncates it off — an edit made to the
+daily note in between capture and undo means undo refuses with a clear error rather than silently
+destroying content the user actually meant to keep, since a `--daily` capture is an append into a
+file that could easily have other, unrelated edits after it). The record is cleared
+(`LastCapture::clear`) immediately after a successful undo, so a second `--undo` reports "nothing
+to undo" instead of either silently no-op'ing (`Note`, file already gone) or re-attempting a body
+suffix strip that would now legitimately fail (`DailyAppend`) with a confusing error instead of a
+clean one.
+
+**`shiki capture --undo` tries the daemon first, for the same live-refresh reason `CAPTURE` does,
+but falls back to reversing it directly through the identical `LastCapture` file if nothing
+answers** (`shiki-cli/src/commands/capture.rs::run_undo` → `run_undo_standalone`) — since the
+record is shared, the standalone path reports the exact same outcome a live daemon would have, just
+without refreshing a TUI that isn't running anyway. Only a `locked: ...` daemon response skips the
+fallback outright (same reasoning as `CAPTURE`'s own locked-notebook handling) — every other daemon
+answer (unreachable, disabled, "nothing to undo") falls through, since re-reading the same shared
+file standalone can't produce a worse or different answer than the daemon already gave.

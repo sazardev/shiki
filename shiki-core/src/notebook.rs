@@ -441,6 +441,84 @@ fn validate_name(name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Validates a `/`-separated relative path for use with `create_note_in`/
+/// `create_folder_in` — e.g. `shiki capture --folder`. Each component is
+/// checked with the same rule as a single notebook/folder name
+/// (`validate_name`): non-empty, not `.`/`..`, no embedded separator.
+/// Rejects the whole path on the first bad component rather than silently
+/// dropping it, so a typo'd `--folder ../../etc` fails loudly instead of
+/// writing somewhere unintended.
+pub fn validate_relative_path(relative: &str) -> Result<PathBuf> {
+    let mut path = PathBuf::new();
+    for component in relative.split('/') {
+        validate_name(component)?;
+        path.push(component);
+    }
+    Ok(path)
+}
+
+/// If `text` looks like `"<name>: <rest>"` where `<name>` case-insensitively
+/// matches one of `existing_notebooks`, returns that notebook's exact
+/// stored name plus the remaining text (leading whitespace trimmed) — used
+/// by `shiki capture` to route `"work: call Ana"` into the `work` notebook
+/// automatically. Returns `None` for anything else (no colon, an empty
+/// prefix, or a prefix that isn't a real notebook), meaning the caller
+/// should fall back to whatever notebook it would otherwise use. Only ever
+/// consulted when the caller has no *explicit* notebook override of its
+/// own — an explicit `-n <notebook>` always wins without this being
+/// consulted at all, so a real note whose text happens to start with
+/// `"word: "` is never mis-routed as long as a target was actually given.
+pub fn route_by_prefix<'a>(
+    text: &'a str,
+    existing_notebooks: &[String],
+) -> Option<(String, &'a str)> {
+    let (prefix, rest) = text.split_once(':')?;
+    let prefix = prefix.trim();
+    if prefix.is_empty() {
+        return None;
+    }
+    let matched = existing_notebooks
+        .iter()
+        .find(|n| n.eq_ignore_ascii_case(prefix))?;
+    Some((matched.clone(), rest.trim_start()))
+}
+
+#[cfg(test)]
+mod routing_tests {
+    use super::*;
+
+    #[test]
+    fn validate_relative_path_accepts_multi_segment_paths() {
+        assert_eq!(
+            validate_relative_path("work/meetings").unwrap(),
+            PathBuf::from("work").join("meetings")
+        );
+    }
+
+    #[test]
+    fn validate_relative_path_rejects_traversal_in_any_segment() {
+        assert!(validate_relative_path("work/..").is_err());
+        assert!(validate_relative_path("../etc").is_err());
+        assert!(validate_relative_path("").is_err());
+    }
+
+    #[test]
+    fn route_by_prefix_matches_case_insensitively_and_trims_rest() {
+        let notebooks = vec!["Work".to_string(), "personal".to_string()];
+        let (name, rest) = route_by_prefix("work:   call Ana", &notebooks).unwrap();
+        assert_eq!(name, "Work");
+        assert_eq!(rest, "call Ana");
+    }
+
+    #[test]
+    fn route_by_prefix_returns_none_for_no_colon_or_unknown_prefix() {
+        let notebooks = vec!["work".to_string()];
+        assert!(route_by_prefix("just some text", &notebooks).is_none());
+        assert!(route_by_prefix("unknown: text", &notebooks).is_none());
+        assert!(route_by_prefix(": text", &notebooks).is_none());
+    }
+}
+
 impl NotebookStore {
     pub fn new(root: PathBuf) -> Self {
         Self {

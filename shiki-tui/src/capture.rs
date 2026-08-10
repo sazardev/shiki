@@ -15,11 +15,25 @@
 //! start, so a dead process never leaves a stale port number for the next
 //! `shiki capture` invocation to hang against.
 //!
-//! Wire protocol is deliberately the simplest thing that works: one TCP
-//! connection per capture, client writes the raw capture text (not line-
-//! delimited — the text itself may contain newlines) then shuts down its
-//! write half, server reads to EOF, replies with exactly one line (`OK
-//! <path>` or `ERR <message>`), and closes.
+//! Wire protocol: one TCP connection per request, client writes the whole
+//! request then shuts down its write half, server reads to EOF, replies
+//! with exactly one line, closes. Three request kinds, all plain text (no
+//! JSON — the payload shapes are too simple to justify it):
+//! - `PING\n\n` — a reachability/health check (`shiki capture --check`);
+//!   answered directly by the accept-loop thread from the `enabled` flag
+//!   it already holds, without touching `App` at all. Reply is always
+//!   `OK enabled`/`OK disabled`, never `ERR` — being asked "are you there"
+//!   isn't itself an error state.
+//! - `UNDO\n\n` — reverses the single most recent capture (`shiki capture
+//!   --undo`), whichever kind it was and however it was made (daemon or
+//!   the CLI's own standalone fallback both write to the same
+//!   `LastCapture` record).
+//! - `CAPTURE\n<headers>\n\n<body>` — `<headers>` is zero or more
+//!   `key=value` lines (`daily=1`, `tags=a,b,c`, `notebook=work`,
+//!   `folder=work/meetings`), ending at the first blank line; `<body>` is
+//!   the raw capture text, not line-delimited (it may itself contain blank
+//!   lines/newlines) since it's simply "everything after the header
+//!   block's terminating blank line."
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -29,23 +43,34 @@ use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::Duration;
 
-use shiki_config::Config;
+use shiki_config::{Config, LastCapture};
 
 use crate::app::App;
 
-/// Sent from the listener thread to the main thread over `App::capture_tx`/
-/// `capture_rx` — the listener thread never touches `App`/`NotebookStore`
-/// itself, it's a dumb pipe; all real work happens on the main thread
-/// inside `perform_capture`, reusing the exact same note-creation/refresh
-/// path every other capture route already uses.
+/// What the listener thread asks the main thread to do — bundled with a
+/// one-shot reply channel, since the listener thread is still holding the
+/// client connection open, waiting to write the result back, and the
+/// existing git-sync/self-update background-thread channels are fire-and-
+/// forget with no "reply to this specific caller" concept.
 pub(crate) struct CaptureRequest {
-    pub text: String,
-    /// One-shot reply channel bundled per-request, since the existing
-    /// git-sync/self-update background-thread channels are fire-and-forget
-    /// with no "reply to this specific caller" concept — a capture needs
-    /// one, since the listener thread is still holding the client
-    /// connection open, waiting to write the result back.
+    pub kind: RequestKind,
     pub reply_tx: Sender<CaptureReply>,
+}
+
+pub(crate) enum RequestKind {
+    Capture {
+        text: String,
+        daily: bool,
+        tags: Vec<String>,
+        /// Explicit `-n <notebook>` from the client, if any — takes
+        /// priority over content-prefix routing and `default_notebook`.
+        notebook: Option<String>,
+        /// `--folder <path>` from the client, if any — a note is created
+        /// inside this subfolder instead of the notebook's root. Ignored
+        /// when `daily` is set (a daily note's path is always fixed).
+        folder: Option<String>,
+    },
+    Undo,
 }
 
 pub(crate) enum CaptureReply {
@@ -59,6 +84,66 @@ pub(crate) enum CaptureReply {
 /// the flag instead.
 pub(crate) struct CaptureDaemonHandle {
     pub enabled: Arc<AtomicBool>,
+}
+
+/// A parsed request off the wire — see the module doc comment for the
+/// exact text format. Pure/testable independent of any real socket.
+enum ParsedRequest {
+    Ping,
+    Undo,
+    Capture {
+        daily: bool,
+        tags: Vec<String>,
+        notebook: Option<String>,
+        folder: Option<String>,
+        text: String,
+    },
+    /// Anything not starting with a recognized command word.
+    Invalid,
+}
+
+/// Headers end at the first blank line; everything after it is the body
+/// verbatim (including any further blank lines inside it) — so this can't
+/// just be `raw.lines()`, which would also split the body on its own
+/// internal newlines.
+fn parse_request(raw: &str) -> ParsedRequest {
+    let (header_block, body) = raw
+        .split_once("\n\n")
+        .unwrap_or((raw.trim_end_matches('\n'), ""));
+    let mut lines = header_block.lines();
+    match lines.next().unwrap_or("").trim() {
+        "PING" => ParsedRequest::Ping,
+        "UNDO" => ParsedRequest::Undo,
+        "CAPTURE" => {
+            let mut daily = false;
+            let mut tags = Vec::new();
+            let mut notebook = None;
+            let mut folder = None;
+            for line in lines {
+                if let Some(v) = line.strip_prefix("daily=") {
+                    daily = matches!(v.trim(), "1" | "true");
+                } else if let Some(v) = line.strip_prefix("tags=") {
+                    tags = v
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                } else if let Some(v) = line.strip_prefix("notebook=") {
+                    notebook = Some(v.trim().to_string()).filter(|s| !s.is_empty());
+                } else if let Some(v) = line.strip_prefix("folder=") {
+                    folder = Some(v.trim().to_string()).filter(|s| !s.is_empty());
+                }
+            }
+            ParsedRequest::Capture {
+                daily,
+                tags,
+                notebook,
+                folder,
+                text: body.to_string(),
+            }
+        }
+        _ => ParsedRequest::Invalid,
+    }
 }
 
 /// Binds an ephemeral loopback port, records it, and spawns the accept-loop
@@ -99,29 +184,82 @@ fn accept_loop(
 ) {
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
-        if !enabled.load(Ordering::Relaxed) {
-            let _ = stream.write_all(disabled_response().as_bytes());
-            continue;
-        }
-        let mut text = String::new();
-        if stream.read_to_string(&mut text).is_err() {
+        let mut raw = String::new();
+        if stream.read_to_string(&mut raw).is_err() {
             let _ = stream.write_all(b"ERR could not read request\n");
             continue;
         }
 
-        let (reply_tx, reply_rx) = std::sync::mpsc::channel();
-        if capture_tx.send(CaptureRequest { text, reply_tx }).is_err() {
-            // Main thread is gone (process shutting down) — nothing left
-            // to reply to correctly, but still close the connection cleanly.
-            let _ = stream.write_all(b"ERR shiki is shutting down\n");
-            continue;
+        match parse_request(&raw) {
+            ParsedRequest::Ping => {
+                // Answered directly, no round trip through `App` — a health
+                // check should be as fast as the connection itself, and
+                // doesn't need anything `App` holds beyond this flag, which
+                // the accept-loop thread already has its own clone of.
+                let status = if enabled.load(Ordering::Relaxed) {
+                    "enabled"
+                } else {
+                    "disabled"
+                };
+                let _ = stream.write_all(format!("OK {status}\n").as_bytes());
+            }
+            ParsedRequest::Undo => {
+                if !enabled.load(Ordering::Relaxed) {
+                    let _ = stream.write_all(disabled_response().as_bytes());
+                    continue;
+                }
+                dispatch(&mut stream, &capture_tx, RequestKind::Undo);
+            }
+            ParsedRequest::Capture {
+                daily,
+                tags,
+                notebook,
+                folder,
+                text,
+            } => {
+                if !enabled.load(Ordering::Relaxed) {
+                    let _ = stream.write_all(disabled_response().as_bytes());
+                    continue;
+                }
+                dispatch(
+                    &mut stream,
+                    &capture_tx,
+                    RequestKind::Capture {
+                        text,
+                        daily,
+                        tags,
+                        notebook,
+                        folder,
+                    },
+                );
+            }
+            ParsedRequest::Invalid => {
+                let _ = stream.write_all(b"ERR unrecognized request\n");
+            }
         }
-        let response = match reply_rx.recv_timeout(Duration::from_secs(5)) {
-            Ok(reply) => response_line(&reply),
-            Err(_) => "ERR timed out waiting for shiki to respond\n".to_string(),
-        };
-        let _ = stream.write_all(response.as_bytes());
     }
+}
+
+/// Sends `kind` to the main thread and writes its reply back to `stream` —
+/// shared by the `CAPTURE`/`UNDO` branches of `accept_loop`, which differ
+/// only in what they send, not in how the round trip works.
+fn dispatch(
+    stream: &mut std::net::TcpStream,
+    capture_tx: &Sender<CaptureRequest>,
+    kind: RequestKind,
+) {
+    let (reply_tx, reply_rx) = std::sync::mpsc::channel();
+    if capture_tx.send(CaptureRequest { kind, reply_tx }).is_err() {
+        // Main thread is gone (process shutting down) — nothing left to
+        // reply to correctly, but still close the connection cleanly.
+        let _ = stream.write_all(b"ERR shiki is shutting down\n");
+        return;
+    }
+    let response = match reply_rx.recv_timeout(Duration::from_secs(5)) {
+        Ok(reply) => response_line(&reply),
+        Err(_) => "ERR timed out waiting for shiki to respond\n".to_string(),
+    };
+    let _ = stream.write_all(response.as_bytes());
 }
 
 fn disabled_response() -> String {
@@ -135,53 +273,273 @@ fn response_line(reply: &CaptureReply) -> String {
     }
 }
 
-/// Runs on the main thread (`App::poll_capture_channel`), reusing the exact
-/// note-creation path every other capture route in this codebase already
-/// uses — this is what makes cache/panel refresh and auto-sync counting
-/// "just work" for a capture that arrived from an external process.
-pub(crate) fn perform_capture(app: &mut App, text: &str) -> CaptureReply {
+/// Runs on the main thread (`App::poll_capture_channel`) — dispatches to
+/// `perform_capture`/`perform_undo` depending on what the listener thread
+/// asked for.
+pub(crate) fn handle_request(app: &mut App, request: &RequestKind) -> CaptureReply {
+    match request {
+        RequestKind::Capture {
+            text,
+            daily,
+            tags,
+            notebook,
+            folder,
+        } => perform_capture(
+            app,
+            text,
+            *daily,
+            tags,
+            notebook.as_deref(),
+            folder.as_deref(),
+        ),
+        RequestKind::Undo => perform_undo(app),
+    }
+}
+
+/// Resolves which notebook a capture with no explicit `-n` targets:
+/// content-prefix routing (`"work: call Ana"`) first, then
+/// `general.default_notebook`. An explicit override always wins outright
+/// and never reaches this function at all — see the call site.
+fn resolve_notebook_and_text<'a>(
+    text: &'a str,
+    explicit: Option<&str>,
+    default_notebook: &str,
+    existing_notebooks: &[String],
+) -> (String, &'a str) {
+    if let Some(name) = explicit {
+        return (name.to_string(), text);
+    }
+    shiki_core::notebook::route_by_prefix(text, existing_notebooks)
+        .unwrap_or_else(|| (default_notebook.to_string(), text))
+}
+
+/// Reuses the exact note-creation/daily-note path every other capture
+/// route in this codebase already uses — this is what makes cache/panel
+/// refresh and auto-sync counting "just work" for a capture that arrived
+/// from an external process. Every outcome is also funneled through
+/// `App::set_status`, so a capture that happened while the TUI was
+/// unattended still leaves a trace in the logs modal (`leader` then `l`),
+/// not just a footer message nobody was there to read.
+fn perform_capture(
+    app: &mut App,
+    text: &str,
+    daily: bool,
+    tags: &[String],
+    explicit_notebook: Option<&str>,
+    folder: Option<&str>,
+) -> CaptureReply {
     let text = text.trim();
     if text.is_empty() {
-        return CaptureReply::Err("empty capture text".into());
+        let reply = CaptureReply::Err("empty capture text".into());
+        app.set_status("capture failed: empty text".into());
+        return reply;
     }
 
-    let name = app.config.general.default_notebook.clone();
+    let existing_notebooks: Vec<String> = app.notebooks.iter().map(|nb| nb.name.clone()).collect();
+    let (name, text) = resolve_notebook_and_text(
+        text,
+        explicit_notebook,
+        &app.config.general.default_notebook.clone(),
+        &existing_notebooks,
+    );
+
     let nb = match app.store.get(&name) {
         Ok(nb) => nb,
         Err(_) => match app.store.create(&name) {
             Ok(nb) => nb,
-            Err(e) => return CaptureReply::Err(format!("could not create notebook '{name}': {e}")),
+            Err(e) => {
+                let msg = format!("could not create notebook '{name}': {e}");
+                app.set_status(format!("capture failed: {msg}"));
+                return CaptureReply::Err(msg);
+            }
         },
     };
 
     let encrypted = app.config.encrypt_for(&name);
     let crypto = app.resolved_notebook_crypto(&name);
     if encrypted && crypto.is_none() {
-        return CaptureReply::Err(format!(
+        let msg = format!(
             "locked: notebook '{name}' is encrypted and locked in this session — \
              unlock it in the TUI or run `shiki capture` from a terminal instead"
-        ));
+        );
+        app.set_status(format!("capture failed: notebook '{name}' is locked"));
+        return CaptureReply::Err(msg);
     }
     let nb = nb.with_crypto(crypto);
 
-    let title = format!("Capture {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
-    let note = match nb.create_note(&title, text) {
-        Ok(note) => note,
-        Err(e) => return CaptureReply::Err(format!("could not create note: {e}")),
+    let result = if daily {
+        capture_into_daily(app, &nb, text)
+    } else {
+        capture_into_new_note(&nb, text, tags, folder)
     };
 
-    // Captures always land at the notebook's root — only refresh the live
-    // panel when that's genuinely what's on screen, so a capture into a
-    // different notebook (or the same notebook but a different folder)
-    // doesn't stomp on whatever the user's currently browsing.
-    let viewing_target_root =
-        app.selected_notebook().is_some_and(|sel| sel.name == name) && app.notes_path.is_empty();
-    if viewing_target_root {
+    let (path, record) = match result {
+        Ok(outcome) => outcome,
+        Err(e) => {
+            let msg = format!("could not save capture: {e}");
+            app.set_status(format!("capture failed: {msg}"));
+            return CaptureReply::Err(msg);
+        }
+    };
+    if let Ok(record_path) = Config::default_last_capture_path() {
+        let _ = record.save(&record_path);
+    }
+
+    // A daily-note append always lands at the notebook's root, regardless
+    // of `folder` (which only applies to a brand-new note); only refresh
+    // the live panel when that's genuinely what's on screen, so a capture
+    // elsewhere doesn't stomp on whatever the user's currently browsing.
+    let target_relative = if daily { "" } else { folder.unwrap_or("") };
+    let viewing_target = app.selected_notebook().is_some_and(|sel| sel.name == name)
+        && app.notes_path.join("/") == target_relative;
+    if viewing_target {
         app.refresh_notes_preserve_selection();
     }
     app.note_changed(&name);
+    app.set_status(format!("captured: {}", path.display()));
 
-    CaptureReply::Ok(note.path)
+    CaptureReply::Ok(path)
+}
+
+fn capture_into_new_note(
+    nb: &shiki_core::Notebook,
+    text: &str,
+    tags: &[String],
+    folder: Option<&str>,
+) -> shiki_core::Result<(PathBuf, LastCapture)> {
+    let title = format!("Capture {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
+    let mut note = match folder {
+        Some(folder) => {
+            let relative = shiki_core::notebook::validate_relative_path(folder)?;
+            nb.create_note_in(&relative, &title, text)?
+        }
+        None => nb.create_note(&title, text)?,
+    };
+    if !tags.is_empty() {
+        note.frontmatter.tags = tags.to_vec();
+        note.save_with_crypto(nb.crypto.as_ref())?;
+    }
+    let record = LastCapture::Note {
+        notebook: nb.name.clone(),
+        path: note.path.display().to_string(),
+    };
+    Ok((note.path, record))
+}
+
+fn capture_into_daily(
+    app: &App,
+    nb: &shiki_core::Notebook,
+    text: &str,
+) -> shiki_core::Result<(PathBuf, LastCapture)> {
+    let today = chrono::Local::now().date_naive();
+    let templates_dir = Config::default_templates_dir().unwrap_or_default();
+    let agenda = if app.config.general.daily_agenda {
+        app.store
+            .all_notes()
+            .ok()
+            .and_then(|pool| shiki_core::tasks::agenda_section(&pool, today))
+    } else {
+        None
+    };
+    let mut note = shiki_core::daily::create_or_open(
+        nb,
+        today,
+        &templates_dir,
+        &app.config.general.daily_template,
+        agenda.as_deref(),
+    )?;
+    if !note.body.ends_with('\n') {
+        note.body.push('\n');
+    }
+    let appended = format!("- {text}\n");
+    note.body.push_str(&appended);
+    note.save_with_crypto(nb.crypto.as_ref())?;
+    let record = LastCapture::DailyAppend {
+        notebook: nb.name.clone(),
+        path: note.path.display().to_string(),
+        appended,
+    };
+    Ok((note.path, record))
+}
+
+/// Reverses the single most recent capture — see `LastCapture`'s own doc
+/// comment for why this is a one-slot record, not a stack.
+fn perform_undo(app: &mut App) -> CaptureReply {
+    let record_path = match Config::default_last_capture_path() {
+        Ok(p) => p,
+        Err(e) => return CaptureReply::Err(format!("could not resolve state path: {e}")),
+    };
+    let Some(record) = LastCapture::load(&record_path) else {
+        return CaptureReply::Err("nothing to undo".into());
+    };
+
+    let (notebook, path, outcome) = match &record {
+        LastCapture::Note { notebook, path } => {
+            let outcome = undo_note(app, notebook, path);
+            (notebook.clone(), path.clone(), outcome)
+        }
+        LastCapture::DailyAppend {
+            notebook,
+            path,
+            appended,
+        } => {
+            let outcome = undo_daily_append(app, notebook, path, appended);
+            (notebook.clone(), path.clone(), outcome)
+        }
+    };
+
+    let path = match outcome {
+        Ok(()) => path,
+        Err(e) => {
+            app.set_status(format!("undo failed: {e}"));
+            return CaptureReply::Err(e);
+        }
+    };
+
+    LastCapture::clear(&record_path);
+    let viewing_target = app
+        .selected_notebook()
+        .is_some_and(|sel| sel.name == notebook);
+    if viewing_target {
+        app.refresh_notes_preserve_selection();
+    }
+    app.note_changed(&notebook);
+    app.set_status(format!("undone: {path}"));
+    CaptureReply::Ok(PathBuf::from(path))
+}
+
+fn undo_note(app: &App, notebook: &str, path: &str) -> Result<(), String> {
+    let Some(trash_root) = app.trash_root.as_ref() else {
+        return Err("trash directory unavailable".into());
+    };
+    let trash_dir = trash_root.join(notebook);
+    let suffix = chrono::Local::now().format("%Y%m%d%H%M%S%3f").to_string();
+    shiki_core::trash::move_to_trash(std::path::Path::new(path), &trash_dir, &suffix)
+        .map(|_| ())
+        .map_err(|e| format!("could not move '{path}' to trash: {e}"))
+}
+
+fn undo_daily_append(app: &App, notebook: &str, path: &str, appended: &str) -> Result<(), String> {
+    let encrypted = app.config.encrypt_for(notebook);
+    let crypto = app.resolved_notebook_crypto(notebook);
+    if encrypted && crypto.is_none() {
+        return Err(format!(
+            "locked: notebook '{notebook}' is encrypted and locked in this session"
+        ));
+    }
+    let mut note = shiki_core::Note::from_file_in_notebook_with_crypto(
+        std::path::Path::new(path),
+        notebook,
+        crypto.as_ref(),
+    )
+    .map_err(|e| format!("could not read '{path}': {e}"))?;
+    if !note.body.ends_with(appended) {
+        return Err("the daily note has changed since that capture — not undoing".into());
+    }
+    let new_len = note.body.len() - appended.len();
+    note.body.truncate(new_len);
+    note.save_with_crypto(crypto.as_ref())
+        .map_err(|e| format!("could not save '{path}': {e}"))
 }
 
 #[cfg(test)]
@@ -203,5 +561,99 @@ mod tests {
     #[test]
     fn disabled_response_is_a_clear_err_line() {
         assert_eq!(disabled_response(), "ERR daemon disabled\n");
+    }
+
+    #[test]
+    fn parse_request_recognizes_ping_and_undo() {
+        assert!(matches!(parse_request("PING\n\n"), ParsedRequest::Ping));
+        assert!(matches!(parse_request("PING"), ParsedRequest::Ping));
+        assert!(matches!(parse_request("UNDO\n\n"), ParsedRequest::Undo));
+        assert!(matches!(parse_request("UNDO"), ParsedRequest::Undo));
+    }
+
+    #[test]
+    fn parse_request_parses_plain_capture_with_no_headers() {
+        match parse_request("CAPTURE\n\nbuy milk") {
+            ParsedRequest::Capture {
+                daily,
+                tags,
+                notebook,
+                folder,
+                text,
+            } => {
+                assert!(!daily);
+                assert!(tags.is_empty());
+                assert!(notebook.is_none());
+                assert!(folder.is_none());
+                assert_eq!(text, "buy milk");
+            }
+            _ => panic!("expected Capture"),
+        }
+    }
+
+    #[test]
+    fn parse_request_parses_all_headers() {
+        match parse_request(
+            "CAPTURE\ndaily=1\ntags=work,idea\nnotebook=work\nfolder=work/meetings\n\nbuy milk",
+        ) {
+            ParsedRequest::Capture {
+                daily,
+                tags,
+                notebook,
+                folder,
+                text,
+            } => {
+                assert!(daily);
+                assert_eq!(tags, vec!["work".to_string(), "idea".to_string()]);
+                assert_eq!(notebook.as_deref(), Some("work"));
+                assert_eq!(folder.as_deref(), Some("work/meetings"));
+                assert_eq!(text, "buy milk");
+            }
+            _ => panic!("expected Capture"),
+        }
+    }
+
+    #[test]
+    fn parse_request_body_may_contain_blank_lines() {
+        match parse_request("CAPTURE\n\nline one\n\nline two") {
+            ParsedRequest::Capture { text, .. } => {
+                assert_eq!(text, "line one\n\nline two");
+            }
+            _ => panic!("expected Capture"),
+        }
+    }
+
+    #[test]
+    fn parse_request_rejects_unrecognized_command() {
+        assert!(matches!(
+            parse_request("GARBAGE\n\nsomething"),
+            ParsedRequest::Invalid
+        ));
+        assert!(matches!(parse_request(""), ParsedRequest::Invalid));
+    }
+
+    #[test]
+    fn resolve_notebook_and_text_prefers_explicit_override() {
+        let existing = vec!["work".to_string()];
+        let (name, text) =
+            resolve_notebook_and_text("work: call Ana", Some("personal"), "personal", &existing);
+        assert_eq!(name, "personal");
+        assert_eq!(text, "work: call Ana");
+    }
+
+    #[test]
+    fn resolve_notebook_and_text_routes_by_prefix_when_no_override() {
+        let existing = vec!["work".to_string()];
+        let (name, text) = resolve_notebook_and_text("work: call Ana", None, "personal", &existing);
+        assert_eq!(name, "work");
+        assert_eq!(text, "call Ana");
+    }
+
+    #[test]
+    fn resolve_notebook_and_text_falls_back_to_default() {
+        let existing = vec!["work".to_string()];
+        let (name, text) = resolve_notebook_and_text("just an idea", None, "personal", &existing);
+        assert_eq!(name, "personal");
+        assert_eq!(text, "just an idea");
     }
 }

@@ -380,6 +380,14 @@ shiki edit <note>         # edit with $EDITOR
 shiki search <query>      # search and show results
 shiki capture "quick idea"       # near-instant note capture, no $EDITOR, no TUI drawn
 shiki capture "text" -n work     # capture into a specific notebook instead of default_notebook
+echo "piped idea" | shiki capture      # reads the text from stdin when no argument is given
+shiki capture "call Ana" --tags work,idea   # comma-separated tags, same flag as `shiki new`
+shiki capture "call Ana" --daily      # appends as a bullet to today's daily note instead of a new note
+shiki capture "call Ana" --json       # emits {"path":..,"daemon":..,"daily":..} for scripts
+shiki capture --check                 # is a capture daemon reachable right now? exits non-zero if not
+shiki capture "meeting notes" --folder work/meetings -n work   # into a subfolder, not the notebook root
+shiki capture "work: call Ana"        # no -n given -> routed into the "work" notebook automatically
+shiki capture --undo                  # reverses the single most recent capture (any kind)
 shiki new "title" --body "text"     # create non-interactively, no $EDITOR spawned
 shiki new "title" --stdin --tags work,idea  # body piped in, tags attached, still no $EDITOR
 shiki list --json         # list/search/show all take --json for scripting (list/search: array, show: object)
@@ -439,12 +447,34 @@ those launchers just needs to call.
 By default it targets `general.default_notebook` (auto-created if it doesn't exist yet, same as
 `shiki new`), with an auto-generated title (`Capture 2026-08-10 15:35`, no title prompt) so there's
 nothing to type but the note's actual content. `-n <notebook>` overrides the target, same flag as
-`shiki new`/`shiki daily`.
+`shiki new`/`shiki daily`. The text itself is a plain positional argument; omit it entirely and
+shiki reads it from stdin instead (`echo "idea" | shiki capture`), for wiring into another
+program's own output rather than typing a literal string.
 
 ```
 shiki capture "buy milk"          # -> personal/capture-2026-08-10-15-35.md
 shiki capture "call Ana" -n work  # -> work/capture-....md instead
 ```
+
+`--tags work,idea` sets tags on the created note, same flag/format as `shiki new --tags`.
+`--daily` changes the target entirely: instead of a new note, the text is appended as a `- ` bullet
+under today's daily note (created via the same `shiki_core::daily::create_or_open` the `t`
+keybinding/`shiki daily` already use — template + agenda section included on first creation, an
+already-existing daily is just opened and appended to) — for treating the daily note as a running
+inbox for the whole day rather than one note per capture. `--tags` is ignored when `--daily` is
+also given, since an appended bullet has no frontmatter of its own to carry tags on.
+`--json` emits `{"path": "...", "daemon": true|false, "daily": true|false}` instead of the plain
+sentence, for a script or browser extension that wants to act on the result without string-matching
+`"captured (daemon): "`. `--folder work/meetings` creates the note inside that subfolder of the
+notebook instead of its root (each path segment validated the same way a notebook/folder name is —
+no `..`/empty segments); ignored when `--daily` is given, since a daily note's path is always fixed.
+
+**Content-prefix routing**: if no `-n` was given and the text itself looks like `"<notebook>:
+<rest>"` where `<notebook>` case-insensitively matches a real, existing notebook, that notebook is
+used automatically and the prefix is stripped from the saved text — `shiki capture "work: call
+Ana"` needs no `-n work` at all. An explicit `-n` always wins outright and skips this check
+entirely, so a genuine note that happens to start with `"word: "` is never mis-routed as long as a
+target was actually given.
 
 **The optional daemon** (`general.enable_capture_daemon`, off by default — toggle it from
 `leader+s` → GENERAL → `enable_capture_daemon`) makes a *running* TUI aware of captures the instant
@@ -466,6 +496,28 @@ a TUI running; the toggle only controls whether an already-open TUI finds out im
 it back on later reuses the same listener thread rather than restarting anything — the daemon, once
 started this session, never actually shuts down; off just means it answers "disabled" to new
 connections instead of processing them.
+
+`shiki capture --check` reports whether a daemon is reachable right now without capturing anything
+(and without touching stdin) — meant for a status-bar module or launcher script that wants to show
+"capture: on"/"capture: off", or decide something differently, before committing to a real capture.
+It exits `0` when a daemon answered (regardless of whether it said enabled or disabled — reachable
+at all means a TUI process exists) and non-zero otherwise, so `shiki capture --check && ...`
+composes naturally in a script; `--json` emits `{"reachable": true|false, "enabled": true|false}`.
+Every capture handled by the daemon (not the standalone fallback — there's no running `App` to log
+into in that case) is also recorded in the TUI's own log history (`leader` then `l`), so a capture
+that happened while nobody was watching the screen still leaves a trace, the same way a background
+git sync result does.
+
+`shiki capture --undo` reverses the single most recent capture — a plain note is moved to trash
+(restorable exactly like any other deleted note); a `--daily` append instead strips exactly the
+bullet that was added off the end of the daily note's body, and only if the body still ends with it
+verbatim — if the daily note was edited in between, undo refuses rather than risk removing content
+you actually meant to keep. This is a *one-slot* undo, not a stack, same simplicity level as
+`leader+u` (undo delete): a second `--undo` in a row reports "nothing to undo" rather than reaching
+further back. The record backing it (`~/.config/shiki/last-capture.toml`) is shared between the
+daemon and the standalone fallback, so undo works the same regardless of which one made the
+original capture — it tries the daemon first (for a live TUI refresh if the reverted item was on
+screen), then falls back to reversing it directly.
 
 Capturing into an **encrypted** notebook only works through the daemon if that notebook is already
 unlocked in the running TUI this session — the background listener thread can't itself pop up a
@@ -581,6 +633,7 @@ file's mtime. It only gains real frontmatter once you touch it through shiki
 ├── theme.toml             # custom theme (optional)
 ├── shiki.log              # persistent status/log history (leader+l to view, x to clear)
 ├── capture.port           # port the capture daemon is listening on (only while a TUI has it enabled)
+├── last-capture.toml      # backs `shiki capture --undo` — removed once undone
 ├── trash/                 # deleted notes/folders, restorable with leader+u (see below)
 │   └── <notebook>/
 └── templates/             # templates

@@ -1423,6 +1423,18 @@ impl Config {
             .join("capture.port"))
     }
 
+    /// Where `shiki capture --undo`'s backing record (`LastCapture`) lives —
+    /// same collision reasoning as every other fixed file in this list.
+    /// Shared between the in-TUI daemon and the CLI's standalone fallback,
+    /// so `--undo` works the same regardless of which path performed the
+    /// capture being undone.
+    pub fn default_last_capture_path() -> Result<PathBuf> {
+        Ok(Self::default_path()?
+            .parent()
+            .expect("config path always has a parent")
+            .join("last-capture.toml"))
+    }
+
     /// Loads the config from `path`, or creates and saves a default config if it doesn't exist.
     pub fn load_or_init(path: &Path) -> Result<Self> {
         if path.exists() {

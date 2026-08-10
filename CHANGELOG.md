@@ -13,7 +13,15 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   `general.default_notebook` by default (`-n <notebook>` overrides), auto-generates a timestamped
   title. `general.enable_capture_daemon` (off by default, toggle from Settings → GENERAL) lets a
   running TUI pick up captures live over a local loopback socket instead of only writing to disk;
-  `shiki capture` always works with or without it.
+  `shiki capture` always works with or without it. Also supports: reading the text from stdin when
+  no argument is given; `--tags` (same format as `shiki new --tags`); `--daily` (append as a bullet
+  to today's daily note instead of creating a new one); `--json` (machine-readable output); and
+  `--check` (reports whether a daemon is reachable, for status-bar modules, exits non-zero if not);
+  `--folder` (create the note inside a subfolder instead of the notebook root); content-prefix
+  routing (`shiki capture "work: call Ana"` routes into the `work` notebook automatically when no
+  `-n` is given); and `--undo` (reverses the single most recent capture — trash for a plain note,
+  strips the bullet back off for a `--daily` append). Every daemon-handled capture is also recorded
+  in the TUI's log history (`leader` then `l`).
 - Writing-comfort improvements to the native note editor (`Mode::Edit`), each independently
   toggleable from the EDITOR tab in Settings (`leader` then `s`): list/checkbox auto-continuation
   on `Enter` (with ordered-list auto-increment, empty-item exit, and `Backspace` cleanup),

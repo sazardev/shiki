@@ -45,9 +45,48 @@ enum Commands {
     /// scripts/launchers (rofi, waybar, Raycast, hotkeys, etc.), not
     /// interactive use.
     Capture {
-        text: String,
+        /// Text to capture. Omit it to read from stdin instead, e.g.
+        /// `echo "idea" | shiki capture`. Ignored (and not read) when
+        /// `--check`/`--undo` is given. If it starts with `"<notebook>:
+        /// "` and no `-n` was given, and `<notebook>` names a real
+        /// notebook, that notebook is used automatically (the prefix is
+        /// stripped from the saved text) — e.g. `shiki capture "work:
+        /// call Ana"`.
+        text: Option<String>,
+        /// Overrides both `general.default_notebook` and content-prefix
+        /// routing — always wins outright when given.
         #[arg(short, long)]
         notebook: Option<String>,
+        /// Comma-separated tags, e.g. `--tags work,idea`. Ignored when
+        /// `--daily` is given — an appended bullet has no frontmatter of
+        /// its own to tag.
+        #[arg(long, value_delimiter = ',')]
+        tags: Vec<String>,
+        /// Creates the note inside this subfolder of the notebook instead
+        /// of its root, e.g. `--folder work/meetings`. Ignored when
+        /// `--daily` is given — a daily note's path is always fixed.
+        #[arg(long)]
+        folder: Option<String>,
+        /// Appends the text as a bullet to today's daily note instead of
+        /// creating a new note — for using the daily note as a running
+        /// inbox rather than one note per capture.
+        #[arg(long)]
+        daily: bool,
+        /// Emits `{"path": ..., "daemon": ..., "daily": ...}` instead of a
+        /// plain sentence — for scripts/browser extensions.
+        #[arg(long)]
+        json: bool,
+        /// Reports whether a capture daemon is reachable right now and
+        /// exits — doesn't capture anything or read stdin. Exits non-zero
+        /// when unreachable, so `shiki capture --check && ...` composes.
+        #[arg(long, conflicts_with = "undo")]
+        check: bool,
+        /// Reverses the single most recent capture (whichever kind, from
+        /// either this machine's daemon or the standalone fallback) —
+        /// moves a plain note to trash, or strips the bullet back off a
+        /// `--daily` append. Doesn't touch stdin/text.
+        #[arg(long)]
+        undo: bool,
     },
     /// Lists the notes in a notebook
     List {
@@ -307,9 +346,35 @@ fn main() -> Result<()> {
 
     match cli.command {
         None => tui::launch(ctx.config, ctx.store),
-        Some(Commands::Capture { text, notebook }) => {
-            let notebook = ctx.notebook_name(notebook);
-            commands::capture::run(&ctx.store, &ctx.config, &notebook, &text)
+        Some(Commands::Capture {
+            text,
+            notebook,
+            tags,
+            folder,
+            daily,
+            json,
+            check,
+            undo,
+        }) => {
+            // Deliberately NOT resolved via `ctx.notebook_name` here, unlike
+            // every other command — `commands::capture::run` needs to know
+            // whether `-n` was actually given at all, since an explicit
+            // override always wins over content-prefix routing, which in
+            // turn wins over `default_notebook`. Collapsing that into an
+            // already-resolved `String` up front would make it
+            // indistinguishable from "the user typed `-n personal`".
+            commands::capture::run(
+                &ctx.store,
+                &ctx.config,
+                notebook,
+                text,
+                &tags,
+                daily,
+                json,
+                check,
+                undo,
+                folder,
+            )
         }
         Some(Commands::New {
             title,

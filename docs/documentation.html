@@ -500,6 +500,14 @@ shiki edit &lt;note&gt;         # edit with $EDITOR
 shiki search &lt;query&gt;      # search and show results
 shiki capture "quick idea"       # near-instant note capture, no $EDITOR, no TUI drawn
 shiki capture "text" -n work     # capture into a specific notebook instead of default_notebook
+echo "piped idea" | shiki capture      # reads the text from stdin when no argument is given
+shiki capture "call Ana" --tags work,idea   # comma-separated tags, same flag as `shiki new`
+shiki capture "call Ana" --daily      # appends as a bullet to today's daily note instead of a new note
+shiki capture "call Ana" --json       # emits {"path":..,"daemon":..,"daily":..} for scripts
+shiki capture --check                 # is a capture daemon reachable right now? exits non-zero if not
+shiki capture "meeting notes" --folder work/meetings -n work   # into a subfolder, not the notebook root
+shiki capture "work: call Ana"        # no -n given -> routed into the "work" notebook automatically
+shiki capture --undo                  # reverses the single most recent capture (any kind)
 shiki tasks               # every pending checkbox task across notebooks, urgency-sorted
 shiki tasks --overdue --count  # just the number — made for waybar/polybar/tmux status modules
 shiki tasks --today --json     # machine-readable, with due/overdue/location per task
@@ -582,10 +590,44 @@ shiki doctor              # environment check: config, data dir, git, editor, te
         exist yet, same as <code>shiki new</code>), with an auto-generated title
         (<code>Capture 2026-08-10 15:35</code>, no title prompt) so there's nothing to type but the
         note's actual content. <code>-n &lt;notebook&gt;</code> overrides the target, same flag as
-        <code>shiki new</code>/<code>shiki daily</code>.
+        <code>shiki new</code>/<code>shiki daily</code>. The text itself is a plain positional
+        argument; omit it entirely and shiki reads it from stdin instead
+        (<code>echo "idea" | shiki capture</code>), for wiring into another program's own output
+        rather than typing a literal string.
       </p>
       <pre class="code">shiki capture "buy milk"          # -> personal/capture-2026-08-10-15-35.md
 shiki capture "call Ana" -n work  # -> work/capture-....md instead</pre>
+      <p style="max-width:70ch;">
+        <code>--tags work,idea</code> sets tags on the created note, same flag/format as
+        <code>shiki new --tags</code>. <code>--daily</code> changes the target entirely: instead of
+        a new note, the text is appended as a <code>- </code> bullet under today's daily note
+        (created via the same machinery the <code>t</code> keybinding/<code>shiki daily</code>
+        already use — template + agenda section included on first creation, an already-existing
+        daily is just opened and appended to) — for treating the daily note as a running inbox for
+        the whole day rather than one note per capture. <code>--tags</code> is ignored when
+        <code>--daily</code> is also given, since an appended bullet has no frontmatter of its own
+        to carry tags on. <code>--json</code> emits
+        <code>{"path": "...", "daemon": true|false, "daily": true|false}</code> instead of the
+        plain sentence, for a script or browser extension that wants to act on the result without
+        string-matching <code>"captured (daemon): "</code>. <code>--folder work/meetings</code>
+        creates the note inside that subfolder of the notebook instead of its root (each path
+        segment validated the same way a notebook/folder name is — no <code>..</code>/empty
+        segments); ignored when <code>--daily</code> is given, since a daily note's path is
+        always fixed.
+      </p>
+      <div class="doc-callout">
+        <strong>Content-prefix routing</strong>
+        <p>
+          If no <code>-n</code> was given and the text itself looks like
+          <code>"&lt;notebook&gt;: &lt;rest&gt;"</code> where <code>&lt;notebook&gt;</code>
+          case-insensitively matches a real, existing notebook, that notebook is used
+          automatically and the prefix is stripped from the saved text —
+          <code>shiki capture "work: call Ana"</code> needs no <code>-n work</code> at all. An
+          explicit <code>-n</code> always wins outright and skips this check entirely, so a
+          genuine note that happens to start with <code>"word: "</code> is never mis-routed as
+          long as a target was actually given.
+        </p>
+      </div>
       <p style="max-width:70ch;">
         <strong>The optional daemon</strong> (<code>general.enable_capture_daemon</code>, off by
         default — toggle it from <code>leader+s</code> → GENERAL →
@@ -609,6 +651,32 @@ captured: /home/you/notes/personal/capture-2026-08-10-15-35.md            # writ
         thread rather than restarting anything — the daemon, once started this session, never
         actually shuts down; off just means it answers "disabled" to new connections instead of
         processing them.
+      </p>
+      <p style="max-width:70ch;">
+        <code>shiki capture --check</code> reports whether a daemon is reachable right now without
+        capturing anything (and without touching stdin) — meant for a status-bar module or launcher
+        script that wants to show "capture: on"/"capture: off" before committing to a real capture.
+        It exits <code>0</code> when a daemon answered (reachable at all means a TUI process
+        exists, regardless of whether it said enabled or disabled) and non-zero otherwise, so
+        <code>shiki capture --check &amp;&amp; ...</code> composes naturally in a script;
+        <code>--json</code> emits <code>{"reachable": true|false, "enabled": true|false}</code>.
+        Every capture handled by the daemon is also recorded in the TUI's own log history
+        (<code>leader</code> then <code>l</code>), so a capture that happened while nobody was
+        watching the screen still leaves a trace, the same way a background git sync result does.
+      </p>
+      <p style="max-width:70ch;">
+        <code>shiki capture --undo</code> reverses the single most recent capture — a plain note is
+        moved to trash (restorable exactly like any other deleted note); a <code>--daily</code>
+        append instead strips exactly the bullet that was added off the end of the daily note's
+        body, and only if the body still ends with it verbatim — if the daily note was edited in
+        between, undo refuses rather than risk removing content you actually meant to keep. This is
+        a <em>one-slot</em> undo, not a stack, same simplicity level as <code>leader+u</code> (undo
+        delete): a second <code>--undo</code> in a row reports "nothing to undo" rather than
+        reaching further back. The record backing it
+        (<code>~/.config/shiki/last-capture.toml</code>) is shared between the daemon and the
+        standalone fallback, so undo works the same regardless of which one made the original
+        capture — it tries the daemon first (for a live TUI refresh if the reverted item was on
+        screen), then falls back to reversing it directly.
       </p>
       <div class="doc-callout">
         <strong>Encrypted notebooks need to already be unlocked in the TUI.</strong>
@@ -745,6 +813,7 @@ captured: /home/you/notes/personal/capture-2026-08-10-15-35.md            # writ
 ├── theme.toml             # custom theme (optional)
 ├── shiki.log              # persistent status/log history (leader+l to view, x to clear)
 ├── capture.port           # port the capture daemon is listening on (only while a TUI has it enabled)
+├── last-capture.toml      # backs `shiki capture --undo` — removed once undone
 ├── trash/                 # deleted notes/folders, restorable with leader+u (see below)
 │   └── &lt;notebook&gt;/
 └── templates/             # templates
