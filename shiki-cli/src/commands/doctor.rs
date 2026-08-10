@@ -361,6 +361,7 @@ fn check_keybinding_health(config: &Config, r: &mut Report) {
                 ("new_folder", kb.notes.new_folder.as_str()),
                 ("visual", kb.notes.visual.as_str()),
                 ("copy_entries", kb.notes.copy_entries.as_str()),
+                ("metadata", kb.notes.metadata.as_str()),
             ],
         ),
         (
@@ -371,6 +372,7 @@ fn check_keybinding_health(config: &Config, r: &mut Report) {
                 ("history", kb.preview.history.as_str()),
                 ("links", kb.preview.links.as_str()),
                 ("outline", kb.preview.outline.as_str()),
+                ("metadata", kb.preview.metadata.as_str()),
             ],
         ),
     ];

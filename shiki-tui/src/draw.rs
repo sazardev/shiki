@@ -5,8 +5,8 @@ use crate::app::{
 use crate::icons;
 use crate::render::{hex_to_color, panel_block};
 use crate::{
-    layout, panel_drawer, panel_notebooks, panel_notes, panel_outline, panel_preview, panel_query,
-    panel_settings, panel_tags, panel_tasks, status_bar, which,
+    layout, panel_drawer, panel_metadata, panel_notebooks, panel_notes, panel_outline,
+    panel_preview, panel_query, panel_settings, panel_tags, panel_tasks, status_bar, which,
 };
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
@@ -105,6 +105,44 @@ pub fn draw(frame: &mut Frame, app: &App) {
                 state.select(Some(app.quick_template_selected));
             }
             frame.render_stateful_widget(list, list_area, &mut state);
+        } else if app.metadata_value_query().is_some() {
+            // Same stacked-dropdown shape as the `@`-quick-template one
+            // above, just for the metadata modal's field-value prompt
+            // (`due`/`status`/`priority`/anything with prior history) —
+            // see `App::metadata_value_query`/`metadata_value_filtered`.
+            let filtered = app.metadata_value_filtered();
+            let list_height = (filtered.len() as u16 + 2)
+                .min(frame.area().height / 2)
+                .max(3);
+            let popup_area = centered_rect(frame.area(), width, 3 + list_height);
+            frame.render_widget(Clear, popup_area);
+            let [input_area, list_area] =
+                Layout::vertical([Constraint::Length(3), Constraint::Length(list_height)])
+                    .areas(popup_area);
+            app.input
+                .render(frame, input_area, title, hex_to_color(&app.theme.accent));
+
+            let items: Vec<ListItem> = filtered.iter().map(|s| ListItem::new(s.clone())).collect();
+            let highlight_symbol = format!("{}", icons::ARROW);
+            let list_title = if app.is_tags_prompt() {
+                format!(" {}Existing tags  ·  tab adds it, keep typing ", icons::TAG)
+            } else {
+                format!(" {}Suggestions ", icons::TAG)
+            };
+            let list = List::new(items)
+                .block(panel_block(Line::from(list_title), true, &app.theme))
+                .highlight_style(
+                    Style::default()
+                        .bg(hex_to_color(&app.theme.selection))
+                        .fg(hex_to_color(&app.theme.accent))
+                        .add_modifier(Modifier::BOLD),
+                )
+                .highlight_symbol(highlight_symbol.as_str());
+            let mut state = ListState::default();
+            if !filtered.is_empty() {
+                state.select(Some(app.metadata_value_selected.min(filtered.len() - 1)));
+            }
+            frame.render_stateful_widget(list, list_area, &mut state);
         } else if let Some(hint) = kind.hint().filter(|_| app.config.general.show_hints) {
             // Stacked under the input box's own fixed 3 rows, same idea as
             // the quick-template dropdown above — the hint is informational
@@ -138,18 +176,36 @@ pub fn draw(frame: &mut Frame, app: &App) {
     }
 
     if app.show_tags {
-        let rows = match &app.tags_viewing {
-            None => app.tag_index().len(),
-            Some(tag) => app
-                .notes
-                .iter()
-                .filter(|n| n.frontmatter.tags.iter().any(|t| t == tag))
-                .count()
-                .max(1),
+        // Level 1 gets an extra row for its hint footer (`r` rename/merge)
+        // — level 2 has no actions of its own beyond navigating/jumping,
+        // so it stays exactly as tall as its row count, same as before.
+        let (rows, footer_rows) = match &app.tags_viewing {
+            None => (app.tag_index().len(), 1),
+            Some(tag) => (
+                app.notes
+                    .iter()
+                    .filter(|n| n.frontmatter.tags.iter().any(|t| t == tag))
+                    .count()
+                    .max(1),
+                0,
+            ),
         };
-        let popup_area = centered_rect(frame.area(), 40, (rows as u16 + 2).max(3));
+        let popup_area = centered_rect(
+            frame.area(),
+            40,
+            (rows as u16 + footer_rows + 2).max(3 + footer_rows),
+        );
         frame.render_widget(Clear, popup_area);
         panel_tags::render(frame, popup_area, app);
+    }
+
+    if app.show_metadata {
+        let rows = app.metadata_rows().len().max(1);
+        // +2 for the block's own top/bottom border, +1 for the hint footer
+        // row `panel_metadata::render` splits out of the inner area.
+        let popup_area = centered_rect(frame.area(), 60, (rows as u16 + 3).max(5));
+        frame.render_widget(Clear, popup_area);
+        panel_metadata::render(frame, popup_area, app);
     }
 
     if app.show_outline {
@@ -307,10 +363,20 @@ fn render_global_search(frame: &mut Frame, frame_area: Rect, app: &App) {
     frame.render_widget(Clear, popup_area);
     let (input_area, list_area) = global_search_layout(popup_area);
 
+    // A leading `!` flips this box into the query DSL (see
+    // `App::global_search_is_query`) — the warning color (the same one
+    // `status_bar`'s mode label already uses to flag "you're in a
+    // different mode now") is the only visual cue, since the box and
+    // popup are otherwise identical in both modes.
+    if app.global_search_is_query() {
+        render_global_search_query(frame, input_area, list_area, app);
+        return;
+    }
+
     app.global_search_input.render(
         frame,
         input_area,
-        &format!(" {}Search all notes ", icons::SEARCH),
+        &format!(" {}Search all notes  ·  ! for query mode ", icons::SEARCH),
         hex_to_color(&app.theme.accent),
     );
 
@@ -345,6 +411,36 @@ fn render_global_search(frame: &mut Frame, frame_area: Rect, app: &App) {
         state.select(Some(app.global_search_selected));
     }
     frame.render_stateful_widget(list, list_area, &mut state);
+}
+
+/// Query mode of the global search modal (typed `!` first — see
+/// `App::global_search_is_query`) — same input box and popup as the plain
+/// text search above, warning-colored instead of accent-colored so it
+/// reads as a distinct mode, with the DSL's own results `Table` (shared
+/// with the dedicated leader+`q` modal via `panel_query::render_result_table`)
+/// instead of the plain-search `List`.
+fn render_global_search_query(frame: &mut Frame, input_area: Rect, list_area: Rect, app: &App) {
+    let warning = hex_to_color(&app.theme.warning);
+    app.global_search_input.render(
+        frame,
+        input_area,
+        &format!(
+            " {}Query  —  where field = value [and/or ...] [sort field [asc|desc]] ",
+            icons::FILTER
+        ),
+        warning,
+    );
+    panel_query::render_result_table(
+        frame,
+        list_area,
+        app,
+        &app.global_search_query_rows,
+        &app.query_suggestions_visible,
+        app.global_search_selected,
+        app.global_search_query_error.as_deref(),
+        warning,
+        false,
+    );
 }
 
 fn render_update(frame: &mut Frame, frame_area: Rect, app: &App) {

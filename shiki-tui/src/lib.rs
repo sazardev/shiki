@@ -11,6 +11,7 @@ pub mod layout;
 pub mod links_panel;
 pub(crate) mod multicursor;
 pub mod panel_drawer;
+pub mod panel_metadata;
 pub mod panel_notebooks;
 pub mod panel_notes;
 pub mod panel_outline;

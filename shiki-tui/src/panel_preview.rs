@@ -8,6 +8,59 @@ use crate::app::{App, Focus};
 use crate::icons;
 use crate::render::{borrow_lines, hex_to_color, panel_block, panel_block_reading};
 
+/// A small read-only header — tags (one combined line), then every custom
+/// frontmatter field (`status`, `priority`, whatever a note's own YAML
+/// happens to carry, via `Frontmatter::extra`) one per line — prepended to
+/// the note's body by `App::refresh_note_preview_cache`. Deliberately part
+/// of the same scrollable, wrapped, cached document as the body rather than
+/// a separate fixed-height area above it: reusing the exact same row/scroll/
+/// mouse-hit-test math the body already has (`preview_row_at`,
+/// `note_preview_source_line`) means this needed no new offset arithmetic
+/// anywhere, at the cost of the header scrolling away with the rest of the
+/// note instead of staying pinned — an acceptable trade for a modal-free,
+/// always-visible view of metadata that previously had no in-app view at
+/// all (only visible before by opening the raw file in an external editor).
+/// Empty when there's nothing to show (no tags, no extra fields) — the
+/// common case, which must look exactly like a note with no header at all.
+pub(crate) fn metadata_lines(
+    note: &shiki_core::Note,
+    muted: Color,
+    tag_color: Color,
+) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    if !note.frontmatter.tags.is_empty() {
+        let mut spans = vec![Span::styled(
+            format!("{} ", icons::TAG),
+            Style::default().fg(tag_color),
+        )];
+        for (i, t) in note.frontmatter.tags.iter().enumerate() {
+            if i > 0 {
+                spans.push(Span::raw(" "));
+            }
+            spans.push(Span::styled(
+                format!("#{t}"),
+                Style::default().fg(tag_color),
+            ));
+        }
+        lines.push(Line::from(spans));
+    }
+    for (k, v) in note.frontmatter.extra.iter() {
+        let Some(key) = k.as_str() else { continue };
+        let val = crate::panel_query::yaml_cell_text(v);
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{key}: "),
+                Style::default().fg(muted).add_modifier(Modifier::ITALIC),
+            ),
+            Span::styled(val, Style::default().fg(muted)),
+        ]));
+    }
+    if !lines.is_empty() {
+        lines.push(Line::from(""));
+    }
+    lines
+}
+
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let focused = app.focus == Focus::Preview;
     let muted = hex_to_color(&app.theme.muted);

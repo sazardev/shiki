@@ -102,3 +102,4 @@ pub const PDF: Icon = Icon('\u{f1c1}', "", true); // file-pdf-o, publish-to-PDF 
 pub const EXPAND: Icon = Icon('\u{f065}', "", true); // arrows-alt (expand), zen mode
 pub const REPEAT: Icon = Icon('\u{f01e}', "", true); // repeat, recurring task indicator
 pub const FILTER: Icon = Icon('\u{f0b0}', "", true); // filter, query modal
+pub const STAR: Icon = Icon('\u{f005}', "*", true); // star, saved queries

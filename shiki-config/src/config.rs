@@ -577,6 +577,12 @@ pub struct NoteKeybindings {
     /// target instead of moving them. Same field-level-default reasoning.
     #[serde(default = "default_copy_entries_key")]
     pub copy_entries: String,
+    /// Opens the metadata modal — tags plus every custom frontmatter field
+    /// (`status`, `priority`, ...), add/edit/delete in place. Same
+    /// field-level-default backward-compatibility reasoning as `tree_view`/
+    /// `toggle_dates`/`new_folder`/`visual`/`copy_entries`.
+    #[serde(default = "default_metadata_key")]
+    pub metadata: String,
 }
 
 impl Default for NoteKeybindings {
@@ -596,8 +602,13 @@ impl Default for NoteKeybindings {
             new_folder: default_new_folder_key(),
             visual: default_visual_key(),
             copy_entries: default_copy_entries_key(),
+            metadata: default_metadata_key(),
         }
     }
+}
+
+fn default_metadata_key() -> String {
+    "M".into()
 }
 
 fn default_visual_key() -> String {
@@ -681,6 +692,10 @@ pub struct PreviewKeybindings {
     /// as `history`.
     #[serde(default = "default_outline_key")]
     pub outline: String,
+    /// Opens the metadata modal — same action as `NoteKeybindings::metadata`,
+    /// bound here too so it also works with PREVIEW focused, not only NOTES.
+    #[serde(default = "default_metadata_key")]
+    pub metadata: String,
 }
 
 impl Default for PreviewKeybindings {
@@ -691,6 +706,7 @@ impl Default for PreviewKeybindings {
             history: default_history_key(),
             links: default_links_key(),
             outline: default_outline_key(),
+            metadata: default_metadata_key(),
         }
     }
 }
@@ -1269,7 +1285,11 @@ pub struct Config {
     /// same reason: an empty `Vec<_>` would serialize as a bare `queries =
     /// []` line that a later hand-added `[queries.foo]`-style table would
     /// conflict with. Ad-hoc (unsaved) queries typed directly into the CLI
-    /// arg or the TUI modal don't touch this map at all.
+    /// arg don't touch this map — the TUI's query modal does, though:
+    /// `Ctrl+S` on a valid query prompts for a name and writes it here
+    /// (`App::confirm_save_query`), and `Ctrl+D` on a highlighted saved
+    /// suggestion removes it, so this file is genuinely round-trippable
+    /// from either the TUI or by hand.
     #[serde(default)]
     pub queries: std::collections::HashMap<String, String>,
 }

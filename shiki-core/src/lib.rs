@@ -66,6 +66,11 @@ pub enum Error {
     /// encrypted notebook, or an `age` error setting up encryption.
     #[error("{0}")]
     Encryption(String),
+    /// `tags::rename_tag`'s new name, empty — a bare rename-to-nothing
+    /// would silently become a delete, which isn't what "rename" means;
+    /// removing a tag entirely isn't exposed as a distinct operation yet.
+    #[error("new tag name can't be empty")]
+    EmptyTagName,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

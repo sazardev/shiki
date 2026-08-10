@@ -9,15 +9,15 @@
 
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
-use ratatui::text::Line;
-use ratatui::widgets::{Cell, Clear, Row, Table, TableState};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Cell, Clear, List, ListItem, ListState, Row, Table, TableState};
 use ratatui::Frame;
 
 use crate::app::{centered_rect, App};
 use crate::icons;
 use crate::render::{hex_to_color, panel_block};
 
-fn yaml_cell_text(v: &serde_yaml::Value) -> String {
+pub(crate) fn yaml_cell_text(v: &serde_yaml::Value) -> String {
     match v {
         serde_yaml::Value::String(s) => s.clone(),
         serde_yaml::Value::Number(n) => n.to_string(),
@@ -39,8 +39,6 @@ pub fn render(frame: &mut Frame, frame_area: Rect, app: &App) {
         Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).areas(popup_area);
 
     let accent = hex_to_color(&app.theme.accent);
-    let muted = hex_to_color(&app.theme.muted);
-    let error = hex_to_color(&app.theme.error);
 
     app.query_input.render(
         frame,
@@ -52,24 +50,117 @@ pub fn render(frame: &mut Frame, frame_area: Rect, app: &App) {
         accent,
     );
 
-    if let Some(err) = &app.query_error {
+    render_result_table(
+        frame,
+        list_area,
+        app,
+        &app.query_rows,
+        &app.query_suggestions_visible,
+        app.query_selected,
+        app.query_error.as_deref(),
+        accent,
+        true,
+    );
+}
+
+/// The query DSL's results table — a `Table` (not a `List`, since this is
+/// genuinely tabular, multi-column data), shared by the dedicated query
+/// modal (leader+`q`, above) and the global search modal's own `!`-prefixed
+/// query mode (`draw.rs::render_global_search_query`), so a query means the
+/// same thing and renders the same way in either place. `suggestions`
+/// (`shiki_core::query::suggest_queries`, filtered live by
+/// `App::matching_suggestions`) takes priority over both the table and the
+/// error message whenever it's non-empty — either nothing's been typed yet
+/// (every suggestion shows, as a "here's what you can ask" starting point)
+/// or what's in progress doesn't parse yet but still resembles something
+/// real (a live "did you mean" list) — the raw parse error only surfaces
+/// once no suggestion matches either.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_result_table(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    rows: &[shiki_core::query::QueryRow],
+    suggestions: &[crate::app::QuerySuggestion],
+    selected: usize,
+    error: Option<&str>,
+    accent: ratatui::style::Color,
+    can_manage_saved: bool,
+) {
+    let muted = hex_to_color(&app.theme.muted);
+    let error_color = hex_to_color(&app.theme.error);
+
+    if !suggestions.is_empty() {
+        // `Ctrl+S`/`Ctrl+D` (save/delete a saved query) only exist in the
+        // dedicated leader+`q` modal, not global search's `!`-prefixed
+        // mode — the hint says so only where it's actually true, rather
+        // than advertising a shortcut that would silently do nothing here.
+        let title = if can_manage_saved {
+            format!(
+                " {}try one of these, from your own notes  ·  enter fills it in \u{B7} ctrl+s save \u{B7} ctrl+d delete saved ",
+                icons::FILTER
+            )
+        } else {
+            format!(
+                " {}try one of these, from your own notes  ·  enter fills it in ",
+                icons::FILTER
+            )
+        };
+        let items: Vec<ListItem> = suggestions
+            .iter()
+            .map(|s| ListItem::new(s.display.as_str()))
+            .collect();
+        let list = List::new(items)
+            .block(panel_block(Line::from(title), true, &app.theme))
+            .highlight_style(
+                Style::default()
+                    .bg(hex_to_color(&app.theme.selection))
+                    .fg(accent)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol(format!("{} ", icons::ARROW));
+        let mut state = ListState::default();
+        state.select(Some(selected.min(suggestions.len().saturating_sub(1))));
+        frame.render_stateful_widget(list, area, &mut state);
+        return;
+    }
+
+    if let Some(err) = error {
         let block = panel_block(Line::from(" Query "), true, &app.theme);
-        let msg = ratatui::widgets::Paragraph::new(err.as_str())
-            .style(Style::default().fg(error))
+        let mut lines = vec![Line::from(Span::styled(
+            err.to_string(),
+            Style::default().fg(error_color),
+        ))];
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            format!("built-in fields: {}", shiki_core::query::BUILTIN_FIELDS),
+            Style::default().fg(muted),
+        )));
+        if !app.query_known_fields.is_empty() {
+            lines.push(Line::from(Span::styled(
+                format!("seen in your notes: {}", app.query_known_fields.join(", ")),
+                Style::default().fg(muted),
+            )));
+        }
+        lines.push(Line::from(Span::styled(
+            format!("example: {}", shiki_core::query::EXAMPLE_QUERY),
+            Style::default().fg(muted),
+        )));
+        let msg = ratatui::widgets::Paragraph::new(lines)
+            .wrap(ratatui::widgets::Wrap { trim: true })
             .block(block);
-        frame.render_widget(msg, list_area);
+        frame.render_widget(msg, area);
         return;
     }
 
     let title = format!(
         " {}{} note{} matched ",
         icons::FILTER,
-        app.query_rows.len(),
-        if app.query_rows.len() == 1 { "" } else { "s" }
+        rows.len(),
+        if rows.len() == 1 { "" } else { "s" }
     );
 
-    let rows: Vec<Row> = app
-        .query_rows
+    let table_rows: Vec<Row> = rows
         .iter()
         .map(|r| {
             let fields = r
@@ -97,7 +188,7 @@ pub fn render(frame: &mut Frame, frame_area: Rect, app: &App) {
         Constraint::Percentage(25),
     ];
 
-    let table = Table::new(rows, widths)
+    let table = Table::new(table_rows, widths)
         .header(header)
         .block(panel_block(Line::from(title), true, &app.theme))
         .row_highlight_style(
@@ -109,8 +200,8 @@ pub fn render(frame: &mut Frame, frame_area: Rect, app: &App) {
         .highlight_symbol(format!("{} ", icons::ARROW));
 
     let mut state = TableState::default();
-    if !app.query_rows.is_empty() {
-        state.select(Some(app.query_selected));
+    if !rows.is_empty() {
+        state.select(Some(selected));
     }
-    frame.render_stateful_widget(table, list_area, &mut state);
+    frame.render_stateful_widget(table, area, &mut state);
 }

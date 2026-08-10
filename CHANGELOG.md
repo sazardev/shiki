@@ -76,6 +76,27 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   never stored anywhere — not in `config.toml`, not in the repo. Write paths (`shiki new`/`shiki
   daily`) prompt for it; non-interactive read commands (`list`/`tasks`/`graph`/`show`/`search`)
   fail with a clear error against a locked notebook instead of printing garbage.
+- Metadata editor (notes-scope/preview-scope `M`): view and edit a note's tags and custom
+  frontmatter fields (`status`, `priority`, `due`, or anything else) without leaving the TUI —
+  `a` adds a field, `Enter` edits the selected one, `d` deletes it. PREVIEW also gained a
+  read-only header showing the same tags/fields above the note body, so they're visible without
+  opening the editor. Field-value prompts show a suggestions dropdown: built-in defaults for
+  `status`/`priority`/`due`, plus every value already used for that field anywhere in the vault;
+  the `Tags` prompt suggests every tag already in use — `Tab` accepts one and keeps typing,
+  `Enter` still saves the full comma-separated list as typed.
+- Query mode (leader+`q`, or leader+`g` then `!`) now opens straight into a "here's what you can
+  ask" suggestions list generated from your own notes — every distinct value per field, both sort
+  directions, and relative-date variants (`today`, overdue, upcoming, this week, this month) —
+  instead of a blank box, and narrows live as you type. Queries can now be saved from the TUI
+  itself: `Ctrl+S` on a valid query prompts for a name and writes it to `config.toml`'s
+  `[queries]` table (already supported by `shiki query --saved`, but previously CLI-only to
+  manage); saved queries show up first in the suggestions list with a `★`, and `Ctrl+D` on one
+  deletes it.
+- Tag rename/merge (`r` in the tags modal, leader+`T`, level 1): renames a tag across every note
+  in every notebook, not just the current directory being browsed — typing an existing tag's name
+  merges into it instead of creating a duplicate.
+- `scripts/query-demo.sh`: seeds an isolated "demo" notebook with example notes carrying varied
+  frontmatter, for trying out query mode without touching real data.
 
 ### Fixed
 

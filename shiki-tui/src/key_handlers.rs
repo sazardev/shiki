@@ -5,13 +5,15 @@ use shiki_core::{wikilinks, Note, Notebook};
 use crate::app::{
     drawer_area, global_search_layout, global_search_popup_area, is_notebook_git_action,
     looks_like_git_url, looks_like_path, relative_folder, shift, App, BatchOp, ConflictView,
-    DeleteTarget, EditorFindState, FindField, Focus, Mode, PassphrasePurpose, PendingInput,
-    PreviewSelection, QuickCommand, SelectedEntry, TrashedEntry, UpdateMsg, UpdateState,
+    DeleteTarget, EditorFindState, FindField, Focus, MetadataPrompt, Mode, PassphrasePurpose,
+    PendingInput, PreviewSelection, QuerySuggestion, QuickCommand, SelectedEntry, TrashedEntry,
+    UpdateMsg, UpdateState,
 };
 use crate::editor::InlineEditor;
 use crate::icons;
 use crate::input::InputBox;
 use crate::keybindings::{Action, WhichKeyRow};
+use crate::panel_query;
 use crate::render::{hex_to_color, panel_block};
 use crate::{
     confirm, layout, panel_drawer, panel_notebooks, panel_notes, panel_preview, slash_menu,
@@ -2289,53 +2291,140 @@ impl App {
         self.query_error = None;
         self.query_rows.clear();
         self.query_pool = self.store.all_notes().unwrap_or_default();
+        self.query_known_fields = shiki_core::query::known_fields(&self.query_pool);
+        self.query_suggestions = self.build_query_suggestions(&self.query_pool);
+        self.query_suggestions_visible = self.query_suggestions.clone();
         self.show_query = true;
+    }
+    /// Every saved query (`Config.queries`, alphabetical by name) first,
+    /// then the generated examples (`shiki_core::query::suggest_queries`
+    /// over `pool`) — saved ones lead since they're a deliberate choice the
+    /// user already made, more relevant than an auto-generated guess at
+    /// what might be useful. Takes `pool` explicitly (rather than reading
+    /// `self.query_pool`) so both query surfaces can call this against
+    /// their own already-loaded pool (`query_pool`/`global_search_pool`)
+    /// without one having to shadow the other's field first.
+    fn build_query_suggestions(
+        &self,
+        pool: &[(shiki_core::Notebook, shiki_core::Note)],
+    ) -> Vec<QuerySuggestion> {
+        let mut saved: Vec<(&String, &String)> = self.config.queries.iter().collect();
+        saved.sort_by_key(|(name, _)| name.to_lowercase());
+        let mut list: Vec<QuerySuggestion> = saved
+            .into_iter()
+            .map(|(name, dsl)| QuerySuggestion::saved(name, dsl.clone()))
+            .collect();
+        list.extend(
+            shiki_core::query::suggest_queries(pool)
+                .into_iter()
+                .map(QuerySuggestion::generated),
+        );
+        list
+    }
+    /// Filters `query_suggestions` down to ones whose display text or
+    /// underlying DSL contains `text` — used both for the immediate
+    /// "here's what you can ask" list (empty text, so every suggestion
+    /// matches) and, once typing starts, as a live "did you mean" list for
+    /// whatever's in progress but doesn't parse yet. Shared by
+    /// `refresh_query` and `refresh_global_search`'s query mode so the two
+    /// can't drift into filtering differently.
+    fn matching_suggestions(&self, text: &str) -> Vec<QuerySuggestion> {
+        let needle = text.trim().to_lowercase();
+        self.query_suggestions
+            .iter()
+            .filter(|s| {
+                needle.is_empty()
+                    || s.display.to_lowercase().contains(&needle)
+                    || s.dsl.to_lowercase().contains(&needle)
+            })
+            .cloned()
+            .collect()
     }
     /// Re-parses and re-evaluates the DSL against the already-loaded
     /// `query_pool` — pure in-memory work, safe to redo on every keystroke.
-    /// An empty box clears results without showing an error (nothing typed
-    /// yet isn't the same as an invalid query); a genuinely malformed DSL
-    /// clears the results and shows the parse error in their place instead
-    /// of crashing or silently keeping stale rows on screen.
+    /// An empty box shows every suggestion (the "here's what you can ask"
+    /// list) rather than a blank screen; a query that doesn't parse yet
+    /// shows whichever suggestions still match what's typed so far instead
+    /// of a bare error, falling back to the real parse error (with its own
+    /// field hint, see `panel_query::render_result_table`) only once no
+    /// suggestion matches either.
     fn refresh_query(&mut self) {
-        let text = self.query_input.value.trim();
+        let text = self.query_input.value.trim().to_string();
         if text.is_empty() {
             self.query_error = None;
             self.query_rows.clear();
+            self.query_suggestions_visible = self.query_suggestions.clone();
             self.query_selected = 0;
             return;
         }
         let today = chrono::Local::now().date_naive();
-        match shiki_core::query::parse(text) {
+        match shiki_core::query::parse(&text) {
             Ok(q) => {
                 self.query_error = None;
+                self.query_suggestions_visible.clear();
                 self.query_rows = shiki_core::query::run_query(&self.query_pool, &q, None, today);
             }
             Err(e) => {
-                self.query_error = Some(e.to_string());
                 self.query_rows.clear();
+                let matches = self.matching_suggestions(&text);
+                if matches.is_empty() {
+                    self.query_error = Some(e.to_string());
+                    self.query_suggestions_visible.clear();
+                } else {
+                    self.query_error = None;
+                    self.query_suggestions_visible = matches;
+                }
             }
         }
-        self.query_selected = self
-            .query_selected
-            .min(self.query_rows.len().saturating_sub(1));
+        let visible_len = if self.query_suggestions_visible.is_empty() {
+            self.query_rows.len()
+        } else {
+            self.query_suggestions_visible.len()
+        };
+        self.query_selected = self.query_selected.min(visible_len.saturating_sub(1));
     }
     /// Navigation is arrows/PageUp/PageDown/Home/End only, deliberately no
     /// `j`/`k` — same reasoning as `which.rs`: those letters need to be
     /// typeable into the query itself.
     fn handle_query_key(&mut self, key: KeyEvent) {
+        let showing_suggestions = !self.query_suggestions_visible.is_empty();
+        let len = if showing_suggestions {
+            self.query_suggestions_visible.len()
+        } else {
+            self.query_rows.len()
+        };
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
+            KeyCode::Char('s') if ctrl => self.start_save_query_prompt(),
+            KeyCode::Char('d') if ctrl && showing_suggestions => {
+                if let Some(name) = self
+                    .query_suggestions_visible
+                    .get(self.query_selected)
+                    .and_then(|s| s.saved_name.clone())
+                {
+                    self.delete_saved_query(&name);
+                }
+            }
             KeyCode::Esc => self.show_query = false,
-            KeyCode::Enter => self.jump_to_query_note(),
+            KeyCode::Enter => {
+                if showing_suggestions {
+                    if let Some(s) = self.query_suggestions_visible.get(self.query_selected) {
+                        self.query_input.value = s.dsl.clone();
+                        self.refresh_query();
+                    }
+                } else {
+                    self.jump_to_query_note();
+                }
+            }
             KeyCode::Down => {
-                if self.query_selected + 1 < self.query_rows.len() {
+                if self.query_selected + 1 < len {
                     self.query_selected += 1;
                 }
             }
             KeyCode::Up => self.query_selected = self.query_selected.saturating_sub(1),
             KeyCode::PageDown => {
-                self.query_selected = (self.query_selected + self.page_step() as usize)
-                    .min(self.query_rows.len().saturating_sub(1));
+                self.query_selected =
+                    (self.query_selected + self.page_step() as usize).min(len.saturating_sub(1));
             }
             KeyCode::PageUp => {
                 self.query_selected = self
@@ -2343,7 +2432,7 @@ impl App {
                     .saturating_sub(self.page_step() as usize);
             }
             KeyCode::Home => self.query_selected = 0,
-            KeyCode::End => self.query_selected = self.query_rows.len().saturating_sub(1),
+            KeyCode::End => self.query_selected = len.saturating_sub(1),
             KeyCode::Backspace => {
                 self.query_input.backspace();
                 self.refresh_query();
@@ -2354,6 +2443,63 @@ impl App {
             }
             _ => {}
         }
+    }
+    /// `Ctrl+S` in the query modal — only a query that already parses is
+    /// worth saving (a broken one saved under a name would just replay the
+    /// same parse error every time it's picked from the suggestions list
+    /// later). Hides the modal and opens the name prompt, same "hide
+    /// yourself, restore after" convention as `start_metadata_prompt`/
+    /// `handle_tags_key`'s `r`.
+    fn start_save_query_prompt(&mut self) {
+        let text = self.query_input.value.trim().to_string();
+        if text.is_empty() || self.query_error.is_some() {
+            self.set_status("type a valid query first".into());
+            return;
+        }
+        self.pending_save_query_dsl = Some(text);
+        self.show_query = false;
+        self.start_input(PendingInput::SaveQuery, String::new());
+    }
+    /// Removes a saved query and immediately rebuilds the suggestions list
+    /// so it stops showing up — reuses `refresh_query` afterward rather
+    /// than hand-patching `query_suggestions_visible`, since the deleted
+    /// entry might currently be the *filtered* list shown, not just the
+    /// full one.
+    fn delete_saved_query(&mut self, name: &str) {
+        self.config.queries.remove(name);
+        self.save_config();
+        self.query_suggestions = self.build_query_suggestions(&self.query_pool);
+        self.refresh_query();
+        self.set_status(format!("deleted saved query '{name}'"));
+    }
+    /// Writes `pending_save_query_dsl` into `config.queries` under the
+    /// typed name and persists it — an existing name overwrites (reported
+    /// distinctly from a fresh save, so overwriting isn't a silent
+    /// surprise). Reopens the query modal either way, same as
+    /// `confirm_rename_tag` does for its own modal.
+    fn confirm_save_query(&mut self, value: String) {
+        let Some(dsl) = self.pending_save_query_dsl.take() else {
+            self.show_query = true;
+            return;
+        };
+        let name = value.trim().to_string();
+        if name.is_empty() {
+            self.set_status("save cancelled (name can't be empty)".into());
+        } else {
+            let overwritten = self.config.queries.contains_key(&name);
+            self.config.queries.insert(name.clone(), dsl);
+            self.save_config();
+            self.query_suggestions = self.build_query_suggestions(&self.query_pool);
+            self.set_status(format!(
+                "{} query '{name}'",
+                if overwritten {
+                    "updated saved"
+                } else {
+                    "saved"
+                }
+            ));
+        }
+        self.show_query = true;
     }
     /// Cross-notebook jump to the selected result's note — same shape as
     /// `jump_to_task_note`/`jump_to_global_hit`.
@@ -2378,6 +2524,334 @@ impl App {
             }
         }
         self.show_query = false;
+    }
+    /// Opens the metadata modal for the selected note — a no-op with a
+    /// status message rather than a blank modal when nothing's selected
+    /// (e.g. NOTES is on an empty notebook).
+    fn open_metadata(&mut self) {
+        if self.selected_note().is_none() {
+            self.set_status("select a note first".into());
+            return;
+        }
+        self.metadata_selected = 0;
+        self.show_metadata = true;
+    }
+    /// `tags` is always the first row, even when empty — it's the one
+    /// always-present, always-discoverable place to add tags without a
+    /// separate mechanism. Every other row is one `extra` frontmatter
+    /// field, in the YAML file's own order (a `serde_yaml::Mapping`
+    /// preserves insertion order, so this matches what's actually on disk).
+    pub(crate) fn metadata_rows(&self) -> Vec<(String, String)> {
+        let Some(note) = self.selected_note() else {
+            return Vec::new();
+        };
+        let mut rows = vec![("tags".to_string(), note.frontmatter.tags.join(", "))];
+        for (k, v) in note.frontmatter.extra.iter() {
+            if let Some(key) = k.as_str() {
+                rows.push((key.to_string(), panel_query::yaml_cell_text(v)));
+            }
+        }
+        rows
+    }
+    /// Hides the modal and opens the shared `PendingInput::Metadata` prompt
+    /// — every metadata edit funnels through here so hiding/restoring
+    /// `show_metadata` and stamping an explicit `pending_input_title` (this
+    /// prompt's meaning changes per step, unlike most `PendingInput`
+    /// variants — see `MetadataPrompt`) can't be forgotten in one call site
+    /// but not another.
+    fn start_metadata_prompt(&mut self, kind: MetadataPrompt, title: String, prefill: String) {
+        self.show_metadata = false;
+        let pool = self.store.all_notes().unwrap_or_default();
+        let input_value = match &kind {
+            // Tags keeps its prefill (the note's current comma-separated
+            // list) — unlike a single-value field, there's nothing to
+            // "select instead of the current value", only more to append,
+            // so the box starts exactly where editing naturally continues.
+            MetadataPrompt::Tags => {
+                self.metadata_value_options = shiki_core::tags::all_tags(&pool);
+                self.metadata_value_selected = 0;
+                prefill
+            }
+            MetadataPrompt::NewFieldKey => {
+                self.metadata_value_options = Vec::new();
+                self.metadata_value_selected = 0;
+                prefill
+            }
+            MetadataPrompt::FieldValue(field) | MetadataPrompt::NewFieldValue(field) => {
+                let options = Self::metadata_value_suggestions(&pool, field);
+                // When there are suggestions, the box starts *empty* rather
+                // than prefilled with the current value — prefilling it
+                // would make the live substring filter immediately narrow
+                // the dropdown down to just that one value (nothing else
+                // contains it), defeating the point of seeing every option
+                // at once. The current value isn't lost: `metadata_value_
+                // selected` points at its position in the list instead, so
+                // it's already highlighted and a bare `Enter` with nothing
+                // typed keeps it unchanged, same safety a real prefill
+                // would have given.
+                let value = if options.is_empty() {
+                    self.metadata_value_selected = 0;
+                    prefill
+                } else {
+                    self.metadata_value_selected = options
+                        .iter()
+                        .position(|o| o.eq_ignore_ascii_case(&prefill))
+                        .unwrap_or(0);
+                    String::new()
+                };
+                self.metadata_value_options = options;
+                value
+            }
+        };
+        self.metadata_prompt = Some(kind);
+        self.start_input(PendingInput::Metadata, input_value);
+        self.pending_input_title = Some(title);
+    }
+    /// `true` while the prompt currently open is specifically the `Tags`
+    /// one — the one case where the box holds several comma-separated
+    /// values instead of one, so the suggestions dropdown has to filter/
+    /// insert against just the segment being typed, not the whole box (see
+    /// `metadata_value_query`/`metadata_value_filtered` and the `Tab`
+    /// handling in `handle_insert_key`).
+    pub(crate) fn is_tags_prompt(&self) -> bool {
+        matches!(self.metadata_prompt, Some(MetadataPrompt::Tags))
+    }
+    /// Built-in suggestions for the handful of field names that have an
+    /// obvious convention — `due` in particular resolves relative to *now*
+    /// (never cached), so re-opening the prompt tomorrow suggests tomorrow's
+    /// dates, not stale ones from whenever the app started. Any other field
+    /// name (e.g. `project`) has no universal default; it's suggested purely
+    /// from history via `metadata_value_suggestions`.
+    fn default_metadata_value_suggestions(field: &str) -> Vec<String> {
+        let today = chrono::Local::now().date_naive();
+        match field.to_ascii_lowercase().as_str() {
+            "status" => ["pending", "in-progress", "done"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+            "priority" => ["high", "medium", "low"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+            "due" => [
+                today,
+                today.succ_opt().unwrap_or(today),
+                today + chrono::Duration::days(7),
+            ]
+            .into_iter()
+            .map(|d| d.format("%Y-%m-%d").to_string())
+            .collect(),
+            _ => Vec::new(),
+        }
+    }
+    /// Built-in defaults first (the common, "hasn't been used yet" case),
+    /// then every value already used for `field` anywhere across every
+    /// notebook (`shiki_core::query::field_values`, deduped against the
+    /// defaults) — `pool` is passed in (rather than fetched here) so
+    /// `start_metadata_prompt` only walks every notebook once regardless of
+    /// which kind of prompt it's opening.
+    fn metadata_value_suggestions(
+        pool: &[(shiki_core::Notebook, shiki_core::Note)],
+        field: &str,
+    ) -> Vec<String> {
+        let mut values = Self::default_metadata_value_suggestions(field);
+        for v in shiki_core::query::field_values(pool, field) {
+            if !values.iter().any(|d| d.eq_ignore_ascii_case(&v)) {
+                values.push(v);
+            }
+        }
+        values
+    }
+    /// `Some` only while a `PendingInput::Metadata` prompt has suggestions
+    /// to show (`NewFieldKey` never does — see `start_metadata_prompt`) —
+    /// gates the suggestions dropdown in `handle_insert_key`/`draw.rs`,
+    /// same shape as `quick_template_query`. For `Tags`, this is only the
+    /// segment after the last comma (whatever's currently being typed),
+    /// not the whole box — matching several already-picked tags against
+    /// "what's typed" would filter the dropdown down to nothing the moment
+    /// there's more than one tag.
+    pub(crate) fn metadata_value_query(&self) -> Option<&str> {
+        if self.pending_input != Some(PendingInput::Metadata)
+            || self.metadata_value_options.is_empty()
+        {
+            return None;
+        }
+        Some(if self.is_tags_prompt() {
+            self.input
+                .value
+                .rsplit(',')
+                .next()
+                .unwrap_or("")
+                .trim_start()
+        } else {
+            self.input.value.as_str()
+        })
+    }
+    /// `metadata_value_options` narrowed to whatever's typed so far
+    /// (case-insensitive substring, same filter shape as
+    /// `App::matching_suggestions` for the query modal) — empty input
+    /// shows every suggestion, exactly like that one too. For `Tags`,
+    /// additionally drops any tag already picked earlier in the same
+    /// comma-separated list, so a half-finished "work, wor" doesn't offer
+    /// "work" again as if it were a fresh option.
+    pub(crate) fn metadata_value_filtered(&self) -> Vec<String> {
+        let Some(query) = self.metadata_value_query() else {
+            return Vec::new();
+        };
+        let needle = query.to_lowercase();
+        let already_picked: Vec<String> = if self.is_tags_prompt() {
+            self.input
+                .value
+                .split(',')
+                .rev()
+                .skip(1)
+                .map(|s| s.trim().to_lowercase())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        self.metadata_value_options
+            .iter()
+            .filter(|v| {
+                (needle.is_empty() || v.to_lowercase().contains(&needle))
+                    && !already_picked.contains(&v.to_lowercase())
+            })
+            .cloned()
+            .collect()
+    }
+    /// `Tab`-only (see `handle_insert_key`): replaces the segment currently
+    /// being typed (after the last comma) with `suggestion` and appends a
+    /// fresh `", "` separator, ready to keep typing the next tag — doesn't
+    /// touch or confirm the rest of the box, unlike a single-value field's
+    /// `Enter` (`self.input.value = s`), since there can be other
+    /// already-picked tags before it that must survive untouched.
+    fn apply_tag_suggestion(&mut self, suggestion: &str) {
+        match self.input.value.rfind(',') {
+            Some(pos) => {
+                self.input.value.truncate(pos + 1);
+                self.input.value.push(' ');
+            }
+            None => self.input.value.clear(),
+        }
+        self.input.value.push_str(suggestion);
+        self.input.value.push_str(", ");
+        self.metadata_value_selected = 0;
+    }
+    fn handle_metadata_key(&mut self, key: KeyEvent) {
+        let rows = self.metadata_rows();
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => self.show_metadata = false,
+            KeyCode::Char('j') | KeyCode::Down => {
+                if self.metadata_selected + 1 < rows.len() {
+                    self.metadata_selected += 1;
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.metadata_selected = self.metadata_selected.saturating_sub(1);
+            }
+            KeyCode::Char('a') => {
+                self.start_metadata_prompt(
+                    MetadataPrompt::NewFieldKey,
+                    " New field name ".into(),
+                    String::new(),
+                );
+            }
+            KeyCode::Enter => {
+                if let Some((key, value)) = rows.get(self.metadata_selected).cloned() {
+                    if key == "tags" {
+                        self.start_metadata_prompt(
+                            MetadataPrompt::Tags,
+                            " Tags (comma-separated) ".into(),
+                            value,
+                        );
+                    } else {
+                        self.start_metadata_prompt(
+                            MetadataPrompt::FieldValue(key.clone()),
+                            format!(" Value for '{key}' (current: {value}) "),
+                            value,
+                        );
+                    }
+                }
+            }
+            KeyCode::Char('d') => {
+                if let Some((key, _)) = rows.get(self.metadata_selected).cloned() {
+                    if let Some(mut note) = self.selected_note().cloned() {
+                        if key == "tags" {
+                            note.frontmatter.tags.clear();
+                        } else {
+                            note.frontmatter
+                                .extra
+                                .remove(serde_yaml::Value::String(key));
+                        }
+                        self.save_metadata_note(note);
+                        self.metadata_selected = self
+                            .metadata_selected
+                            .min(self.metadata_rows().len().saturating_sub(1));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    /// Resolves whichever step of the metadata prompt flow just confirmed
+    /// (see `MetadataPrompt`) — `NewFieldKey` is the one non-terminal step,
+    /// chaining straight into `NewFieldValue` via `start_metadata_prompt`
+    /// again instead of saving anything yet; every other step is terminal
+    /// and restores `show_metadata` once it's done.
+    fn confirm_metadata_prompt(&mut self, value: String) {
+        match self.metadata_prompt.take() {
+            Some(MetadataPrompt::Tags) => {
+                if let Some(mut note) = self.selected_note().cloned() {
+                    note.frontmatter.tags = value
+                        .split(',')
+                        .map(|t| t.trim().to_string())
+                        .filter(|t| !t.is_empty())
+                        .collect();
+                    self.save_metadata_note(note);
+                }
+                self.show_metadata = true;
+            }
+            Some(MetadataPrompt::NewFieldKey) => {
+                let key = value.trim().to_string();
+                if key.is_empty() {
+                    self.set_status("metadata field cancelled (name can't be empty)".into());
+                    self.show_metadata = true;
+                } else {
+                    self.start_metadata_prompt(
+                        MetadataPrompt::NewFieldValue(key.clone()),
+                        format!(" Value for '{key}' "),
+                        String::new(),
+                    );
+                }
+            }
+            Some(MetadataPrompt::NewFieldValue(key)) | Some(MetadataPrompt::FieldValue(key)) => {
+                if let Some(mut note) = self.selected_note().cloned() {
+                    note.frontmatter.extra.insert(
+                        serde_yaml::Value::String(key),
+                        serde_yaml::Value::String(value),
+                    );
+                    self.save_metadata_note(note);
+                }
+                self.show_metadata = true;
+            }
+            None => {}
+        }
+    }
+    /// Every metadata edit funnels through here — same crypto-aware save
+    /// path `save_and_exit_edit` uses for the note's body, just for
+    /// frontmatter instead. Refreshes the same caches a body edit would
+    /// (`note_changed` for auto-sync's counter, `refresh_notes_preserve_selection`
+    /// so PREVIEW's metadata header reflects the change immediately).
+    fn save_metadata_note(&mut self, note: shiki_core::Note) {
+        let crypto = self.selected_notebook().and_then(|nb| nb.crypto.clone());
+        match note.save_with_crypto(crypto.as_ref()) {
+            Ok(_) => {
+                self.note_changed(&note.frontmatter.notebook);
+                self.refresh_notes_preserve_selection();
+                self.set_status("metadata saved".into());
+            }
+            Err(e) => self.set_status(format!("could not save metadata: {e}")),
+        }
     }
     /// The tags modal has two levels: the tag list itself, and (after
     /// drilling into one) the notes that carry it — reset to level 1 every
@@ -2408,6 +2882,13 @@ impl App {
                     if let Some(tag) = tags.get(self.tags_selected) {
                         self.tags_viewing = Some(tag.clone());
                         self.tags_notes_selected = 0;
+                    }
+                }
+                KeyCode::Char('r') => {
+                    if let Some(tag) = tags.get(self.tags_selected).cloned() {
+                        self.pending_rename_tag = Some(tag.clone());
+                        self.show_tags = false;
+                        self.start_input(PendingInput::RenameTag, tag);
                     }
                 }
                 _ => {}
@@ -2453,17 +2934,105 @@ impl App {
         self.show_tags = false;
         self.tags_viewing = None;
     }
+    /// Renames (or merges) `pending_rename_tag` across every notebook —
+    /// see `shiki_core::tags::rename_tag`'s own doc comment for why this
+    /// deliberately isn't scoped to the current directory the tags modal
+    /// itself browses. Reopens the tags modal either way (success or
+    /// error), same "restore what hid you" convention every other
+    /// modal-launched prompt in this codebase follows.
+    fn confirm_rename_tag(&mut self, value: String) {
+        let Some(old) = self.pending_rename_tag.take() else {
+            self.show_tags = true;
+            return;
+        };
+        let new = value.trim();
+        if new.is_empty() || new == old {
+            self.set_status("tag rename cancelled".into());
+            self.show_tags = true;
+            return;
+        }
+        let pool = self.store.all_notes().unwrap_or_default();
+        match shiki_core::tags::rename_tag(&pool, &old, new) {
+            Ok((count, notebooks)) => {
+                for nb in &notebooks {
+                    self.note_changed(nb);
+                }
+                self.refresh_notes_preserve_selection();
+                self.set_status(format!(
+                    "renamed tag '{old}' \u{2192} '{new}' in {count} note{}",
+                    if count == 1 { "" } else { "s" }
+                ));
+            }
+            Err(e) => self.set_status(format!("could not rename tag: {e}")),
+        }
+        self.show_tags = true;
+    }
     /// Loads every note from every notebook and opens the global search modal.
     fn open_global_search(&mut self) {
         self.global_search_pool = self.store.all_notes().unwrap_or_default();
         self.global_search_input = InputBox::default();
+        self.global_search_query_rows.clear();
+        self.global_search_query_error = None;
+        self.query_known_fields = shiki_core::query::known_fields(&self.global_search_pool);
+        self.query_suggestions = self.build_query_suggestions(&self.global_search_pool);
+        self.query_suggestions_visible.clear();
         self.refresh_global_search();
         self.show_global_search = true;
     }
+    /// A leading `!` switches the box from plain text search into the query
+    /// DSL (`shiki_core::query`) — same box, same pool, one extra character
+    /// to opt in, so there's no separate modal to remember a binding for.
+    pub(crate) fn global_search_is_query(&self) -> bool {
+        self.global_search_input.value.starts_with('!')
+    }
     /// Re-scores `global_search_pool` against the current query (title +
     /// body + notebook name, so this behaves like a grep across all notes,
-    /// not just a title filter).
+    /// not just a title filter) — or, in query mode (see
+    /// `global_search_is_query`), re-parses and re-evaluates the DSL
+    /// against the same pool instead, mirroring `refresh_query` exactly
+    /// (including the suggestions list — see `matching_suggestions`).
     fn refresh_global_search(&mut self) {
+        if self.global_search_is_query() {
+            self.global_search_results.clear();
+            let text = self.global_search_input.value[1..].trim().to_string();
+            if text.is_empty() {
+                self.global_search_query_error = None;
+                self.global_search_query_rows.clear();
+                self.query_suggestions_visible = self.query_suggestions.clone();
+            } else {
+                let today = chrono::Local::now().date_naive();
+                match shiki_core::query::parse(&text) {
+                    Ok(q) => {
+                        self.global_search_query_error = None;
+                        self.query_suggestions_visible.clear();
+                        self.global_search_query_rows =
+                            shiki_core::query::run_query(&self.global_search_pool, &q, None, today);
+                    }
+                    Err(e) => {
+                        self.global_search_query_rows.clear();
+                        let matches = self.matching_suggestions(&text);
+                        if matches.is_empty() {
+                            self.global_search_query_error = Some(e.to_string());
+                            self.query_suggestions_visible.clear();
+                        } else {
+                            self.global_search_query_error = None;
+                            self.query_suggestions_visible = matches;
+                        }
+                    }
+                }
+            }
+            let visible_len = if self.query_suggestions_visible.is_empty() {
+                self.global_search_query_rows.len()
+            } else {
+                self.query_suggestions_visible.len()
+            };
+            self.global_search_selected = self
+                .global_search_selected
+                .min(visible_len.saturating_sub(1));
+            return;
+        }
+        self.global_search_query_rows.clear();
+        self.global_search_query_error = None;
         let query = self.global_search_input.value.clone();
         let haystacks: Vec<String> = self
             .global_search_pool
@@ -2477,10 +3046,29 @@ impl App {
         self.global_search_selected = 0;
     }
     fn handle_global_search_key(&mut self, key: KeyEvent) {
+        let is_query = self.global_search_is_query();
+        let showing_suggestions = is_query && !self.query_suggestions_visible.is_empty();
+        let len = if showing_suggestions {
+            self.query_suggestions_visible.len()
+        } else if is_query {
+            self.global_search_query_rows.len()
+        } else {
+            self.global_search_results.len()
+        };
         match key.code {
             KeyCode::Esc => self.show_global_search = false,
             KeyCode::Enter => {
-                if let Some(hit) = self
+                if showing_suggestions {
+                    if let Some(s) = self
+                        .query_suggestions_visible
+                        .get(self.global_search_selected)
+                    {
+                        self.global_search_input.value = format!("!{}", s.dsl);
+                        self.refresh_global_search();
+                    }
+                } else if is_query {
+                    self.jump_to_global_search_query_note();
+                } else if let Some(hit) = self
                     .global_search_results
                     .get(self.global_search_selected)
                     .copied()
@@ -2489,7 +3077,7 @@ impl App {
                 }
             }
             KeyCode::Down => {
-                if self.global_search_selected + 1 < self.global_search_results.len() {
+                if self.global_search_selected + 1 < len {
                     self.global_search_selected += 1;
                 }
             }
@@ -2499,7 +3087,7 @@ impl App {
             KeyCode::PageDown => {
                 self.global_search_selected = (self.global_search_selected
                     + self.page_step() as usize)
-                    .min(self.global_search_results.len().saturating_sub(1));
+                    .min(len.saturating_sub(1));
             }
             KeyCode::PageUp => {
                 self.global_search_selected = self
@@ -2507,9 +3095,7 @@ impl App {
                     .saturating_sub(self.page_step() as usize);
             }
             KeyCode::Home => self.global_search_selected = 0,
-            KeyCode::End => {
-                self.global_search_selected = self.global_search_results.len().saturating_sub(1)
-            }
+            KeyCode::End => self.global_search_selected = len.saturating_sub(1),
             KeyCode::Backspace => {
                 self.global_search_input.backspace();
                 self.refresh_global_search();
@@ -2537,6 +3123,34 @@ impl App {
             }
             self.focus = Focus::Preview;
             self.set_status(format!("opened '{}'", note.frontmatter.title));
+        }
+        self.show_global_search = false;
+    }
+    /// Cross-notebook jump to a query-mode result — same shape as
+    /// `jump_to_global_hit`/`jump_to_query_note`, just resolving by path
+    /// against `global_search_pool` since `QueryRow` carries no pool index.
+    fn jump_to_global_search_query_note(&mut self) {
+        let Some(row) = self
+            .global_search_query_rows
+            .get(self.global_search_selected)
+        else {
+            return;
+        };
+        let notebook = row.notebook.clone();
+        let note_path = row.path.clone();
+        if let Some(nb_idx) = self.notebooks.iter().position(|n| n.name == notebook) {
+            self.selected_notebook = nb_idx;
+            let nb_path = self.notebooks[nb_idx].path.clone();
+            self.notes_path = relative_folder(&note_path, &nb_path);
+            self.reload_notes();
+            if let Some(idx) = self.notes.iter().position(|n| n.path == note_path) {
+                self.selected_note = self.folders.len() + idx;
+            }
+            self.focus = Focus::Preview;
+            if let Some(note) = self.selected_note() {
+                let title = note.frontmatter.title.clone();
+                self.set_status(format!("opened '{title}'"));
+            }
         }
         self.show_global_search = false;
     }
@@ -2702,9 +3316,14 @@ impl App {
     }
     fn on_mouse_down(&mut self, column: u16, row: u16) {
         if self.show_global_search {
-            if let Some(index) = self.global_search_hit_at(column, row) {
-                if let Some(hit) = self.global_search_results.get(index).copied() {
-                    self.jump_to_global_hit(hit.index);
+            // Query mode renders a `Table` (with its own header row), not
+            // the plain `List` this hit-test's math assumes — clicking is
+            // a no-op there rather than risk jumping to the wrong row.
+            if !self.global_search_is_query() {
+                if let Some(index) = self.global_search_hit_at(column, row) {
+                    if let Some(hit) = self.global_search_results.get(index).copied() {
+                        self.jump_to_global_hit(hit.index);
+                    }
                 }
             }
             return;
@@ -3061,6 +3680,7 @@ impl App {
             && !self.show_update
             && !self.show_settings
             && !self.show_which_key
+            && !self.show_metadata
             && self.confirm.is_none()
     }
     /// Best-effort: a browser failing to launch (no GUI, headless SSH
@@ -3833,6 +4453,7 @@ impl App {
             Action::Scratchpad => self.start_scratchpad(),
             Action::ToggleTasks => self.open_tasks(),
             Action::ToggleQuery => self.open_query(),
+            Action::EditMetadata => self.open_metadata(),
             Action::PublishNotebook => self.publish_notebook(),
             Action::ExportNotebook => self.start_export_notebook(),
             Action::ToggleZenMode => self.toggle_zen_mode(),
@@ -4378,6 +4999,9 @@ impl App {
                 }
             }
             Some(PendingInput::NotebookPassphrase) => self.confirm_notebook_passphrase(),
+            Some(PendingInput::Metadata) => self.confirm_metadata_prompt(value),
+            Some(PendingInput::RenameTag) => self.confirm_rename_tag(value),
+            Some(PendingInput::SaveQuery) => self.confirm_save_query(value),
             None => {}
         }
         // A guard, not a no-op: `confirm_notebook_passphrase`'s `Enable`
@@ -4662,6 +5286,62 @@ impl App {
                 _ => return,
             }
         }
+        // The metadata field-value suggestions dropdown (`due`/`status`/
+        // `priority`/any field with prior history) — deliberately doesn't
+        // intercept `Esc`, unlike the `@`-dropdown above: there's no typed
+        // trigger substring to strip first, so the very first `Esc` should
+        // fall straight through to the ordinary cancel-the-whole-prompt
+        // handling below (which reopens `show_metadata` for `Metadata`).
+        if self.metadata_value_query().is_some() {
+            match key.code {
+                // `Tags` holds several comma-separated values, so `Enter`
+                // always submits whatever's literally typed — overwriting
+                // it with just the highlighted suggestion (the single-value
+                // fields' behavior) would silently drop every other tag
+                // already picked. `Tab` is the accept-a-suggestion key
+                // there instead (see `apply_tag_suggestion`), the same role
+                // a real shell/editor completion binds it to.
+                KeyCode::Tab if self.is_tags_prompt() => {
+                    let filtered = self.metadata_value_filtered();
+                    if let Some(s) = filtered.get(self.metadata_value_selected).cloned() {
+                        self.apply_tag_suggestion(&s);
+                    }
+                    return;
+                }
+                KeyCode::Enter => {
+                    if !self.is_tags_prompt() {
+                        let filtered = self.metadata_value_filtered();
+                        if let Some(s) = filtered.get(self.metadata_value_selected).cloned() {
+                            self.input.value = s;
+                        }
+                    }
+                    self.confirm_input();
+                    return;
+                }
+                KeyCode::Down => {
+                    let len = self.metadata_value_filtered().len();
+                    if self.metadata_value_selected + 1 < len {
+                        self.metadata_value_selected += 1;
+                    }
+                    return;
+                }
+                KeyCode::Up => {
+                    self.metadata_value_selected = self.metadata_value_selected.saturating_sub(1);
+                    return;
+                }
+                KeyCode::Backspace => {
+                    self.input.backspace();
+                    self.metadata_value_selected = 0;
+                    return;
+                }
+                KeyCode::Char(c) => {
+                    self.input.push(c);
+                    self.metadata_value_selected = 0;
+                    return;
+                }
+                _ => {}
+            }
+        }
         match key.code {
             KeyCode::Esc => {
                 let kind = self.pending_input.take();
@@ -4702,6 +5382,24 @@ impl App {
                         self.reopen_settings_after_passphrase = false;
                         self.show_settings = true;
                     }
+                }
+                // Cancelling any step of the metadata modal's prompt flow —
+                // including mid-chain, on the `NewFieldKey` -> `NewFieldValue`
+                // hop — reopens the metadata modal exactly like confirming
+                // one does, rather than dropping back to bare NOTES/PREVIEW.
+                if kind == Some(PendingInput::Metadata) {
+                    self.metadata_prompt = None;
+                    self.metadata_value_options.clear();
+                    self.show_metadata = true;
+                }
+                // Same reopen-on-cancel reasoning as `Metadata` above.
+                if kind == Some(PendingInput::RenameTag) {
+                    self.pending_rename_tag = None;
+                    self.show_tags = true;
+                }
+                if kind == Some(PendingInput::SaveQuery) {
+                    self.pending_save_query_dsl = None;
+                    self.show_query = true;
                 }
             }
             KeyCode::Enter => self.confirm_input(),
@@ -6417,6 +7115,10 @@ impl App {
         }
         if self.show_settings {
             self.handle_settings_key(key);
+            return;
+        }
+        if self.show_metadata {
+            self.handle_metadata_key(key);
             return;
         }
         match self.mode {

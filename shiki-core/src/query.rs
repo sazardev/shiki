@@ -63,21 +63,23 @@ pub struct Query {
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum QueryError {
-    #[error("unterminated string")]
+    #[error("unterminated string — missing a closing '\"'")]
     UnterminatedString,
-    #[error("unexpected character '{0}'")]
+    #[error("unexpected character '{0}' — supported operators are = != > < >= <= ~")]
     UnexpectedChar(char),
-    #[error("expected a field name")]
+    #[error("expected a field name (e.g. title, date, notebook, tag, template, or any custom frontmatter field)")]
     ExpectedField,
-    #[error("expected a comparison operator (=, !=, >, <, >=, <=, ~)")]
+    #[error("expected a comparison operator (=, !=, >, <, >=, <=, ~) after the field name")]
     ExpectedOperator,
-    #[error("expected a value")]
+    #[error(
+        "expected a value after the operator — a word, \"quoted string\", a number, or `today`"
+    )]
     ExpectedValue,
     #[error("expected a closing ')'")]
     ExpectedCloseParen,
-    #[error("unexpected trailing input")]
+    #[error("unexpected trailing input — did you forget `and`/`or` between conditions?")]
     TrailingTokens,
-    #[error("empty query")]
+    #[error("empty query — try something like: where status = pending sort due asc")]
     Empty,
 }
 
@@ -505,6 +507,163 @@ pub fn run_query(
         .collect()
 }
 
+/// Every custom frontmatter field name actually present across `pool`'s
+/// notes (their `extra` maps) — deduped, sorted. Used to build a "here's
+/// what you can actually query on" hint next to a parse error, in both the
+/// CLI (`shiki query`) and the TUI query modals — pool-driven rather than a
+/// fixed list, since custom fields are whatever a user happened to write.
+pub fn known_fields(pool: &[(Notebook, Note)]) -> Vec<String> {
+    let mut fields: Vec<String> = pool
+        .iter()
+        .flat_map(|(_, note)| note.frontmatter.extra.keys())
+        .filter_map(|k| k.as_str().map(str::to_string))
+        .collect();
+    fields.sort();
+    fields.dedup();
+    fields
+}
+
+/// The always-available fields (not stored per-note) plus the DSL's basic
+/// shape — shown alongside `known_fields` so the hint is useful even for a
+/// notebook with no custom frontmatter fields at all yet.
+pub const BUILTIN_FIELDS: &str = "title, date, notebook, tag, template";
+pub const EXAMPLE_QUERY: &str = "where status = pending sort due asc";
+
+/// Every distinct value actually seen for exactly `field` across `pool`'s
+/// notes (their `extra` maps) — deduped, sorted. Unlike `known_fields`
+/// (field *names*, across every field) or `suggest_queries` (whole example
+/// DSL strings), this answers "what have I already put in this one field
+/// before" — used by the TUI's metadata editor to suggest previously-used
+/// values (e.g. every `project` name used anywhere) when editing a field.
+pub fn field_values(pool: &[(Notebook, Note)], field: &str) -> Vec<String> {
+    let mut values: Vec<String> = pool
+        .iter()
+        .filter_map(|(_, note)| note.frontmatter.extra.get(field))
+        .map(yaml_value_to_string)
+        .filter(|v| !v.is_empty())
+        .collect();
+    values.sort();
+    values.dedup();
+    values
+}
+
+fn quote_if_needed(v: &str) -> String {
+    if !v.is_empty()
+        && v.chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        v.to_string()
+    } else {
+        format!("{v:?}")
+    }
+}
+
+/// A big, varied set of ready-to-run example queries generated from the
+/// fields and values actually present in `pool` — shown the moment query
+/// mode opens (before anything's typed), and used as a live "did you mean"
+/// list while an in-progress query doesn't parse yet (see the TUI's
+/// `refresh_query`/`refresh_global_search`). Genuinely reads what's in the
+/// notes rather than being a fixed hardcoded example, so it stays useful
+/// for a notebook with a completely different set of custom fields —
+/// deliberately generous rather than a curated top few: `App::
+/// matching_suggestions` already narrows this live as the user types, so a
+/// long list here costs nothing once someone's typing "proj" and only the
+/// project-related ones remain, but *not* generating a value (e.g. every
+/// distinct `project` name, not just the two most common) would make that
+/// filtering come up empty for exactly the thing being typed.
+pub fn suggest_queries(pool: &[(Notebook, Note)]) -> Vec<String> {
+    let mut values: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    for (_, note) in pool {
+        for (k, v) in note.frontmatter.extra.iter() {
+            let Some(key) = k.as_str() else { continue };
+            let val = yaml_value_to_string(v);
+            if val.is_empty() {
+                continue;
+            }
+            let entry = values.entry(key.to_string()).or_default();
+            if !entry.contains(&val) {
+                entry.push(val);
+            }
+        }
+    }
+
+    // Fields with more distinct values sort first — a field with only one
+    // value everywhere still gets its `where`/`sort` examples, just later
+    // in the list, since a single-value field is still meaningful to sort
+    // or combine with `and`/`or`, just not as interesting to filter alone.
+    let mut fields: Vec<(&String, &Vec<String>)> = values.iter().collect();
+    fields.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then(a.0.cmp(b.0)));
+
+    let today = chrono::Local::now().date_naive();
+    let mut examples = Vec::new();
+
+    for (field, vals) in &fields {
+        // Every distinct value gets its own example — "por todos los
+        // projects", not just the top couple — so typing any real value
+        // this notebook actually uses finds a matching suggestion.
+        for val in vals.iter() {
+            examples.push(format!("where {field} = {}", quote_if_needed(val)));
+        }
+        // Sorting is meaningful for any field, not just dates — both
+        // directions, since "asc"/"desc" are themselves things a user
+        // might type looking for a sort example.
+        examples.push(format!("sort {field} asc"));
+        examples.push(format!("sort {field} desc"));
+
+        if vals.iter().any(|v| is_iso_date(v)) {
+            let in_a_week = (today + chrono::Duration::days(7)).format("%Y-%m-%d");
+            let in_a_month = (today + chrono::Duration::days(30)).format("%Y-%m-%d");
+            examples.push(format!("where {field} = today"));
+            examples.push(format!("where {field} < today"));
+            examples.push(format!("where {field} > today"));
+            examples.push(format!("where {field} >= today and {field} <= {in_a_week}"));
+            examples.push(format!(
+                "where {field} >= today and {field} <= {in_a_month}"
+            ));
+        }
+    }
+
+    // Combine the two most-varied fields, and offer an `or` between the
+    // top field's own two most common values.
+    if let [(f1, v1), (f2, v2), ..] = fields.as_slice() {
+        if let (Some(a), Some(b)) = (v1.first(), v2.first()) {
+            examples.push(format!(
+                "where {f1} = {} and {f2} = {}",
+                quote_if_needed(a),
+                quote_if_needed(b)
+            ));
+        }
+    }
+    if let Some((field, vals)) = fields.first() {
+        if let [a, b, ..] = vals.as_slice() {
+            examples.push(format!(
+                "where {field} = {} or {field} = {}",
+                quote_if_needed(a),
+                quote_if_needed(b)
+            ));
+        }
+    }
+
+    for word in pool
+        .iter()
+        .flat_map(|(_, n)| n.frontmatter.title.split_whitespace())
+        .filter(|w| w.len() > 3 && w.chars().all(|c| c.is_alphanumeric()))
+        .take(3)
+    {
+        examples.push(format!("where contains \"{}\"", word.to_lowercase()));
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    examples.retain(|e| seen.insert(e.clone()));
+    examples.truncate(60);
+    examples
+}
+
+fn is_iso_date(s: &str) -> bool {
+    NaiveDate::parse_from_str(s, "%Y-%m-%d").is_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -705,5 +864,136 @@ mod tests {
         let rows = run_query(&pool, &q, Some("nb"), today());
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].notebook, "nb");
+    }
+
+    #[test]
+    fn suggested_queries_use_real_fields_and_values_from_the_pool() {
+        let pool = pool_with(vec![
+            note_with(
+                "Fix login bug",
+                &[
+                    ("status", "pending".into()),
+                    ("priority", "high".into()),
+                    ("due", "2026-08-07".into()),
+                ],
+                &[],
+            ),
+            note_with(
+                "Update dependencies",
+                &[
+                    ("status", "done".into()),
+                    ("priority", "low".into()),
+                    ("due", "2026-07-30".into()),
+                ],
+                &[],
+            ),
+        ]);
+        let suggestions = suggest_queries(&pool);
+        assert!(!suggestions.is_empty());
+        // Every generated example must itself be a valid, parseable query —
+        // a suggestion that doesn't parse would be worse than none at all.
+        for s in &suggestions {
+            assert!(parse(s).is_ok(), "suggestion {s:?} failed to parse");
+        }
+        assert!(suggestions.iter().any(|s| s.contains("status")));
+        assert!(suggestions.iter().any(|s| s.starts_with("sort due")));
+    }
+
+    #[test]
+    fn suggested_queries_cover_every_distinct_value_and_sort_both_directions() {
+        let pool = pool_with(vec![
+            note_with(
+                "A",
+                &[
+                    ("status", "pending".into()),
+                    ("project", "alpha".into()),
+                    ("due", "2026-08-07".into()),
+                ],
+                &[],
+            ),
+            note_with(
+                "B",
+                &[
+                    ("status", "in-progress".into()),
+                    ("project", "beta".into()),
+                    ("due", "2026-07-30".into()),
+                ],
+                &[],
+            ),
+            note_with(
+                "C",
+                &[
+                    ("status", "done".into()),
+                    ("project", "gamma".into()),
+                    ("due", "2026-06-01".into()),
+                ],
+                &[],
+            ),
+        ]);
+        let suggestions = suggest_queries(&pool);
+        for s in &suggestions {
+            assert!(parse(s).is_ok(), "suggestion {s:?} failed to parse");
+        }
+        // Every distinct status/project value gets its own example, not
+        // just the top couple — this is the whole point of the richer
+        // generation ("por todos los projects").
+        for status in ["pending", "in-progress", "done"] {
+            assert!(
+                suggestions.contains(&format!("where status = {status}")),
+                "missing suggestion for status = {status}"
+            );
+        }
+        for project in ["alpha", "beta", "gamma"] {
+            assert!(
+                suggestions.contains(&format!("where project = {project}")),
+                "missing suggestion for project = {project}"
+            );
+        }
+        // Both sort directions, for a plain (non-date) field.
+        assert!(suggestions.contains(&"sort status asc".to_string()));
+        assert!(suggestions.contains(&"sort status desc".to_string()));
+        // Relative-date variety: today, overdue, upcoming, week, month.
+        assert!(suggestions.contains(&"where due = today".to_string()));
+        assert!(suggestions.contains(&"where due < today".to_string()));
+        assert!(suggestions.contains(&"where due > today".to_string()));
+        assert!(suggestions
+            .iter()
+            .any(|s| s.starts_with("where due >= today and due <=")));
+        // No duplicates.
+        let mut sorted = suggestions.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), suggestions.len());
+    }
+
+    #[test]
+    fn suggested_queries_is_empty_for_a_pool_with_no_custom_fields() {
+        let pool = pool_with(vec![note_with("Plain note", &[], &[])]);
+        // No `extra` fields anywhere to build a `where`/`sort` example from
+        // — still shouldn't panic, just yields nothing (or a `contains`
+        // example only, if the title has a word long enough).
+        let suggestions = suggest_queries(&pool);
+        for s in &suggestions {
+            assert!(parse(s).is_ok(), "suggestion {s:?} failed to parse");
+        }
+    }
+
+    #[test]
+    fn field_values_deduped_and_sorted_scoped_to_one_field() {
+        let pool = pool_with(vec![
+            note_with(
+                "A",
+                &[("project", "alpha".into()), ("priority", "high".into())],
+                &[],
+            ),
+            note_with("B", &[("project", "beta".into())], &[]),
+            note_with("C", &[("project", "alpha".into())], &[]),
+        ]);
+        assert_eq!(
+            field_values(&pool, "project"),
+            vec!["alpha".to_string(), "beta".to_string()]
+        );
+        assert_eq!(field_values(&pool, "priority"), vec!["high".to_string()]);
+        assert!(field_values(&pool, "nonexistent").is_empty());
     }
 }

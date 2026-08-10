@@ -131,6 +131,20 @@ pub(crate) enum PendingInput {
     NewFolder,
     RenameNote,
     RenameNotebook,
+    /// Renames (or merges into an existing tag) whichever tag is selected
+    /// in the tags modal's level 1 — the old name lives in
+    /// `App.pending_rename_tag`, same "one variant, the real state lives
+    /// alongside it" shape as `NotebookPassphrase`/`PassphrasePurpose`.
+    /// Operates across every notebook (`shiki_core::tags::rename_tag`),
+    /// not just the current directory the tags modal itself browses —
+    /// see that function's own doc comment for why.
+    RenameTag,
+    /// A name to save the query modal's current (already-valid) DSL text
+    /// under (`Ctrl+S`, `App.pending_save_query_dsl` carries the DSL
+    /// itself). Typing an existing saved query's name overwrites it,
+    /// same "typing an existing tag's name merges" precedent `RenameTag`
+    /// already set for "this name already means something, reuse it."
+    SaveQuery,
     Search,
     SetRemote,
     /// Editing a notebook's remote from inside the Settings modal's
@@ -192,6 +206,67 @@ pub(crate) enum PendingInput {
     /// same "tracked separately, this stays a plain unit variant" reasoning
     /// as `SettingsNotebookRemote`.
     NotebookPassphrase,
+    /// Any step of the metadata modal's prompts (tags, a new field's key,
+    /// a new or existing field's value) — which step is `App.metadata_prompt`,
+    /// same "one variant, the real state lives alongside it" shape as
+    /// `NotebookPassphrase`/`PassphrasePurpose` above, since the metadata
+    /// modal's own multi-step "key, then value" flow for a brand-new field
+    /// needs exactly the same kind of chaining that one already does.
+    Metadata,
+}
+
+/// Which step of the metadata modal's editing flow a `PendingInput::Metadata`
+/// prompt answers — see `App::start_metadata_prompt`/`App::confirm_input`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum MetadataPrompt {
+    /// Comma-separated tags, prefilled with the note's current ones.
+    Tags,
+    /// A brand-new field's key — chains straight into `NewFieldValue` once
+    /// confirmed, the same way `PassphrasePurpose::Enable` chains into
+    /// `EnableConfirm`.
+    NewFieldKey,
+    /// The new field's value, once its key (carried here) is known.
+    NewFieldValue(String),
+    /// An existing field's value, prefilled with its current one — the
+    /// field's key never changes, only editing what it's set to.
+    FieldValue(String),
+}
+
+/// One entry in the query modal's suggestions dropdown — `display` is what
+/// the list shows (a saved query's `★ name`, or, for a generated example,
+/// just the DSL itself, same string as `dsl`), `dsl` is what actually gets
+/// filled into the input box and run. Kept as two separate strings rather
+/// than one, unlike the plain generated examples this replaced, specifically
+/// so a saved query's *name* can be searched/displayed without that name
+/// ever being mistaken for part of the query text that gets executed.
+#[derive(Debug, Clone)]
+pub(crate) struct QuerySuggestion {
+    pub display: String,
+    pub dsl: String,
+    /// `Some(name)` for a saved query (its key in `Config.queries`) —
+    /// `None` for a generated example, which can't be deleted from here
+    /// since there's nothing saved to delete. `App::handle_query_key`'s
+    /// `Ctrl+D` uses this to know whether the highlighted suggestion is
+    /// even a valid delete target.
+    pub saved_name: Option<String>,
+}
+
+impl QuerySuggestion {
+    pub(crate) fn generated(dsl: String) -> Self {
+        Self {
+            display: dsl.clone(),
+            dsl,
+            saved_name: None,
+        }
+    }
+
+    pub(crate) fn saved(name: &str, dsl: String) -> Self {
+        Self {
+            display: format!("{} {name}", crate::icons::STAR),
+            dsl,
+            saved_name: Some(name.to_string()),
+        }
+    }
 }
 
 /// What a `PendingInput::NotebookPassphrase` prompt's answer will be used
@@ -227,6 +302,8 @@ impl PendingInput {
             PendingInput::NewNotebook => " New notebook ",
             PendingInput::NewFolder => " New folder ",
             PendingInput::RenameNote | PendingInput::RenameNotebook => " Rename ",
+            PendingInput::RenameTag => " Rename/merge tag ",
+            PendingInput::SaveQuery => " Save query as ",
             PendingInput::Search => " Jump to note ",
             PendingInput::SetRemote => " Git remote (URL or local path) ",
             PendingInput::SettingsNotebookRemote => " Git remote (URL or local path) ",
@@ -240,6 +317,7 @@ impl PendingInput {
             PendingInput::ExportNotebook => " Export path (.html or .md) ",
             PendingInput::PublishPath => " Save PDF as ",
             PendingInput::NotebookPassphrase => " Passphrase ",
+            PendingInput::Metadata => " Metadata ",
         }
     }
 
@@ -258,6 +336,14 @@ impl PendingInput {
             PendingInput::ExportNotebook => {
                 Some("Format is inferred from the extension — .md/.markdown for Markdown, anything else for HTML.")
             }
+            PendingInput::RenameTag => Some(
+                "Applies to every note in every notebook that has this tag, not just here. \
+                 Typing an existing tag's name merges into it instead of creating a duplicate.",
+            ),
+            PendingInput::SaveQuery => Some(
+                "Saves to config.toml under [queries] — shows up as a ★ suggestion (in either \
+                 query surface) from now on. An existing name overwrites that saved query.",
+            ),
             _ => None,
         }
     }
@@ -371,20 +457,24 @@ pub(crate) enum DeleteTarget {
     Notebook,
 }
 
-/// `(note path, [fg, accent, muted, link, bg], content width, formatted
+/// `(note path, [fg, accent, muted, link, bg, tag], content width, formatted
 /// lines, source-line-per-row)` — see `App::note_preview_cache`'s own doc
-/// comment for what each element means. `bg` rides along in the same array
-/// purely so it participates in the cache-key equality check (it drives
-/// `render::is_dark_color`, which picks the syntect syntax-highlighting
-/// theme for code fences) without a whole extra tuple field. Named only to
-/// keep clippy's `type_complexity` lint quiet; still just a plain tuple
-/// everywhere it's used.
+/// comment for what each element means. `bg`/`tag` ride along in the same
+/// array purely so they participate in the cache-key equality check (`bg`
+/// drives `render::is_dark_color`, which picks the syntect syntax-
+/// highlighting theme for code fences; `tag` colors the metadata header's
+/// `#tag` spans — see `panel_preview::metadata_lines`) without two more
+/// tuple fields. Named only to keep clippy's `type_complexity` lint quiet;
+/// still just a plain tuple everywhere it's used. Source-line-per-row is
+/// `None` for the metadata header's own rows (there's no corresponding
+/// `note.body` line to jump to on click) and `Some(line)` for every real
+/// body row, same as before.
 type NotePreviewCache = (
     std::path::PathBuf,
-    [Color; 5],
+    [Color; 6],
     u16,
     Vec<Line<'static>>,
-    Vec<usize>,
+    Vec<Option<usize>>,
 );
 
 /// Which of the find/replace bar's two fields is currently typed into —
@@ -460,6 +550,11 @@ pub struct App {
     /// Index into the *filtered* notes list, only meaningful while
     /// `tags_viewing.is_some()`.
     pub tags_notes_selected: usize,
+    /// The tag being renamed/merged — captured up front when the
+    /// `PendingInput::RenameTag` prompt opens (`r` on level 1), same
+    /// eager-capture reasoning `pending_batch` uses: by confirm time
+    /// `tags_selected`/the tag list could in principle have changed.
+    pub(crate) pending_rename_tag: Option<String>,
     pub show_outline: bool,
     /// Snapshotted the instant the outline opens (`open_outline`) — from
     /// the selected note's saved body normally, or the live editor buffer
@@ -727,6 +822,51 @@ pub struct App {
     /// place of the results list (which is cleared) rather than a crash;
     /// the user can keep typing until the query becomes valid again.
     pub(crate) query_error: Option<String>,
+    /// Custom frontmatter field names actually seen across whichever pool
+    /// was last loaded (`open_query`/`open_global_search`) — shown next to
+    /// a parse error as "here's what you can actually query on", instead of
+    /// leaving the user to guess field names blind.
+    pub(crate) query_known_fields: Vec<String>,
+    /// Ready-to-run example queries generated from whichever pool was last
+    /// loaded (`shiki_core::query::suggest_queries`), with every saved
+    /// query (`Config.queries`) prepended ahead of them — the full set, not
+    /// filtered by anything typed yet. Recomputed on open, same lifetime as
+    /// `query_pool`/`query_known_fields`.
+    pub(crate) query_suggestions: Vec<QuerySuggestion>,
+    /// The subset of `query_suggestions` actually shown right now — every
+    /// one of them when the box is empty (so opening query mode
+    /// immediately shows "here's what you can ask" instead of a blank
+    /// screen), or whichever still contain the in-progress text once the
+    /// DSL fails to parse (a live "did you mean" list) — empty once the
+    /// text parses into a real query, at which point the results table
+    /// takes over instead. Shared by both query surfaces (the dedicated
+    /// leader+`q` modal and global search's `!`-prefixed mode) exactly like
+    /// `query_known_fields`, since only one is ever open at a time.
+    pub(crate) query_suggestions_visible: Vec<QuerySuggestion>,
+    /// The DSL text being saved, captured up front the instant `Ctrl+S` is
+    /// pressed in the query modal (before `PendingInput::SaveQuery` even
+    /// opens) — same eager-capture reasoning `pending_batch`/
+    /// `pending_rename_tag` use, since the query modal is hidden (and its
+    /// own input box repurposed) while the name prompt is up.
+    pub(crate) pending_save_query_dsl: Option<String>,
+    /// The metadata modal (notes-scope/preview-scope `M`) — the selected
+    /// note's tags plus every custom frontmatter field, add/edit/delete in
+    /// place. See `App::metadata_rows`/`handle_metadata_key`.
+    pub show_metadata: bool,
+    pub(crate) metadata_selected: usize,
+    /// Which step of the modal's prompt flow a `PendingInput::Metadata`
+    /// answer belongs to — `None` while the modal itself is just being
+    /// browsed, not prompting for anything.
+    pub(crate) metadata_prompt: Option<MetadataPrompt>,
+    /// Suggestions for whichever field a `MetadataPrompt::FieldValue`/
+    /// `NewFieldValue` prompt is currently editing — built-in defaults
+    /// (`status`/`priority`/`due` each have their own, see
+    /// `App::default_metadata_value_suggestions`) plus every value already
+    /// used for that exact field anywhere (`shiki_core::query::field_values`).
+    /// Empty for `Tags`/`NewFieldKey`, which don't get a suggestions
+    /// dropdown — see `App::metadata_value_query`.
+    pub(crate) metadata_value_options: Vec<String>,
+    pub(crate) metadata_value_selected: usize,
     /// True right after the leader key is pressed, waiting for the next key
     /// to resolve against the `global` scope.
     pub leader_pending: bool,
@@ -761,6 +901,15 @@ pub struct App {
     pub(crate) global_search_input: InputBox,
     pub(crate) global_search_results: Vec<SearchHit>,
     pub(crate) global_search_selected: usize,
+    /// Populated instead of `global_search_results` whenever
+    /// `global_search_input` starts with `!` — the global search modal
+    /// doubling as the query DSL's entry point (`shiki_core::query`),
+    /// same pool, same box, just a different mode signaled by the leading
+    /// `!` and rendered in the theme's warning color instead of accent.
+    pub(crate) global_search_query_rows: Vec<shiki_core::query::QueryRow>,
+    /// Set when the `!`-prefixed text fails to parse as a query — mirrors
+    /// `query_error` from the dedicated leader+`q` modal.
+    pub(crate) global_search_query_error: Option<String>,
     pub(crate) search_engine: SearchEngine,
     pub(crate) keymaps: KeyMaps,
     pub(crate) logs_selected: usize,
@@ -1079,6 +1228,7 @@ impl App {
             tags_selected: 0,
             tags_viewing: None,
             tags_notes_selected: 0,
+            pending_rename_tag: None,
             show_outline: false,
             outline_headings: Vec::new(),
             outline_selected: 0,
@@ -1150,6 +1300,15 @@ impl App {
             query_rows: Vec::new(),
             query_selected: 0,
             query_error: None,
+            query_known_fields: Vec::new(),
+            query_suggestions: Vec::new(),
+            query_suggestions_visible: Vec::new(),
+            pending_save_query_dsl: None,
+            show_metadata: false,
+            metadata_selected: 0,
+            metadata_prompt: None,
+            metadata_value_options: Vec::new(),
+            metadata_value_selected: 0,
             leader_pending: false,
             preview_scroll: 0,
             preview_selection: None,
@@ -1167,6 +1326,8 @@ impl App {
             global_search_input: InputBox::default(),
             global_search_results: Vec::new(),
             global_search_selected: 0,
+            global_search_query_rows: Vec::new(),
+            global_search_query_error: None,
             search_engine: SearchEngine::new(),
             keymaps,
             logs_selected: 0,
@@ -1942,6 +2103,7 @@ impl App {
             hex_to_color(&self.theme.muted),
             hex_to_color(&self.theme.link),
             hex_to_color(&self.theme.bg),
+            hex_to_color(&self.theme.tag),
         ];
         let width = layout::split(self.last_frame_area, self.focus, self.zen_mode)
             .preview
@@ -1962,10 +2124,14 @@ impl App {
         let (source_indices, plain_lines): (Vec<usize>, Vec<Line<'static>>) =
             indexed.into_iter().unzip();
         let grouped = crate::wrap::wrap_lines_grouped(&plain_lines, width);
-        let mut lines = Vec::with_capacity(plain_lines.len());
-        let mut sources = Vec::with_capacity(plain_lines.len());
+        let meta_lines = panel_preview::metadata_lines(note, colors[2], colors[5]);
+        let mut lines = Vec::with_capacity(meta_lines.len() + plain_lines.len());
+        let mut sources = Vec::with_capacity(meta_lines.len() + plain_lines.len());
+        let meta_len = meta_lines.len();
+        lines.extend(meta_lines);
+        sources.extend(std::iter::repeat_n(None, meta_len));
         for (src, rows) in source_indices.into_iter().zip(grouped) {
-            sources.extend(std::iter::repeat_n(src, rows.len()));
+            sources.extend(std::iter::repeat_n(Some(src), rows.len()));
             lines.extend(rows);
         }
         self.note_preview_cache = Some((path, colors, width, lines, sources));
@@ -2028,7 +2194,7 @@ impl App {
     pub(crate) fn note_preview_source_line(&self, row: usize) -> Option<usize> {
         self.note_preview_cache
             .as_ref()
-            .and_then(|(_, _, _, _, sources)| sources.get(row).copied())
+            .and_then(|(_, _, _, _, sources)| sources.get(row).copied().flatten())
     }
 
     /// The cached revision count for whichever note is currently selected,

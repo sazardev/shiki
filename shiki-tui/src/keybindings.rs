@@ -79,6 +79,13 @@ pub enum Action {
     /// inside `Mode::Edit` itself (bound directly in `handle_edit_key`,
     /// not through this scoped map).
     ShowOutline,
+    /// Opens the metadata modal — the selected note's tags plus every
+    /// custom frontmatter field (`status`, `priority`, ...), add/edit/
+    /// delete in place. Bound in both `notes` and `preview` scope, same as
+    /// `ShowLinks`'s global+preview double-binding, since "the selected
+    /// note's metadata" is a concept independent of which panel happens to
+    /// have focus.
+    EditMetadata,
 }
 
 /// Translates a config string (e.g. `"enter"`, `"tab"`, `"a"`, `"space"`) into a `KeyCode`.
@@ -196,6 +203,7 @@ impl KeyMaps {
         bind(&mut notes, &cfg.notes.toggle_dates, Action::ToggleDates);
         bind(&mut notes, &cfg.notes.visual, Action::ToggleVisual);
         bind(&mut notes, &cfg.notes.copy_entries, Action::CopyEntries);
+        bind(&mut notes, &cfg.notes.metadata, Action::EditMetadata);
 
         let mut preview = HashMap::new();
         bind(&mut preview, &cfg.preview.edit_inline, Action::EditInline);
@@ -207,6 +215,7 @@ impl KeyMaps {
         bind(&mut preview, &cfg.preview.history, Action::ShowHistory);
         bind(&mut preview, &cfg.preview.links, Action::ShowLinks);
         bind(&mut preview, &cfg.preview.outline, Action::ShowOutline);
+        bind(&mut preview, &cfg.preview.metadata, Action::EditMetadata);
 
         Self {
             leader,
@@ -409,6 +418,7 @@ pub fn action_label(action: Action) -> &'static str {
         Action::ExportNotebook => "export notebook to HTML/Markdown",
         Action::ToggleZenMode => "zen mode (full-screen, hide side panels)",
         Action::ShowOutline => "outline (jump to a heading)",
+        Action::EditMetadata => "metadata (tags / frontmatter fields)",
     }
 }
 
@@ -447,5 +457,6 @@ pub fn action_icon(action: Action) -> crate::icons::Icon {
         Action::ExportNotebook => crate::icons::NOTE,
         Action::ToggleZenMode => crate::icons::EXPAND,
         Action::ShowOutline => crate::icons::TREE,
+        Action::EditMetadata => crate::icons::TAG,
     }
 }

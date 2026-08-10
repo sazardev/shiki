@@ -18,8 +18,20 @@ pub fn run(
     count: bool,
 ) -> Result<()> {
     let today = chrono::Local::now().date_naive();
-    let query = shiki_core::query::parse(dsl).map_err(|e| anyhow::anyhow!("query error: {e}"))?;
     let pool = store.all_notes()?;
+    let query = shiki_core::query::parse(dsl).map_err(|e| {
+        let known = shiki_core::query::known_fields(&pool);
+        let seen = if known.is_empty() {
+            String::new()
+        } else {
+            format!("\n  seen in your notes: {}", known.join(", "))
+        };
+        anyhow::anyhow!(
+            "query error: {e}\n  built-in fields: {}{seen}\n  example: {}",
+            shiki_core::query::BUILTIN_FIELDS,
+            shiki_core::query::EXAMPLE_QUERY,
+        )
+    })?;
     let rows = shiki_core::query::run_query(&pool, &query, notebook, today);
 
     if count {
