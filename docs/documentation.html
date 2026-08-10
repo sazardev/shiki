@@ -576,45 +576,55 @@ shiki doctor              # environment check: config, data dir, git, editor, te
   <section id="capture">
     <div class="container">
       <h2>Quick capture (<code>shiki capture</code> + optional daemon)</h2>
+
+      <h3>The idea</h3>
       <p style="max-width:70ch;">
-        <code>shiki capture "some text"</code> creates a note with no ceremony — no
-        <code>$EDITOR</code> spawned, no TUI drawn, just a single line of output. It's meant to be
-        wired into things <em>outside</em> shiki entirely: a rofi/wofi prompt bound to an OS
-        hotkey, a waybar/polybar click action, a Raycast/Alfred script command, an AutoHotkey
-        shortcut on Windows — anything that can shell out. Shiki can't register a global OS hotkey
-        itself from a terminal app; <code>shiki capture</code> is the one command every one of
-        those launchers just needs to call.
+        Opening the full TUI just to jot down one line is friction — navigate to a notebook, press
+        <code>a</code>, type a title, type the body, save. <code>shiki capture "some text"</code>
+        skips all of it: no <code>$EDITOR</code> spawned, no TUI drawn, just a single line of
+        output. It's designed to be wired into things <em>outside</em> shiki entirely — a rofi/wofi
+        prompt bound to an OS hotkey, a waybar/polybar click action, a Raycast/Alfred script
+        command, an AutoHotkey shortcut on Windows, a browser extension, a cron job, another
+        program's own generated output piped in. Shiki can't register a global OS hotkey itself
+        from a terminal app, and deliberately doesn't try to — <code>shiki capture</code> is the
+        one command every one of those launchers just needs to call; see
+        <a href="#capture-recipes">Wiring it into external launchers</a> below for copy-pasteable
+        examples of exactly that.
       </p>
       <p style="max-width:70ch;">
-        By default it targets <code>general.default_notebook</code> (auto-created if it doesn't
-        exist yet, same as <code>shiki new</code>), with an auto-generated title
-        (<code>Capture 2026-08-10 15:35</code>, no title prompt) so there's nothing to type but the
-        note's actual content. <code>-n &lt;notebook&gt;</code> overrides the target, same flag as
-        <code>shiki new</code>/<code>shiki daily</code>. The text itself is a plain positional
-        argument; omit it entirely and shiki reads it from stdin instead
-        (<code>echo "idea" | shiki capture</code>), for wiring into another program's own output
-        rather than typing a literal string.
+        The design is layered on purpose: the plain command always works standalone (writes
+        straight to disk, works from a cold shell with no shiki process anywhere), and an
+        <em>entirely optional</em> daemon on top makes an already-running TUI aware of a capture
+        the instant it happens instead of finding out on the next manual reload. Nothing about
+        capture requires the daemon — it's an enhancement, never a dependency.
+      </p>
+
+      <h3>What it does by default</h3>
+      <p style="max-width:70ch;">
+        With no flags, it targets <code>general.default_notebook</code> (auto-created if it
+        doesn't exist yet, same as <code>shiki new</code>), with an auto-generated title
+        (<code>Capture 2026-08-10 15:35</code> — a timestamp, never a prompt) so there's nothing to
+        type but the note's actual content.
       </p>
       <pre class="code">shiki capture "buy milk"          # -> personal/capture-2026-08-10-15-35.md
-shiki capture "call Ana" -n work  # -> work/capture-....md instead</pre>
-      <p style="max-width:70ch;">
-        <code>--tags work,idea</code> sets tags on the created note, same flag/format as
-        <code>shiki new --tags</code>. <code>--daily</code> changes the target entirely: instead of
-        a new note, the text is appended as a <code>- </code> bullet under today's daily note
-        (created via the same machinery the <code>t</code> keybinding/<code>shiki daily</code>
-        already use — template + agenda section included on first creation, an already-existing
-        daily is just opened and appended to) — for treating the daily note as a running inbox for
-        the whole day rather than one note per capture. <code>--tags</code> is ignored when
-        <code>--daily</code> is also given, since an appended bullet has no frontmatter of its own
-        to carry tags on. <code>--json</code> emits
-        <code>{"path": "...", "daemon": true|false, "daily": true|false}</code> instead of the
-        plain sentence, for a script or browser extension that wants to act on the result without
-        string-matching <code>"captured (daemon): "</code>. <code>--folder work/meetings</code>
-        creates the note inside that subfolder of the notebook instead of its root (each path
-        segment validated the same way a notebook/folder name is — no <code>..</code>/empty
-        segments); ignored when <code>--daily</code> is given, since a daily note's path is
-        always fixed.
-      </p>
+shiki capture "call Ana" -n work  # -> work/capture-....md instead
+echo "piped idea" | shiki capture # no argument at all -> reads the text from stdin</pre>
+
+      <h3>Every parameter, in detail</h3>
+      <table class="ref-table">
+        <thead><tr><th>Flag</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>&lt;text&gt;</code> <span class="muted">(positional)</span></td><td>The text to capture. Omit it entirely to read from stdin instead (<code>echo "idea" | shiki capture</code>) — useful for piping another program's own output straight in rather than typing a literal string. Not read at all when <code>--check</code> or <code>--undo</code> is given.</td></tr>
+          <tr><td><code>-n, --notebook &lt;name&gt;</code></td><td>Overrides both <code>general.default_notebook</code> <em>and</em> content-prefix routing (below) — an explicit target always wins outright, no exceptions. Auto-creates the notebook if it doesn't exist yet, same as <code>shiki new</code>.</td></tr>
+          <tr><td><code>--tags a,b,c</code></td><td>Comma-separated tags set on the created note's frontmatter — identical format to <code>shiki new --tags</code>. Ignored when <code>--daily</code> is also given: an appended bullet has no frontmatter of its own to carry tags on.</td></tr>
+          <tr><td><code>--daily</code></td><td>Changes the target entirely — instead of a new note, the text is appended as a <code>- </code> bullet under <em>today's</em> daily note, via the same machinery the <code>t</code> keybinding/<code>shiki daily</code> already use (template + agenda section included only on first creation; an already-existing daily is just opened and appended to). For treating the daily note as a running inbox for the whole day instead of one note per capture.</td></tr>
+          <tr><td><code>--folder work/meetings</code></td><td>Creates the note inside that subfolder of the notebook instead of its root — any depth (<code>work/meetings/q3</code> works too). Each path segment is validated the same way a single notebook/folder name is (no <code>..</code>, no empty segments, no embedded separators) — a typo'd <code>--folder ../../etc</code> fails loudly rather than writing somewhere unintended. Ignored when <code>--daily</code> is given, since a daily note's filesystem path is always fixed.</td></tr>
+          <tr><td><code>--json</code></td><td>Emits a single machine-readable line instead of a sentence — <code>{"path": "...", "daemon": true|false, "daily": true|false}</code> on success. For a script or browser extension that wants to act on the exact result without string-matching <code>"captured (daemon): "</code>.</td></tr>
+          <tr><td><code>--check</code></td><td>Reports whether a capture daemon is reachable right now and exits immediately — doesn't capture anything, doesn't touch stdin at all. Exits <code>0</code> if <em>any</em> daemon answered (reachable at all means a TUI process exists, regardless of whether it said enabled or disabled) and non-zero otherwise, so <code>shiki capture --check &amp;&amp; ...</code> composes naturally in a script. <code>--json</code> emits <code>{"reachable": true|false, "enabled": true|false}</code>. Conflicts with <code>--undo</code>.</td></tr>
+          <tr><td><code>--undo</code></td><td>Reverses the single most recent capture, whichever kind it was — see <a href="#capture-undo">Undo</a> below for the full behavior. Doesn't touch <code>&lt;text&gt;</code>/stdin/<code>--tags</code>/<code>--daily</code>/<code>--folder</code> at all.</td></tr>
+        </tbody>
+      </table>
+
       <div class="doc-callout">
         <strong>Content-prefix routing</strong>
         <p>
@@ -625,20 +635,37 @@ shiki capture "call Ana" -n work  # -> work/capture-....md instead</pre>
           <code>shiki capture "work: call Ana"</code> needs no <code>-n work</code> at all. An
           explicit <code>-n</code> always wins outright and skips this check entirely, so a
           genuine note that happens to start with <code>"word: "</code> is never mis-routed as
-          long as a target was actually given.
+          long as a target was actually given. The exact same check runs whether the capture ends
+          up going through the daemon or the standalone fallback, so routing behaves identically
+          either way.
         </p>
       </div>
+
+      <h3>How the optional daemon works</h3>
       <p style="max-width:70ch;">
-        <strong>The optional daemon</strong> (<code>general.enable_capture_daemon</code>, off by
-        default — toggle it from <code>leader+s</code> → GENERAL →
-        <code>enable_capture_daemon</code>) makes a <em>running</em> TUI aware of captures the
-        instant they happen, instead of only writing to disk unnoticed until the next manual
-        reload. With it on, the TUI listens on a local TCP loopback port
-        (<code>127.0.0.1</code>, OS-assigned, recorded in
-        <code>~/.config/shiki/capture.port</code>); <code>shiki capture</code> tries that socket
-        first, and if a TUI answers, the new note appears live in NOTES (when you're already
-        looking at that notebook's root) with no keypress needed. The command's own output tells
-        you which path it took:
+        <code>general.enable_capture_daemon</code> (off by default — toggle it from
+        <code>leader+s</code> → GENERAL → <code>enable_capture_daemon</code>) makes a
+        <em>running</em> TUI listen for captures instead of only finding out about them on its next
+        manual reload. When it's on, the TUI binds a local TCP socket on <code>127.0.0.1</code>
+        with an OS-assigned ephemeral port (not a fixed one, and not a Unix domain socket — a plain
+        TCP loopback socket is the one transport that works identically on Linux, macOS, <em>and</em>
+        Windows with zero extra dependencies, and shiki genuinely ships Windows binaries, so this
+        wasn't a hypothetical concern). Whichever port it bound is written to
+        <code>~/.config/shiki/capture.port</code>, rewritten every time the daemon starts — so a
+        crashed shiki process never leaves a stale port number behind for the next
+        <code>shiki capture</code> to hang against; connecting to a genuinely dead port fails
+        instantly instead of timing out.
+      </p>
+      <p style="max-width:70ch;">
+        Every <code>shiki capture</code> invocation tries that socket first. If a TUI answers, the
+        new note appears live in NOTES (when you're already looking at that notebook's root) with
+        no keypress needed, and the capture is recorded in the TUI's own log history
+        (<code>leader</code> then <code>l</code>) — so a capture that happened while nobody was
+        watching the screen still leaves a trace, the same way a background git sync result does.
+        If nothing answers (no daemon running, or it answered "disabled"), the command falls
+        straight through to writing the file directly to disk — the exact same underlying
+        note-creation code path <code>shiki new</code> uses, so the two are never out of sync with
+        each other. The command's own output always tells you which path it actually took:
       </p>
       <pre class="code">$ shiki capture "buy milk"
 captured (daemon): /home/you/notes/personal/capture-2026-08-10-15-35.md   # a running TUI picked it up live
@@ -650,46 +677,105 @@ captured: /home/you/notes/personal/capture-2026-08-10-15-35.md            # writ
         already-open TUI finds out immediately. Toggling it back on later reuses the same listener
         thread rather than restarting anything — the daemon, once started this session, never
         actually shuts down; off just means it answers "disabled" to new connections instead of
-        processing them.
+        processing them, with no rebind/reconnect step needed to turn it back on.
       </p>
       <p style="max-width:70ch;">
-        <code>shiki capture --check</code> reports whether a daemon is reachable right now without
-        capturing anything (and without touching stdin) — meant for a status-bar module or launcher
-        script that wants to show "capture: on"/"capture: off" before committing to a real capture.
-        It exits <code>0</code> when a daemon answered (reachable at all means a TUI process
-        exists, regardless of whether it said enabled or disabled) and non-zero otherwise, so
-        <code>shiki capture --check &amp;&amp; ...</code> composes naturally in a script;
-        <code>--json</code> emits <code>{"reachable": true|false, "enabled": true|false}</code>.
-        Every capture handled by the daemon is also recorded in the TUI's own log history
-        (<code>leader</code> then <code>l</code>), so a capture that happened while nobody was
-        watching the screen still leaves a trace, the same way a background git sync result does.
+        <code>shiki capture --check</code> exists specifically for the "is anything even listening"
+        question — a status-bar module can poll it every so often and show a different icon for
+        "no TUI running" vs. "TUI running, daemon toggled off" vs. "live," without ever performing
+        an actual capture just to find that out.
       </p>
+
+      <h3 id="capture-undo">Undo</h3>
       <p style="max-width:70ch;">
         <code>shiki capture --undo</code> reverses the single most recent capture — a plain note is
-        moved to trash (restorable exactly like any other deleted note); a <code>--daily</code>
-        append instead strips exactly the bullet that was added off the end of the daily note's
-        body, and only if the body still ends with it verbatim — if the daily note was edited in
-        between, undo refuses rather than risk removing content you actually meant to keep. This is
-        a <em>one-slot</em> undo, not a stack, same simplicity level as <code>leader+u</code> (undo
-        delete): a second <code>--undo</code> in a row reports "nothing to undo" rather than
-        reaching further back. The record backing it
-        (<code>~/.config/shiki/last-capture.toml</code>) is shared between the daemon and the
-        standalone fallback, so undo works the same regardless of which one made the original
-        capture — it tries the daemon first (for a live TUI refresh if the reverted item was on
-        screen), then falls back to reversing it directly.
+        moved to trash (restorable exactly like any other deleted note, via the same trash
+        mechanism <code>d</code> in NOTES already uses); a <code>--daily</code> append instead
+        strips exactly the bullet that was added off the end of the daily note's body, and only if
+        the body still ends with it verbatim — if the daily note was edited in between, undo
+        refuses with a clear error rather than risk removing content you actually meant to keep.
+        This is a <em>one-slot</em> undo, not a stack, same simplicity level as
+        <code>leader+u</code> (undo delete) in the TUI itself: a second <code>--undo</code> in a
+        row reports "nothing to undo" rather than reaching further back into history.
       </p>
+      <p style="max-width:70ch;">
+        The record backing it (<code>~/.config/shiki/last-capture.toml</code>) is shared between
+        the daemon and the standalone fallback — whichever one performed the original capture
+        writes to the exact same file, so <code>--undo</code> works identically no matter which
+        path made it. It tries the daemon first, the same way a capture itself does (so a live TUI
+        refreshes immediately if the reverted item was on screen), then falls back to reversing it
+        directly through that shared file if nothing answers.
+      </p>
+
       <div class="doc-callout">
         <strong>Encrypted notebooks need to already be unlocked in the TUI.</strong>
         <p>
-          Capturing into an encrypted notebook only works through the daemon if that notebook is
-          already unlocked in the running TUI this session — the background listener thread can't
-          itself pop up a passphrase prompt, so it replies with a clear "locked" error instead of
-          hanging or writing plaintext, and <code>shiki capture</code> reports that error rather
-          than silently falling back. Run <code>shiki capture</code> from a plain terminal (no
-          daemon involved) against an encrypted, locked notebook and it prompts for the passphrase
-          interactively instead, same as <code>shiki new</code>.
+          Capturing into (or undoing a capture in) an encrypted notebook only works through the
+          daemon if that notebook is already unlocked in the running TUI this session — the
+          background listener thread can't itself pop up a passphrase prompt, so it replies with a
+          clear "locked" error instead of hanging or writing plaintext, and <code>shiki capture</code>
+          reports that error rather than silently falling back to a plaintext write. Run
+          <code>shiki capture</code> from a plain terminal (no daemon involved) against an
+          encrypted, locked notebook and it prompts for the passphrase interactively instead, same
+          as <code>shiki new</code>.
         </p>
       </div>
+
+      <h3 id="capture-recipes">Wiring it into external launchers</h3>
+      <p style="max-width:70ch;">
+        These are starting points, not the only way to do it — anything that can run a shell
+        command can drive <code>shiki capture</code>.
+      </p>
+      <p class="muted" style="font-size:0.9rem;"><strong>Linux — rofi/wofi bound to a window-manager hotkey</strong></p>
+      <pre class="code">#!/usr/bin/env bash
+# ~/.local/bin/shiki-capture-rofi.sh — bind this to a hotkey in your WM config
+text=$(rofi -dmenu -p "capture")   # swap for `wofi --dmenu` on Wayland
+[ -n "$text" ] && shiki capture "$text"</pre>
+      <pre class="code"># i3/sway config
+bindsym $mod+c exec ~/.local/bin/shiki-capture-rofi.sh</pre>
+      <p class="muted" style="font-size:0.9rem;"><strong>Linux — a waybar module with a live status indicator</strong></p>
+      <pre class="code">// ~/.config/waybar/config
+"custom/capture": {
+  "exec": "shiki capture --check --json | jq -r 'if .reachable then (if .enabled then \"captured\" else \"idle\" end) else \"off\" end'",
+  "interval": 30,
+  "on-click": "rofi -dmenu -p capture | xargs -r shiki capture"
+}</pre>
+      <p class="muted" style="font-size:0.9rem;"><strong>macOS — a Raycast script command</strong></p>
+      <pre class="code">#!/bin/bash
+# @raycast.title Quick Capture
+# @raycast.mode fullOutput
+# @raycast.icon 📝
+# @raycast.argument1 { "type": "text", "placeholder": "capture text" }
+shiki capture "$1"</pre>
+      <p class="muted" style="font-size:0.9rem;"><strong>Windows — an AutoHotkey global hotkey</strong></p>
+      <pre class="code">; Ctrl+Shift+C anywhere in Windows
+^+c::
+InputBox, text, shiki capture, Quick note:
+if (text != "")
+    RunWait, shiki.exe capture "%text%",, Hide
+return</pre>
+      <p style="max-width:70ch;">
+        Alfred (macOS) and PowerToys Run (Windows) both support the same idea via their own
+        "script filter"/"custom action" mechanisms — point either one at the same one-line
+        <code>shiki capture "{query}"</code> command. A browser extension is the one integration
+        that needs more than a shell one-liner (extensions can't spawn arbitrary processes
+        directly); it would use
+        <a href="https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging" target="_blank" rel="noopener">Native Messaging</a>
+        to launch a small native host process that in turn runs <code>shiki capture</code> — not
+        something shiki ships today, but the exact same command underneath either way.
+      </p>
+
+      <h3>Troubleshooting</h3>
+      <table class="ref-table">
+        <thead><tr><th>Symptom</th><th>What's going on / what to do</th></tr></thead>
+        <tbody>
+          <tr><td>Always prints <code>captured:</code>, never <code>captured (daemon):</code></td><td>No TUI has the daemon enabled right now. Run <code>shiki capture --check</code> to confirm — if it says "not reachable," open the TUI and toggle <code>enable_capture_daemon</code> on in Settings (GENERAL tab).</td></tr>
+          <tr><td><code>shiki capture --undo</code> says "nothing to undo"</td><td>Either nothing has been captured yet this "session" (the record is a single slot, not a history — see <a href="#capture-undo">Undo</a>), or a previous <code>--undo</code> already consumed it.</td></tr>
+          <tr><td><code>shiki capture --undo</code> says the daily note "has changed since that capture"</td><td>The daily note was edited (by hand, or by another capture) after the one you're trying to undo — undo refuses on purpose rather than risk stripping content you meant to keep. Edit the file directly if you need to remove that specific line.</td></tr>
+          <tr><td>Capture landed in the wrong notebook</td><td>Check for accidental content-prefix routing — if your text happens to start with <code>"something: "</code> and a notebook named <code>something</code> exists, it routes there automatically. Pass <code>-n &lt;notebook&gt;</code> explicitly to override it.</td></tr>
+          <tr><td>Encrypted notebook: "locked" error via the daemon</td><td>Expected — a background thread can't prompt for a passphrase. Unlock that notebook in the TUI first, or run <code>shiki capture</code> from a plain terminal instead (it prompts interactively there).</td></tr>
+        </tbody>
+      </table>
     </div>
   </section>
 
