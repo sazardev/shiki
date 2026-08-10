@@ -94,6 +94,7 @@
       <a href="#modes">Modes</a>
       <a href="#keybindings">Keybindings</a>
       <a href="#cli">CLI</a>
+      <a href="#capture">Quick capture</a>
       <a href="#encryption">Encryption</a>
       <a href="#filesystem">Filesystem</a>
       <a href="#note-format">Note format</a>
@@ -497,6 +498,8 @@ shiki list --json         # list/search/show all take --json for scripting (list
 shiki show &lt;note&gt;         # show rendered content (ANSI)
 shiki edit &lt;note&gt;         # edit with $EDITOR
 shiki search &lt;query&gt;      # search and show results
+shiki capture "quick idea"       # near-instant note capture, no $EDITOR, no TUI drawn
+shiki capture "text" -n work     # capture into a specific notebook instead of default_notebook
 shiki tasks               # every pending checkbox task across notebooks, urgency-sorted
 shiki tasks --overdue --count  # just the number — made for waybar/polybar/tmux status modules
 shiki tasks --today --json     # machine-readable, with due/overdue/location per task
@@ -557,6 +560,66 @@ shiki doctor              # environment check: config, data dir, git, editor, te
           resolving to the same path on disk; <code>git.remote_template</code> containing its
           <code>{notebook}</code> placeholder; and <code>git.sign_commits</code> having an actual
           signing key configured.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="capture">
+    <div class="container">
+      <h2>Quick capture (<code>shiki capture</code> + optional daemon)</h2>
+      <p style="max-width:70ch;">
+        <code>shiki capture "some text"</code> creates a note with no ceremony — no
+        <code>$EDITOR</code> spawned, no TUI drawn, just a single line of output. It's meant to be
+        wired into things <em>outside</em> shiki entirely: a rofi/wofi prompt bound to an OS
+        hotkey, a waybar/polybar click action, a Raycast/Alfred script command, an AutoHotkey
+        shortcut on Windows — anything that can shell out. Shiki can't register a global OS hotkey
+        itself from a terminal app; <code>shiki capture</code> is the one command every one of
+        those launchers just needs to call.
+      </p>
+      <p style="max-width:70ch;">
+        By default it targets <code>general.default_notebook</code> (auto-created if it doesn't
+        exist yet, same as <code>shiki new</code>), with an auto-generated title
+        (<code>Capture 2026-08-10 15:35</code>, no title prompt) so there's nothing to type but the
+        note's actual content. <code>-n &lt;notebook&gt;</code> overrides the target, same flag as
+        <code>shiki new</code>/<code>shiki daily</code>.
+      </p>
+      <pre class="code">shiki capture "buy milk"          # -> personal/capture-2026-08-10-15-35.md
+shiki capture "call Ana" -n work  # -> work/capture-....md instead</pre>
+      <p style="max-width:70ch;">
+        <strong>The optional daemon</strong> (<code>general.enable_capture_daemon</code>, off by
+        default — toggle it from <code>leader+s</code> → GENERAL →
+        <code>enable_capture_daemon</code>) makes a <em>running</em> TUI aware of captures the
+        instant they happen, instead of only writing to disk unnoticed until the next manual
+        reload. With it on, the TUI listens on a local TCP loopback port
+        (<code>127.0.0.1</code>, OS-assigned, recorded in
+        <code>~/.config/shiki/capture.port</code>); <code>shiki capture</code> tries that socket
+        first, and if a TUI answers, the new note appears live in NOTES (when you're already
+        looking at that notebook's root) with no keypress needed. The command's own output tells
+        you which path it took:
+      </p>
+      <pre class="code">$ shiki capture "buy milk"
+captured (daemon): /home/you/notes/personal/capture-2026-08-10-15-35.md   # a running TUI picked it up live
+$ shiki capture "buy milk"
+captured: /home/you/notes/personal/capture-2026-08-10-15-35.md            # written straight to disk, no TUI (or daemon off) noticed</pre>
+      <p style="max-width:70ch;">
+        Turning the daemon off doesn't turn <em>capture</em> off — <code>shiki capture</code>
+        always works, with or without a TUI running; the toggle only controls whether an
+        already-open TUI finds out immediately. Toggling it back on later reuses the same listener
+        thread rather than restarting anything — the daemon, once started this session, never
+        actually shuts down; off just means it answers "disabled" to new connections instead of
+        processing them.
+      </p>
+      <div class="doc-callout">
+        <strong>Encrypted notebooks need to already be unlocked in the TUI.</strong>
+        <p>
+          Capturing into an encrypted notebook only works through the daemon if that notebook is
+          already unlocked in the running TUI this session — the background listener thread can't
+          itself pop up a passphrase prompt, so it replies with a clear "locked" error instead of
+          hanging or writing plaintext, and <code>shiki capture</code> reports that error rather
+          than silently falling back. Run <code>shiki capture</code> from a plain terminal (no
+          daemon involved) against an encrypted, locked notebook and it prompts for the passphrase
+          interactively instead, same as <code>shiki new</code>.
         </p>
       </div>
     </div>
@@ -681,6 +744,7 @@ shiki doctor              # environment check: config, data dir, git, editor, te
 ├── keybindings.toml       # custom shortcuts (optional)
 ├── theme.toml             # custom theme (optional)
 ├── shiki.log              # persistent status/log history (leader+l to view, x to clear)
+├── capture.port           # port the capture daemon is listening on (only while a TUI has it enabled)
 ├── trash/                 # deleted notes/folders, restorable with leader+u (see below)
 │   └── &lt;notebook&gt;/
 └── templates/             # templates
@@ -805,6 +869,7 @@ Content in **markdown**.
           <tr><td><code>editor</code></td><td><code>$EDITOR</code>, then <code>"nvim"</code></td><td>The external editor <code>E</code> opens. Any shell command works, including one with flags, e.g. <code>"code --wait"</code></td></tr>
           <tr><td><code>daily_template</code></td><td><code>"daily"</code></td><td>Which template (by filename, without <code>.md</code>) <code>t</code>/<code>shiki daily</code> uses for a new daily note</td></tr>
           <tr><td><code>use_favorite_editor</code></td><td><code>false</code></td><td>When true, <code>i</code> opens your OS's detected default text editor (from <code>$VISUAL</code>/<code>$EDITOR</code>, or the desktop's own file-type default) instead of the built-in inline editor — same effect as pressing <code>E</code>, just on the more convenient key. Toggle on the fly with <code>leader</code> then <code>e</code>, no editing required</td></tr>
+          <tr><td><code>enable_capture_daemon</code></td><td><code>false</code></td><td>When true, the TUI listens on a local loopback port so external <code>shiki capture "text"</code> invocations land here live instead of only writing to disk unnoticed — <code>shiki capture</code> itself always works either way, this only controls whether an already-open TUI finds out immediately. Toggle from Settings → GENERAL, see <a href="#capture">Quick capture</a> above</td></tr>
           <tr><td><code>mouse_drag_selection</code></td><td><code>true</code></td><td>A plain click on a note's body in PREVIEW jumps into edit mode with the cursor on that line; click-and-drag instead selects text and copies it to the clipboard as soon as you release the mouse button — the same clipboard mechanism the logs modal's <code>y</code>/<code>c</code> uses</td></tr>
           <tr><td><code>data_dir</code></td><td>unset (platform default)</td><td>Point the <em>entire</em> notebooks root somewhere else — an absolute path to an existing folder of markdown notes (an Obsidian vault, for instance) instead of <code>~/.local/share/shiki/</code>. Every notebook without its own <code>path</code> (below) lives as a subdirectory of this</td></tr>
           <tr><td><code>show_hints</code></td><td><code>true</code></td><td>Shows a small muted hint line under the input box for text prompts whose behavior isn't obvious from the title alone — currently just new-notebook, explaining that a git URL clones and a filesystem path adopts an existing directory</td></tr>
@@ -1093,6 +1158,12 @@ daily_template = "daily"
 # When true, `i` opens the OS's detected favorite editor (env $VISUAL/$EDITOR,
 # then the desktop's default text/plain handler) instead of the inline editor.
 use_favorite_editor = false
+# When true, the TUI listens on a local loopback port so external
+# `shiki capture "text"` invocations land here live instead of only
+# writing to disk unnoticed. `shiki capture` itself always works either
+# way — this only controls whether an already-open TUI finds out
+# immediately. Off by default; toggle from leader+s -> GENERAL.
+enable_capture_daemon = false
 # When true, click-and-drag over a note's body in PREVIEW selects text and
 # copies it to the clipboard (OSC 52, same mechanism as the logs modal's
 # `y`/`c`) as soon as the mouse button is released.

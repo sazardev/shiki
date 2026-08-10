@@ -378,6 +378,8 @@ shiki list -n work        # list notes in "work"
 shiki show <note>         # show rendered content (ANSI)
 shiki edit <note>         # edit with $EDITOR
 shiki search <query>      # search and show results
+shiki capture "quick idea"       # near-instant note capture, no $EDITOR, no TUI drawn
+shiki capture "text" -n work     # capture into a specific notebook instead of default_notebook
 shiki new "title" --body "text"     # create non-interactively, no $EDITOR spawned
 shiki new "title" --stdin --tags work,idea  # body piped in, tags attached, still no $EDITOR
 shiki list --json         # list/search/show all take --json for scripting (list/search: array, show: object)
@@ -422,6 +424,55 @@ given.
 matching an existing notebook; `data_dir` being a real directory, not just existing; two notebooks
 resolving to the same path on disk; `git.remote_template` containing its `{notebook}` placeholder;
 and `git.sign_commits` having an actual signing key configured (`git config user.signingkey`).
+
+---
+
+## Quick capture (`shiki capture` + optional daemon)
+
+`shiki capture "some text"` creates a note with no ceremony — no `$EDITOR` spawned, no TUI drawn,
+just a single line of output. It's meant to be wired into things *outside* shiki entirely: a rofi/
+wofi prompt bound to an OS hotkey, a waybar/polybar click action, a Raycast/Alfred script command,
+an AutoHotkey shortcut on Windows — anything that can shell out. Shiki doesn't (and can't, from a
+terminal app) register a global OS hotkey itself; `shiki capture` is the one command every one of
+those launchers just needs to call.
+
+By default it targets `general.default_notebook` (auto-created if it doesn't exist yet, same as
+`shiki new`), with an auto-generated title (`Capture 2026-08-10 15:35`, no title prompt) so there's
+nothing to type but the note's actual content. `-n <notebook>` overrides the target, same flag as
+`shiki new`/`shiki daily`.
+
+```
+shiki capture "buy milk"          # -> personal/capture-2026-08-10-15-35.md
+shiki capture "call Ana" -n work  # -> work/capture-....md instead
+```
+
+**The optional daemon** (`general.enable_capture_daemon`, off by default — toggle it from
+`leader+s` → GENERAL → `enable_capture_daemon`) makes a *running* TUI aware of captures the instant
+they happen, instead of only writing to disk unnoticed until the next manual reload. With it on,
+the TUI listens on a local TCP loopback port (`127.0.0.1`, OS-assigned, recorded in
+`~/.config/shiki/capture.port`); `shiki capture` tries that socket first, and if a TUI answers, the
+new note appears live in NOTES (when you're already looking at that notebook's root) with no
+keypress needed. The command's own output tells you which path it took:
+
+```
+$ shiki capture "buy milk"
+captured (daemon): /home/you/notes/personal/capture-2026-08-10-15-35.md   # a running TUI picked it up live
+$ shiki capture "buy milk"
+captured: /home/you/notes/personal/capture-2026-08-10-15-35.md            # written straight to disk, no TUI (or daemon off) noticed
+```
+
+Turning the daemon off doesn't turn *capture* off — `shiki capture` always works, with or without
+a TUI running; the toggle only controls whether an already-open TUI finds out immediately. Toggling
+it back on later reuses the same listener thread rather than restarting anything — the daemon, once
+started this session, never actually shuts down; off just means it answers "disabled" to new
+connections instead of processing them.
+
+Capturing into an **encrypted** notebook only works through the daemon if that notebook is already
+unlocked in the running TUI this session — the background listener thread can't itself pop up a
+passphrase prompt, so it replies with a clear "locked" error instead of hanging or writing
+plaintext, and `shiki capture` reports that error rather than silently falling back. Run
+`shiki capture` from a plain terminal (no daemon involved) against an encrypted, locked notebook
+and it prompts for the passphrase interactively instead, same as `shiki new`.
 
 ---
 
@@ -529,6 +580,7 @@ file's mtime. It only gains real frontmatter once you touch it through shiki
 ├── keybindings.toml       # custom shortcuts (optional)
 ├── theme.toml             # custom theme (optional)
 ├── shiki.log              # persistent status/log history (leader+l to view, x to clear)
+├── capture.port           # port the capture daemon is listening on (only while a TUI has it enabled)
 ├── trash/                 # deleted notes/folders, restorable with leader+u (see below)
 │   └── <notebook>/
 └── templates/             # templates
@@ -604,6 +656,12 @@ daily_template = "daily"
 # When true, `i` opens the OS's detected favorite editor (env $VISUAL/$EDITOR,
 # then the desktop's default text/plain handler) instead of the inline editor.
 use_favorite_editor = false
+# When true, the TUI listens on a local loopback port so external
+# `shiki capture "text"` invocations land here live instead of only
+# writing to disk unnoticed. `shiki capture` itself always works either
+# way — this only controls whether an already-open TUI finds out
+# immediately. Off by default; toggle from leader+s -> GENERAL.
+enable_capture_daemon = false
 # When true, click-and-drag over a note's body in PREVIEW selects text and
 # copies it to the clipboard (OSC 52, same mechanism as the logs modal's
 # `y`/`c`) as soon as the mouse button is released.

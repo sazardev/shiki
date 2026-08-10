@@ -36,6 +36,15 @@ pub struct General {
     /// instead of using a fixed `editor` command.
     #[serde(default)]
     pub use_favorite_editor: bool,
+    /// When true, the TUI listens on a local TCP loopback port
+    /// (`Config::default_capture_port_path` records which one) so external
+    /// `shiki capture "text"` invocations land in this running instance
+    /// live instead of only writing to disk unnoticed. Off by default —
+    /// `shiki capture` itself always works regardless of this setting; it
+    /// only controls whether an already-open TUI finds out about it
+    /// immediately.
+    #[serde(default)]
+    pub enable_capture_daemon: bool,
     /// When true, click-and-drag over a note's body in PREVIEW selects text
     /// and copies it to the clipboard (OSC 52) on release. Defaults to
     /// `true`, so this needs the named-default-fn form rather than bare
@@ -163,6 +172,7 @@ impl Default for General {
             editor: default_editor(),
             daily_template: default_daily_template(),
             use_favorite_editor: false,
+            enable_capture_daemon: false,
             mouse_drag_selection: true,
             data_dir: None,
             show_hints: true,
@@ -1397,6 +1407,20 @@ impl Config {
             .parent()
             .expect("config path always has a parent")
             .join("session.toml"))
+    }
+
+    /// Where the capture daemon (`general.enable_capture_daemon`) records
+    /// which ephemeral TCP port it bound — the config dir, for the exact
+    /// same collision reason as `default_log_path`/`default_trash_dir`/
+    /// `default_session_path`: the data dir's top level is user-named
+    /// notebooks, so a fixed filename placed there could collide with one.
+    /// Rewritten on every daemon start, so a dead process never leaves a
+    /// port number here that anything would mistakenly try to connect to.
+    pub fn default_capture_port_path() -> Result<PathBuf> {
+        Ok(Self::default_path()?
+            .parent()
+            .expect("config path always has a parent")
+            .join("capture.port"))
     }
 
     /// Loads the config from `path`, or creates and saves a default config if it doesn't exist.

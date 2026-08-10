@@ -310,6 +310,11 @@ impl App {
             ));
             return;
         }
+        if field == GeneralField::EnableCaptureDaemon {
+            let new_value = !self.config.general.enable_capture_daemon;
+            self.set_capture_daemon_enabled(new_value);
+            return;
+        }
         if field == GeneralField::MouseDragSelection {
             self.config.general.mouse_drag_selection = !self.config.general.mouse_drag_selection;
             self.save_config();
@@ -429,6 +434,7 @@ impl App {
             }
             GeneralField::PageStep => ("page_step", self.config.general.page_step.to_string()),
             GeneralField::UseFavoriteEditor
+            | GeneralField::EnableCaptureDaemon
             | GeneralField::MouseDragSelection
             | GeneralField::ShowHints
             | GeneralField::RememberLastSession
@@ -1293,6 +1299,18 @@ impl App {
                 ));
                 self.update_rx = None;
             }
+        }
+    }
+
+    /// Non-blocking: called once per `run()` loop iteration, same spot as
+    /// `poll_update_channel`/`poll_sync_channel`. Drains every pending
+    /// `CaptureRequest`, not just one — several `shiki capture` invocations
+    /// could queue up between two frames — and answers each one over its
+    /// own one-shot reply channel before moving to the next.
+    pub(crate) fn poll_capture_channel(&mut self) {
+        while let Ok(request) = self.capture_rx.try_recv() {
+            let reply = crate::capture::perform_capture(self, &request.text);
+            let _ = request.reply_tx.send(reply);
         }
     }
     fn handle_update_key(&mut self, key: KeyEvent) {
@@ -4880,6 +4898,7 @@ impl App {
                             "page_step"
                         }
                         GeneralField::UseFavoriteEditor => "use_favorite_editor",
+                        GeneralField::EnableCaptureDaemon => "enable_capture_daemon",
                         GeneralField::MouseDragSelection => "mouse_drag_selection",
                         GeneralField::ShowHints => "show_hints",
                         GeneralField::RememberLastSession => "remember_last_session",

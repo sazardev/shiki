@@ -1,3 +1,4 @@
+pub mod capture;
 pub mod config;
 pub mod daily;
 pub mod doctor;

@@ -1085,6 +1085,21 @@ pub struct App {
     /// gating in `run()` (`if app.sync_in_flight.is_some() { ... }`) to
     /// cover that case too rather than assuming this field already does.
     pub spinner_frame: usize,
+    /// `Some` once `general.enable_capture_daemon` has been turned on at
+    /// least once this session — the listener thread, once spawned, is
+    /// never torn down; toggling the setting off just flips
+    /// `CaptureDaemonHandle::enabled` so future connections get a clear
+    /// "daemon disabled" refusal instead of being processed. `None` means
+    /// no thread/port exists at all (the true off state, not just ignored).
+    pub(crate) capture_daemon: Option<crate::capture::CaptureDaemonHandle>,
+    /// Always present regardless of whether the daemon has ever been
+    /// enabled — cheap to create up front, and avoids `Option` juggling in
+    /// `poll_capture_channel` for a channel that's empty 99% of the time
+    /// anyway.
+    pub(crate) capture_rx: std::sync::mpsc::Receiver<crate::capture::CaptureRequest>,
+    /// The sender half handed to the listener thread's clone the moment the
+    /// daemon is actually spawned (see `set_capture_daemon_enabled`).
+    pub(crate) capture_tx: std::sync::mpsc::Sender<crate::capture::CaptureRequest>,
 }
 
 /// State of the update modal (leader+`U`), across its whole lifecycle: a
@@ -1208,6 +1223,7 @@ impl App {
             .iter()
             .position(|t| t.name == theme.name)
             .unwrap_or(0);
+        let (capture_tx, capture_rx) = std::sync::mpsc::channel();
 
         let mut app = Self {
             config,
@@ -1369,7 +1385,14 @@ impl App {
             sync_in_flight: None,
             sync_rx: None,
             spinner_frame: 0,
+            capture_daemon: None,
+            capture_rx,
+            capture_tx,
         };
+
+        if app.config.general.enable_capture_daemon {
+            app.ensure_capture_daemon_spawned();
+        }
 
         if app.config.general.remember_last_session {
             if let Some(session) = Config::default_session_path()
@@ -1391,6 +1414,58 @@ impl App {
         }
 
         Ok(app)
+    }
+
+    /// Spawns the capture-daemon listener thread if it isn't already
+    /// running — a no-op if `capture_daemon` is already `Some`, so this is
+    /// safe to call both from `new` (config says start enabled) and from
+    /// `set_capture_daemon_enabled` (the Settings toggle) without double-
+    /// spawning. A bind/IO failure (port exhaustion, no loopback interface,
+    /// etc.) reverts `general.enable_capture_daemon` back to `false` and
+    /// reports it via `set_status` rather than silently pretending the
+    /// daemon is running.
+    pub(crate) fn ensure_capture_daemon_spawned(&mut self) {
+        if self.capture_daemon.is_some() {
+            return;
+        }
+        match crate::capture::spawn_capture_daemon(self.capture_tx.clone()) {
+            Ok(handle) => self.capture_daemon = Some(handle),
+            Err(e) => {
+                self.set_status(format!("could not start capture daemon: {e}"));
+                self.config.general.enable_capture_daemon = false;
+                self.save_config();
+            }
+        }
+    }
+
+    /// Backs the GENERAL settings toggle (`GeneralField::EnableCaptureDaemon`).
+    /// The listener thread, once spawned, is never torn down — turning the
+    /// setting back off just flips `CaptureDaemonHandle::enabled` to `false`
+    /// so the still-running thread replies "daemon disabled" to any new
+    /// connection instead of processing it; turning it back on flips the
+    /// same flag back rather than rebinding a new port. This is deliberate:
+    /// no other background thread in this codebase (self-update, git sync)
+    /// has ever needed a shutdown/rejoin mechanism, and inventing one here
+    /// for a boolean flip isn't worth the complexity.
+    pub(crate) fn set_capture_daemon_enabled(&mut self, enabled: bool) {
+        if enabled {
+            self.ensure_capture_daemon_spawned();
+            match &self.capture_daemon {
+                Some(handle) => handle
+                    .enabled
+                    .store(true, std::sync::atomic::Ordering::Relaxed),
+                // Spawn failed — `ensure_capture_daemon_spawned` already
+                // reverted the config and reported why.
+                None => return,
+            }
+        } else if let Some(handle) = &self.capture_daemon {
+            handle
+                .enabled
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+        }
+        self.config.general.enable_capture_daemon = enabled;
+        self.save_config();
+        self.set_status(format!("enable_capture_daemon -> {enabled}"));
     }
 
     /// Applies a previously saved `SessionState` (`general.remember_last_session`)
@@ -2444,6 +2519,7 @@ pub fn run<B: Backend<Error = io::Error>>(
         app.expire_status_message();
         app.poll_update_channel();
         app.poll_sync_channel();
+        app.poll_capture_channel();
         if app.sync_in_flight.is_some() {
             app.spinner_frame = app.spinner_frame.wrapping_add(1);
         }

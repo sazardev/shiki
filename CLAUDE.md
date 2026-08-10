@@ -21,7 +21,7 @@ cargo fmt --all                      # format (run after editing, before checkin
 cargo run -p shiki-cli -- <args>     # run the binary, e.g. `-- new "titulo"`, `-- daily`, no args launches the TUI
 ```
 
-There are ~220 `#[test]`s: 118 in `shiki-core`, 13 in `shiki-config`, 85 in `shiki-tui`, 3 in
+There are ~234 `#[test]`s: 127 in `shiki-core`, 13 in `shiki-config`, 87 in `shiki-tui`, 7 in
 `shiki-cli` — `cargo test --workspace` is green. They're all inline `#[cfg(test)]` modules inside
 the source files (no `tests/` dirs, no `#[ignore]`, no fixture setup), so the pattern set by
 `panel_drawer::tests` (`shiki-tui/src/panel_drawer.rs`) — covering `drawer_hit_at`'s mouse
@@ -1380,3 +1380,60 @@ the freshly-installed binary as a child process before `should_quit = true` unwi
 child inherits the parent's now-restored-to-normal terminal and does its own completely ordinary
 `enable_raw_mode`/`EnterAlternateScreen` startup — from the user's perspective it just looks like
 shiki restarted itself onto the new version.
+
+**`shiki capture "text"` (`shiki-cli/src/commands/capture.rs`) plus the optional in-TUI capture
+daemon (`shiki-tui/src/capture.rs`, `general.enable_capture_daemon`, off by default) exist so
+external launchers — rofi/waybar/polybar, Raycast/Alfred, AutoHotkey, a bare OS hotkey — have one
+command to shell out to for near-instant note capture, with or without a TUI open.** `shiki
+capture` itself never depends on the daemon: it always falls all the way back to a direct
+`Notebook::create_note` write (the exact same path `shiki new`/`daily.rs` already use, auto-
+creating the target notebook if missing) when nothing answers. The daemon only exists to make an
+*already-running* TUI find out about a capture immediately instead of only picking it up on the
+next manual reload.
+
+**Transport is a TCP loopback socket (`127.0.0.1`, OS-assigned ephemeral port), not a Unix domain
+socket** — the deciding factor was that shiki genuinely ships and CI-tests Windows binaries
+(`release.yml`/`ci.yml`), and a Unix-socket-only daemon would silently have no equivalent on that
+platform. `std::net::TcpListener`/`TcpStream` alone cover Linux/macOS/Windows identically, no new
+dependency. The bound port is written to `Config::default_capture_port_path()`
+(`~/.config/shiki/capture.port`, config dir — same collision reasoning as `shiki.log`/`trash/`/
+`session.toml`: the data dir's top level is user-named notebooks) every time the daemon starts, so
+a crashed process never leaves a stale port number for the next `shiki capture` to hang against —
+confirmed live: `kill -9`ing the TUI and immediately running `shiki capture` falls back to a direct
+write in single-digit milliseconds, since connecting to a now-unbound port fails instantly rather
+than timing out.
+
+**The listener thread, once spawned, is never torn down — toggling `enable_capture_daemon` off
+just flips a shared `Arc<AtomicBool>` (`CaptureDaemonHandle::enabled`) that the thread checks per
+connection, replying `ERR daemon disabled` without ever touching the main-thread channel.**
+Toggling back on flips the same flag rather than rebinding a new port. This mirrors the "no
+shutdown/rejoin mechanism anywhere in this codebase" reality `spawn_git_op`/self-update already
+live with — inventing one here for a boolean would be new complexity with no precedent.
+`App::ensure_capture_daemon_spawned` (called from `App::new` when the config already says on, and
+from `App::set_capture_daemon_enabled` the first time the Settings toggle turns it on) is the only
+place the thread actually gets created; a bind/IO failure reverts `enable_capture_daemon` to
+`false` and reports why via `set_status`, rather than pretending the daemon is running.
+
+**The listener thread is a dumb pipe — it never touches `Notebook`/`NotebookStore`/`App` itself.**
+Per connection it reads the request to EOF (not line-delimited; the capture text may itself contain
+newlines), bundles a fresh one-shot `mpsc::Sender<CaptureReply>` into a `CaptureRequest` sent over
+the long-lived `App::capture_tx` → `capture_rx` channel, and blocks on that one-shot receiver
+(`recv_timeout(5s)` as a safety net, not the normal path — the main loop's `poll_capture_channel`,
+called once per `run()` iteration right next to `poll_update_channel`/`poll_sync_channel`, drains
+every pending request well within that window). All real work — resolving/creating the target
+notebook, checking encryption, `Notebook::create_note`, `refresh_notes_preserve_selection`,
+`note_changed` — runs in `capture::perform_capture` on the *main* thread, reusing the exact same
+note-creation path every other capture route already uses. This is what makes panel refresh and
+auto-sync counting "just work" for a capture that arrived from an external process, with no
+duplicated business logic on the background thread.
+
+**A capture into an encrypted notebook never blocks on a passphrase from the daemon path.**
+`perform_capture` calls the existing `App::resolved_notebook_crypto` — if the target notebook is
+configured as encrypted but nothing's been typed in this session (`None`), it replies with an error
+prefixed `locked: ...` rather than hanging (a background thread has no way to pop up a prompt) or
+silently writing plaintext. `shiki capture`'s client side treats this prefix as authoritative and
+does *not* fall back to a direct write in that case — falling back there could otherwise duplicate
+the note or confuse the user about which passphrase prompt they're about to hit — but treats every
+other daemon error (`daemon disabled`, a timeout, connection refused) as "nothing to connect to"
+and falls through to the direct-write path, where an encrypted notebook prompts interactively via
+the existing `unlock_if_encrypted`, same as `shiki new` always has.

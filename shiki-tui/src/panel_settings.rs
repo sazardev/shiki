@@ -68,6 +68,7 @@ pub enum GeneralField {
     Editor,
     DailyTemplate,
     UseFavoriteEditor,
+    EnableCaptureDaemon,
     MouseDragSelection,
     ShowHints,
     RememberLastSession,
@@ -88,11 +89,12 @@ pub enum GeneralField {
 }
 
 impl GeneralField {
-    pub const ALL: [GeneralField; 21] = [
+    pub const ALL: [GeneralField; 22] = [
         GeneralField::DefaultNotebook,
         GeneralField::Editor,
         GeneralField::DailyTemplate,
         GeneralField::UseFavoriteEditor,
+        GeneralField::EnableCaptureDaemon,
         GeneralField::MouseDragSelection,
         GeneralField::ShowHints,
         GeneralField::RememberLastSession,
@@ -329,6 +331,11 @@ fn general_rows(app: &App) -> Vec<Line<'static>> {
             app,
             "use_favorite_editor",
             cfg.general.use_favorite_editor.to_string(),
+        ),
+        row_line(
+            app,
+            "enable_capture_daemon",
+            cfg.general.enable_capture_daemon.to_string(),
         ),
         row_line(
             app,

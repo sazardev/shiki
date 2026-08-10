@@ -8,6 +8,12 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ### Added
 
+- `shiki capture "text"`: near-instant note capture with no `$EDITOR` and no TUI drawn — meant for
+  scripts, launchers (rofi/waybar/Raycast/AutoHotkey), or an OS hotkey. Targets
+  `general.default_notebook` by default (`-n <notebook>` overrides), auto-generates a timestamped
+  title. `general.enable_capture_daemon` (off by default, toggle from Settings → GENERAL) lets a
+  running TUI pick up captures live over a local loopback socket instead of only writing to disk;
+  `shiki capture` always works with or without it.
 - Writing-comfort improvements to the native note editor (`Mode::Edit`), each independently
   toggleable from the EDITOR tab in Settings (`leader` then `s`): list/checkbox auto-continuation
   on `Enter` (with ordered-list auto-increment, empty-item exit, and `Backspace` cleanup),

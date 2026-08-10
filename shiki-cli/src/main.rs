@@ -38,6 +38,17 @@ enum Commands {
         #[arg(long, value_delimiter = ',')]
         tags: Vec<String>,
     },
+    /// Captures a quick note with no editor and (almost) no ceremony —
+    /// tries a running TUI's capture daemon first (if it's enabled and
+    /// listening) so the note shows up there live, then falls back to
+    /// writing straight to disk if no daemon is reachable. Meant for
+    /// scripts/launchers (rofi, waybar, Raycast, hotkeys, etc.), not
+    /// interactive use.
+    Capture {
+        text: String,
+        #[arg(short, long)]
+        notebook: Option<String>,
+    },
     /// Lists the notes in a notebook
     List {
         #[arg(short = 'n', long)]
@@ -296,6 +307,10 @@ fn main() -> Result<()> {
 
     match cli.command {
         None => tui::launch(ctx.config, ctx.store),
+        Some(Commands::Capture { text, notebook }) => {
+            let notebook = ctx.notebook_name(notebook);
+            commands::capture::run(&ctx.store, &ctx.config, &notebook, &text)
+        }
         Some(Commands::New {
             title,
             notebook,
