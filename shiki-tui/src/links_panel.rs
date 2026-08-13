@@ -33,16 +33,24 @@ pub enum LinkRow {
 /// Builds the rows for `current`: its own outgoing links first (in the
 /// order they appear in the body), then every other note that links back to
 /// it. `notes` should be the *whole notebook* (`all_notes_recursive`), not
-/// just the current folder — links can point anywhere in it. A section
-/// with nothing in it is omitted entirely rather than shown with a header
-/// and no rows under it.
-pub fn build(current: &Note, notes: &[Note]) -> Vec<LinkRow> {
+/// just the current folder — links can point anywhere in it. `global` is the
+/// cross-notebook pool (`NotebookStore::all_notes`) used to resolve an
+/// outgoing link the current notebook can't satisfy — a daily-note agenda
+/// bullet or any link to a note in another notebook otherwise shows up as a
+/// broken link. A section with nothing in it is omitted entirely rather than
+/// shown with a header and no rows under it.
+pub fn build(
+    current: &Note,
+    notes: &[Note],
+    global: &[(shiki_core::Notebook, Note)],
+) -> Vec<LinkRow> {
     let mut rows = Vec::new();
 
     let outgoing: Vec<LinkRow> = wikilinks::extract(&current.body)
         .into_iter()
         .map(|text| {
-            let resolved = wikilinks::resolve_one(&text, notes);
+            let resolved = wikilinks::resolve_one(&text, notes)
+                .or_else(|| wikilinks::resolve_one_global(&text, notes, global).map(|(p, _)| p));
             LinkRow::Outgoing { text, resolved }
         })
         .collect();
@@ -110,7 +118,7 @@ mod tests {
     fn build_omits_empty_sections() {
         let current = note("a/lonely.md", "Lonely", "No links here at all.");
         let notes = vec![current.clone()];
-        assert!(build(&current, &notes).is_empty());
+        assert!(build(&current, &notes, &[]).is_empty());
     }
 
     #[test]
@@ -119,7 +127,7 @@ mod tests {
         let other = note("a/other.md", "Other", "Back to [[Hub]].");
         let notes = vec![current.clone(), other];
 
-        let rows = build(&current, &notes);
+        let rows = build(&current, &notes, &[]);
 
         assert!(matches!(rows[0], LinkRow::Header("Outgoing")));
         assert!(matches!(rows[1], LinkRow::Outgoing { .. }));
@@ -133,7 +141,7 @@ mod tests {
         let current = note("a/hub.md", "Hub", "See [[Other]].");
         let other = note("a/other.md", "Other", "Back to [[Hub]].");
         let notes = vec![current.clone(), other];
-        let rows = build(&current, &notes);
+        let rows = build(&current, &notes, &[]);
 
         // Index 0 -> the Outgoing row at position 1 (after the header).
         assert_eq!(selected_row(&rows, 0), Some(1));
@@ -149,7 +157,7 @@ mod tests {
         let mentioner = note("a/mentioner.md", "Mentioner", "the hub is central");
         let notes = vec![current.clone(), linker, mentioner];
 
-        let rows = build(&current, &notes);
+        let rows = build(&current, &notes, &[]);
 
         assert!(matches!(rows[0], LinkRow::Header("Backlinks")));
         assert!(matches!(rows[1], LinkRow::Backlink { .. }));
@@ -164,7 +172,7 @@ mod tests {
     fn unresolved_outgoing_link_is_still_shown() {
         let current = note("a/hub.md", "Hub", "See [[Nowhere]].");
         let notes = vec![current.clone()];
-        let rows = build(&current, &notes);
+        let rows = build(&current, &notes, &[]);
         assert!(matches!(
             &rows[1],
             LinkRow::Outgoing { resolved: None, text } if text == "Nowhere"

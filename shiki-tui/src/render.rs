@@ -388,7 +388,8 @@ pub fn borrow_lines<'a>(lines: &'a [Line<'static>]) -> Vec<Line<'a>> {
 // something outside the crate might use them).
 #[cfg(test)]
 fn markdown_to_lines(body: &str, colors: &crate::syntax::SyntaxPalette) -> Vec<Line<'static>> {
-    markdown_to_lines_indexed(body, colors)
+    markdown_to_lines_indexed(body, colors, &Default::default())
+        .0
         .into_iter()
         .map(|(_, line)| line)
         .collect()
@@ -404,10 +405,21 @@ fn markdown_to_lines(body: &str, colors: &crate::syntax::SyntaxPalette) -> Vec<L
 /// consumed but produces no rendered row of its own — its index is reused
 /// by the header-divider row rendered in its place instead, so clicking the
 /// divider still lands on a real source line.
+///
+/// `folded` holds the document-order indices of `<details>` blocks that are
+/// currently collapsed: a folded block renders only its `<summary>` row
+/// (marked with `▸` and a hidden-line count), everything between it and the
+/// matching `</details>` is omitted. The second return value is the map of
+/// summary source-line -> block id, so a click on a summary row can toggle
+/// that block (`App::toggle_details_block`).
 pub(crate) fn markdown_to_lines_indexed(
     body: &str,
     colors: &crate::syntax::SyntaxPalette,
-) -> Vec<(usize, Line<'static>)> {
+    folded: &std::collections::HashSet<usize>,
+) -> (
+    Vec<(usize, Line<'static>)>,
+    std::collections::HashMap<usize, usize>,
+) {
     let fg = colors.fg;
     let accent = colors.accent;
     let muted = colors.muted;
@@ -427,6 +439,22 @@ pub(crate) fn markdown_to_lines_indexed(
     let mut code_lang: Option<String> = None;
     let mut code_highlighter: Option<crate::syntax::CodeHighlighter> = None;
     let mut lines: Vec<(usize, Line<'static>)> = Vec::new();
+
+    // Per-`<details>`-block content line counts (document order), computed
+    // up front so a folded block's summary can state how many lines it's
+    // hiding before those lines have been walked. Content means every line
+    // between `<details>` and `</details>` except the `<summary>` row and
+    // the tags themselves; nested blocks' content counts toward every open
+    // ancestor, so a collapsed outer block reports its full hidden size.
+    let hidden_counts = details_content_counts(body);
+    // Stack of currently open `<details>` block ids.
+    let mut details_stack: Vec<usize> = Vec::new();
+    // Stack of ids whose content is currently suppressed (a folded block,
+    // possibly nested inside another folded block).
+    let mut suppressed: Vec<usize> = Vec::new();
+    let mut next_details_id = 0usize;
+    let mut summary_blocks: std::collections::HashMap<usize, usize> =
+        std::collections::HashMap::new();
 
     let mut source = body.lines().enumerate().peekable();
     while let Some((idx, line)) = source.next() {
@@ -487,14 +515,58 @@ pub(crate) fn markdown_to_lines_indexed(
         }
 
         let trimmed = line.trim();
-        if trimmed == "<details>" || trimmed == "</details>" {
+        if trimmed == "<details>" {
+            let id = next_details_id;
+            next_details_id += 1;
+            details_stack.push(id);
+            // Only the outermost folded block suppresses — a folded block
+            // nested inside an already-hidden region is invisible anyway, so
+            // tracking it here would make its `</details>` pop the wrong id.
+            if folded.contains(&id) && suppressed.is_empty() {
+                suppressed.push(id);
+            }
+            continue;
+        }
+        if trimmed == "</details>" {
+            if let Some(id) = details_stack.pop() {
+                if suppressed.last() == Some(&id) {
+                    suppressed.pop();
+                }
+            }
             continue;
         }
         if let Some(inner) = trimmed
             .strip_prefix("<summary>")
             .and_then(|s| s.strip_suffix("</summary>"))
         {
-            lines.push((idx, Line::from(Span::styled(format!("▸ {inner}"), heading))));
+            let id = details_stack.last().copied();
+            // A folded block's own summary is its handle — still rendered
+            // (with a `▸` plus the hidden-line count), even though `suppressed`
+            // already contains it. A summary inside a nested hidden region
+            // (suppressed.last() != this block) renders nothing — you can't
+            // unfold a block you can't see.
+            let is_handle = id.is_some_and(|id| suppressed.last() == Some(&id));
+            if suppressed.is_empty() || is_handle {
+                if let Some(id) = id {
+                    summary_blocks.insert(idx, id);
+                }
+                let folded_here = id.is_some_and(|id| folded.contains(&id));
+                let prefix = if folded_here { "▸" } else { "▾" };
+                let hidden = id.map(|id| hidden_counts[id]).unwrap_or(0);
+                let text = if folded_here && hidden > 0 {
+                    format!("{prefix} {inner}  ({hidden} hidden)")
+                } else {
+                    format!("{prefix} {inner}")
+                };
+                lines.push((idx, Line::from(Span::styled(text, heading))));
+            }
+            continue;
+        }
+
+        // Inside a folded block, everything after its summary (up to the
+        // matching `</details>`) is content to hide — skip it entirely,
+        // including nested `<details>`/`<summary>`/code/table rows.
+        if !suppressed.is_empty() {
             continue;
         }
 
@@ -599,7 +671,35 @@ pub(crate) fn markdown_to_lines_indexed(
         lines.push((idx, rendered));
     }
 
-    lines
+    (lines, summary_blocks)
+}
+
+/// Per-`<details>`-block content line count, in document order — index `i`
+/// is the number of non-tag content lines inside block `i` (nested blocks'
+/// lines count toward every open ancestor too, so a collapsed outer block
+/// reports its full hidden size including anything nested inside it).
+fn details_content_counts(body: &str) -> Vec<usize> {
+    let mut counts = Vec::new();
+    let mut stack: Vec<usize> = Vec::new();
+    for line in body.lines() {
+        let trimmed = line.trim();
+        if trimmed == "<details>" {
+            stack.push(counts.len());
+            counts.push(0);
+        } else if trimmed == "</details>" {
+            stack.pop();
+        } else if trimmed.starts_with("<summary>") {
+            // summary rows aren't "hidden content" — they stay visible.
+        } else {
+            // A content line counts toward every open block, innermost
+            // first — so a collapsed outer block reports its full hidden
+            // size including anything nested inside it.
+            for &open in &stack {
+                counts[open] += 1;
+            }
+        }
+    }
+    counts
 }
 
 #[cfg(test)]
@@ -764,10 +864,60 @@ mod tests {
         let body = "<details>\n<summary>Click to expand</summary>\nhidden content\n</details>";
         let lines = markdown_to_lines(body, &PALETTE);
         // <details>/</details> themselves produce no line; summary becomes
-        // a styled header; the body content still renders normally.
+        // a styled header (expanded blocks get a `▾` handle); the body
+        // content still renders normally.
         assert_eq!(lines.len(), 2);
-        assert_eq!(line_text(&lines[0]), "▸ Click to expand");
+        assert_eq!(line_text(&lines[0]), "▾ Click to expand");
         assert_eq!(line_text(&lines[1]), "hidden content");
+    }
+
+    #[test]
+    fn folded_details_hide_content_and_report_count() {
+        let body =
+            "<details>\n<summary>Click to expand</summary>\nline one\nline two\n</details>\nafter";
+        let folded: std::collections::HashSet<usize> = std::collections::HashSet::from([0]);
+        let (indexed, summary_blocks) = markdown_to_lines_indexed(body, &PALETTE, &folded);
+        // Only the summary handle (with the hidden count) and the trailing
+        // content line survive — the two hidden lines are omitted entirely.
+        assert_eq!(indexed.len(), 2);
+        assert_eq!(line_text(&indexed[0].1), "▸ Click to expand  (2 hidden)");
+        assert_eq!(line_text(&indexed[1].1), "after");
+        // The summary row maps back to its source line and block id.
+        assert_eq!(summary_blocks.get(&1), Some(&0));
+    }
+
+    #[test]
+    fn unfolded_details_hide_nothing_and_map_summaries() {
+        let body = "<details>\n<summary>S</summary>\ncontent\n</details>";
+        let (indexed, summary_blocks) =
+            markdown_to_lines_indexed(body, &PALETTE, &std::collections::HashSet::new());
+        assert_eq!(indexed.len(), 2);
+        assert_eq!(line_text(&indexed[0].1), "▾ S");
+        assert_eq!(line_text(&indexed[1].1), "content");
+        assert_eq!(summary_blocks.get(&1), Some(&0));
+    }
+
+    #[test]
+    fn folded_details_with_no_hidden_lines_omits_count() {
+        let body = "<details>\n<summary>Empty</summary>\n</details>";
+        let folded: std::collections::HashSet<usize> = std::collections::HashSet::from([0]);
+        let (indexed, _) = markdown_to_lines_indexed(body, &PALETTE, &folded);
+        assert_eq!(indexed.len(), 1);
+        assert_eq!(line_text(&indexed[0].1), "▸ Empty");
+    }
+
+    #[test]
+    fn nested_folded_details_outer_wins() {
+        let body = "<details>\n<summary>Outer</summary>\n<details>\n<summary>Inner</summary>\nx\n</details>\ny\n</details>";
+        let folded: std::collections::HashSet<usize> = std::collections::HashSet::from([0]);
+        let (indexed, summary_blocks) = markdown_to_lines_indexed(body, &PALETTE, &folded);
+        // Outer folded: only its summary survives; the inner summary and
+        // both content lines (x, y) are hidden — the count reflects the
+        // two real content lines, not the nested `<details>`/`<summary>`
+        // tag lines that are also skipped.
+        assert_eq!(indexed.len(), 1);
+        assert_eq!(line_text(&indexed[0].1), "▸ Outer  (2 hidden)");
+        assert_eq!(summary_blocks.get(&1), Some(&0));
     }
 
     #[test]

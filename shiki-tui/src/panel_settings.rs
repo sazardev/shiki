@@ -263,15 +263,23 @@ pub enum NotebookField {
     /// note, so `Enter` here starts a passphrase prompt
     /// (`App::start_passphrase_prompt`) instead of cycling a value.
     Encryption,
+    /// Set when "delete notebook" was answered with "just remove the
+    /// reference" (`hidden = true`) — the one field with a genuine
+    /// one-way action: `Enter` clears it (un-hides the notebook back into
+    /// NOTEBOOKS). Hidden notebooks reach this level-2 list through
+    /// `sorted_notebook_names`, which includes them precisely so this
+    /// toggle exists.
+    Hidden,
 }
 
 impl NotebookField {
-    pub const ALL: [NotebookField; 5] = [
+    pub const ALL: [NotebookField; 6] = [
         NotebookField::Remote,
         NotebookField::AutoPush,
         NotebookField::AutoSync,
         NotebookField::AutoSyncEvery,
         NotebookField::Encryption,
+        NotebookField::Hidden,
     ];
 }
 
@@ -294,8 +302,20 @@ impl SnippetField {
 /// sorted by name — the NOTEBOOKS section lists all of them, since a
 /// notebook's git remote is worth showing regardless of whether it has any
 /// config override at all.
+///
+/// Hidden notebooks (config `[notebooks.<name>] hidden = true`, set when
+/// "delete notebook" was answered with "just untrack") are *also* included,
+/// marked by `notebook_list_rows` — they're filtered out of `App.notebooks`
+/// (`reload_notebooks`) so they'd otherwise be invisible to Settings too,
+/// leaving no in-app way to un-hide one. They're listed so drilling in can
+/// flip `hidden` back to false.
 pub fn sorted_notebook_names(app: &App) -> Vec<String> {
     let mut names: Vec<String> = app.notebooks.iter().map(|nb| nb.name.clone()).collect();
+    for (name, over) in &app.config.notebooks {
+        if over.hidden && !names.iter().any(|n| n == name) {
+            names.push(name.clone());
+        }
+    }
     names.sort();
     names
 }
@@ -531,6 +551,16 @@ fn notebook_list_rows(app: &App) -> Vec<Line<'static>> {
     names
         .iter()
         .map(|name| {
+            let hidden = app
+                .config
+                .notebooks
+                .get(name)
+                .is_some_and(|over| over.hidden);
+            let label = if hidden {
+                format!("{name} (hidden)")
+            } else {
+                name.clone()
+            };
             let remote = app
                 .notebooks
                 .iter()
@@ -538,7 +568,7 @@ fn notebook_list_rows(app: &App) -> Vec<Line<'static>> {
                 .and_then(|nb| shiki_core::git::remote_url(&nb.path))
                 .map(|url| shiki_core::git::redact_credentials(&url))
                 .unwrap_or_else(|| "(no remote)".to_string());
-            row_line(app, name, remote)
+            row_line(app, &label, remote)
         })
         .collect()
 }
@@ -553,6 +583,12 @@ fn notebook_field_rows(app: &App, name: &str) -> Vec<Line<'static>> {
         .iter()
         .find(|nb| nb.name == name)
         .and_then(|nb| shiki_core::git::remote_url(&nb.path))
+        .or_else(|| {
+            app.store
+                .get(name)
+                .ok()
+                .and_then(|nb| shiki_core::git::remote_url(&nb.path))
+        })
         .map(|url| shiki_core::git::redact_credentials(&url))
         .unwrap_or_else(|| "(none — enter to set)".to_string());
     let over = app.config.notebooks.get(name).cloned().unwrap_or_default();
@@ -588,6 +624,15 @@ fn notebook_field_rows(app: &App, name: &str) -> Vec<Line<'static>> {
                 "true (enter to disable — prompts for passphrase)".to_string()
             } else {
                 "false (enter to enable — prompts for a new passphrase)".to_string()
+            },
+        ),
+        row_line(
+            app,
+            "hidden",
+            if over.hidden {
+                "true (enter to restore — files left in place)".to_string()
+            } else {
+                "false".to_string()
             },
         ),
     ]

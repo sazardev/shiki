@@ -458,7 +458,8 @@ pub(crate) enum DeleteTarget {
 }
 
 /// `(note path, [fg, accent, muted, link, bg, tag, success, warning], content
-/// width, formatted lines, source-line-per-row)` — see
+/// width, folded <details> block ids, formatted lines, source-line-per-row,
+/// summary-source-line -> <details> block id)` — see
 /// `App::note_preview_cache`'s own doc comment for what each element means.
 /// `bg`/`tag`/`success`/`warning` ride along in the same array purely so they
 /// participate in the cache-key equality check (`bg` drives
@@ -471,13 +472,18 @@ pub(crate) enum DeleteTarget {
 /// to keep clippy's `type_complexity` lint quiet; still just a plain tuple
 /// everywhere it's used. Source-line-per-row is `None` for the metadata
 /// header's own rows (there's no corresponding `note.body` line to jump to
-/// on click) and `Some(line)` for every real body row, same as before.
+/// on click) and `Some(line)` for every real body row, same as before. The
+/// `folded` set doubles as cache key (toggling a `<details>` fold must
+/// rebuild the cache) and the summary map is how a mouse click on a
+/// rendered `<summary>` row finds which block to toggle.
 type NotePreviewCache = (
     std::path::PathBuf,
     [Color; 8],
     u16,
+    std::collections::HashSet<usize>,
     Vec<Line<'static>>,
     Vec<Option<usize>>,
+    std::collections::HashMap<usize, usize>,
 );
 
 /// Which of the find/replace bar's two fields is currently typed into —
@@ -1034,6 +1040,13 @@ pub struct App {
     /// `note_preview_source_line`, which click-to-edit uses to jump into
     /// `Mode::Edit` at the right raw source line.
     pub(crate) note_preview_cache: Option<NotePreviewCache>,
+    /// Session-only fold state for `<details>` blocks in PREVIEW: note path
+    /// -> set of `<details>` block ids currently collapsed. Not persisted to
+    /// `config.toml` (same "view state, not config" rule as zen mode); it's
+    /// part of the `NotePreviewCache` key, so toggling a fold rebuilds the
+    /// cached preview.
+    pub(crate) details_folded:
+        std::collections::HashMap<std::path::PathBuf, std::collections::HashSet<usize>>,
     /// Cache for the tags modal's `TagIndex::build(&self.notes)` — rebuilt
     /// (`refresh_tag_index_cache`) only when the modal is open and the cache
     /// is empty; `reload_notes`/`refresh_notes_preserve_selection` clear it
@@ -1379,6 +1392,7 @@ impl App {
             history_count_cache: None,
             folder_preview_cache: None,
             note_preview_cache: None,
+            details_folded: std::collections::HashMap::new(),
             tag_index_cache: None,
             show_update: false,
             update_state: None,
@@ -2192,10 +2206,16 @@ impl App {
         if self
             .note_preview_cache
             .as_ref()
-            .is_some_and(|(p, c, w, _, _)| *p == path && *c == colors && *w == width)
+            .is_some_and(|(p, c, w, folded, _, _, _)| {
+                *p == path
+                    && *c == colors
+                    && *w == width
+                    && *folded == self.details_folded_for(&path)
+            })
         {
             return;
         }
+        let folded = self.details_folded_for(&path);
         let body = note.body.clone();
         let dark = crate::render::is_dark_color(colors[4]);
         let palette = crate::syntax::SyntaxPalette {
@@ -2208,7 +2228,8 @@ impl App {
             warning: colors[7],
             dark,
         };
-        let indexed = crate::render::markdown_to_lines_indexed(&body, &palette);
+        let (indexed, summary_blocks) =
+            crate::render::markdown_to_lines_indexed(&body, &palette, &folded);
         let (source_indices, plain_lines): (Vec<usize>, Vec<Line<'static>>) =
             indexed.into_iter().unzip();
         let grouped = crate::wrap::wrap_lines_grouped(&plain_lines, width);
@@ -2222,7 +2243,50 @@ impl App {
             sources.extend(std::iter::repeat_n(Some(src), rows.len()));
             lines.extend(rows);
         }
-        self.note_preview_cache = Some((path, colors, width, lines, sources));
+        self.note_preview_cache =
+            Some((path, colors, width, folded, lines, sources, summary_blocks));
+    }
+
+    /// The set of `<details>` block ids currently folded for `path` — the
+    /// session-only fold state (like zen mode, not persisted to
+    /// `config.toml`). `details_folded` is keyed by note path so switching
+    /// away and back to a note keeps its folds; the set is part of the
+    /// `NotePreviewCache` key, so toggling a fold rebuilds the cache.
+    pub(crate) fn details_folded_for(
+        &self,
+        path: &std::path::Path,
+    ) -> std::collections::HashSet<usize> {
+        self.details_folded.get(path).cloned().unwrap_or_default()
+    }
+
+    /// Toggles the `<details>` block whose `<summary>` is at rendered row
+    /// `row` (a mouse click, see `App::on_mouse_up`). Returns `true` when a
+    /// block was actually toggled — the caller uses that to skip the
+    /// normal click-to-edit behavior, since a click on a summary handle
+    /// means "fold/unfold" not "start editing here".
+    pub(crate) fn toggle_details_block(&mut self, row: usize) -> bool {
+        let Some(note) = self.selected_note() else {
+            return false;
+        };
+        let Some(src_line) = self.note_preview_source_line(row) else {
+            return false;
+        };
+        let Some(&block) = self
+            .note_preview_cache
+            .as_ref()
+            .and_then(|(_, _, _, _, _, _, summary_blocks)| summary_blocks.get(&src_line))
+        else {
+            return false;
+        };
+        let folded = self.details_folded.entry(note.path.clone()).or_default();
+        if folded.contains(&block) {
+            folded.remove(&block);
+            self.set_status(format!("details block {block}: expanded"));
+        } else {
+            folded.insert(block);
+            self.set_status(format!("details block {block}: collapsed"));
+        }
+        true
     }
 
     /// Keeps the tags modal's `TagIndex` up to date without rebuilding it on
@@ -2270,7 +2334,7 @@ impl App {
     pub(crate) fn note_preview_lines(&self) -> Option<&[Line<'static>]> {
         self.note_preview_cache
             .as_ref()
-            .map(|(_, _, _, lines, _)| lines.as_slice())
+            .map(|(_, _, _, _, lines, _, _)| lines.as_slice())
     }
 
     /// The 0-based raw-source (`note.body.lines()`) index that rendered
@@ -2282,7 +2346,7 @@ impl App {
     pub(crate) fn note_preview_source_line(&self, row: usize) -> Option<usize> {
         self.note_preview_cache
             .as_ref()
-            .and_then(|(_, _, _, _, sources)| sources.get(row).copied().flatten())
+            .and_then(|(_, _, _, _, _, sources, _)| sources.get(row).copied().flatten())
     }
 
     /// The cached revision count for whichever note is currently selected,

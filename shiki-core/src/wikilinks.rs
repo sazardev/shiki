@@ -30,6 +30,36 @@ pub fn resolve_one(link: &str, notes: &[Note]) -> Option<PathBuf> {
         .map(|n| n.path.clone())
 }
 
+/// Resolves a wikilink against the current notebook's notes first, then —
+/// if it doesn't match there — falls back to every other notebook's notes.
+/// `resolve_one` alone is notebook-scoped, which silently breaks any link
+/// that points across notebooks: the daily note's "## Due today" agenda
+/// bullets `[[link]]` tasks living in *other* notebooks, and any note that
+/// links to one elsewhere, would report "doesn't match any note". Local
+/// resolution always wins (two notebooks can legitimately have different
+/// notes with the same title — see `graph.rs`'s note about not resolving
+/// globally), so the fallback only ever sees links the current notebook
+/// genuinely can't satisfy. Returns the resolved path plus the name of the
+/// notebook it lives in (`None` when it resolved locally), so the caller
+/// can switch notebooks before jumping.
+pub fn resolve_one_global<'a>(
+    link: &str,
+    local_notes: &[Note],
+    global: &'a [(crate::Notebook, Note)],
+) -> Option<(PathBuf, Option<&'a str>)> {
+    if let Some(path) = resolve_one(link, local_notes) {
+        return Some((path, None));
+    }
+    let link = link.trim();
+    let slug = Note::slugify(link);
+    for (nb, note) in global {
+        if note.frontmatter.title.eq_ignore_ascii_case(link) || note.file_stem() == slug {
+            return Some((note.path.clone(), Some(&nb.name)));
+        }
+    }
+    None
+}
+
 /// Every note in `notes` (excluding `target` itself) whose body contains a
 /// `[[wikilink]]` that resolves to `target` — the reverse of `extract` +
 /// `resolve_one`, used to answer "what links here?" without every note
@@ -262,6 +292,44 @@ mod tests {
     fn resolve_one_returns_none_for_unknown_link() {
         let notes = vec![note("a/hiking.md", "Weekend Hiking Trip", "")];
         assert_eq!(resolve_one("nonexistent", &notes), None);
+    }
+
+    #[test]
+    fn resolve_one_global_prefers_local_notebook() {
+        let local_dupe = vec![
+            note("a/hub.md", "Roadmap", ""),
+            note("a/spoke.md", "Spoke", ""),
+        ];
+        let global = vec![(
+            crate::Notebook::new("work", PathBuf::from("a")),
+            note("a/spoke.md", "Spoke", ""),
+        )];
+        assert_eq!(
+            resolve_one_global("spoke", &local_dupe, &global),
+            Some((PathBuf::from("a/spoke.md"), None))
+        );
+    }
+
+    #[test]
+    fn resolve_one_global_falls_back_to_other_notebooks() {
+        let local = vec![note("a/hub.md", "Hub", "See [[Roadmap]].")];
+        let global = vec![(
+            crate::Notebook::new("work", PathBuf::from("b")),
+            note("b/roadmap.md", "Roadmap", ""),
+        )];
+        let (path, notebook) = resolve_one_global("roadmap", &local, &global).unwrap();
+        assert_eq!(path, PathBuf::from("b/roadmap.md"));
+        assert_eq!(notebook, Some("work"));
+    }
+
+    #[test]
+    fn resolve_one_global_returns_none_when_nowhere() {
+        let local = vec![note("a/hub.md", "Hub", "")];
+        let global = vec![(
+            crate::Notebook::new("work", PathBuf::from("b")),
+            note("b/other.md", "Other", ""),
+        )];
+        assert_eq!(resolve_one_global("nope", &local, &global), None);
     }
 
     #[test]
