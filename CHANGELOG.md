@@ -58,6 +58,10 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   (leading spaces then `- `/`* `/`+ ` or `N. `) indent and step the bullet glyph `•` → `◦` → `▪`;
   `>> nested quote` repeats the `▏` gutter per level; `~~struck~~` renders crossed-out; a line
   with 4+ leading spaces that isn't a list/quote renders dim like fenced code.
+- Code fences in PREVIEW now show a line-number gutter: each code row is prefixed with a right-
+  aligned `N │ ` (muted, not the italic dim of the code itself) that resets per fence — so reading
+  a highlighted block references "line 3" the same way a real editor would, and the header row
+  (`▌ rust  main.rs`) plus gutter make the block read as one unit.
 - `shiki capture "text"`: near-instant note capture with no `$EDITOR` and no TUI drawn — meant for
   scripts, launchers (rofi/waybar/Raycast/AutoHotkey), or an OS hotkey. Targets
   `general.default_notebook` by default (`-n <notebook>` overrides), auto-generates a timestamped

@@ -21,7 +21,7 @@ cargo fmt --all                      # format (run after editing, before checkin
 cargo run -p shiki-cli -- <args>     # run the binary, e.g. `-- new "titulo"`, `-- daily`, no args launches the TUI
 ```
 
-There are ~292 `#[test]`s: 134 in `shiki-core`, 17 in `shiki-config`, 128 in `shiki-tui`, 13 in
+There are ~293 `#[test]`s: 134 in `shiki-core`, 17 in `shiki-config`, 129 in `shiki-tui`, 13 in
 `shiki-cli` — `cargo test --workspace` is green. They're all inline `#[cfg(test)]` modules inside
 the source files (no `tests/` dirs, no `#[ignore]`, no fixture setup), so the pattern set by
 `panel_drawer::tests` (`shiki-tui/src/panel_drawer.rs`) — covering `drawer_hit_at`'s mouse
@@ -969,6 +969,15 @@ accent/bold for labels, muted for the shape brackets and connectors — same col
 `math`/`render`. `kind_of` only treats a fence as a diagram when its first content line is a real
 `graph`/`flowchart`/`sequenceDiagram` header, so arbitrary text under a ` ```mermaid ` fence
 falls back instead of being mangled.
+
+**Every non-mermaid code fence gets a right-aligned line-number gutter**: `code_line_no` (reset to
+0 when a fence opens, incremented per source line inside it) is rendered as a leading muted span
+`format!("{n:>3} │ ")` prepended to each code row — before the syntax-highlighted spans for a
+recognized language, before the plain `dim` span otherwise. The gutter is `muted` without the
+italic `dim` uses, so it reads as a separate axis from the code. It's part of the same `Line`, so
+the existing wrap/`note_preview_source_line` machinery treats it as ordinary text — no new
+offset arithmetic anywhere. Line numbers reference the *source* lines of the fence, matching how
+click-to-edit maps a PREVIEW row back to the raw Markdown line.
 
 **List items, blockquotes, and indented code all render at any nesting depth, via five small
 prefix helpers (`done_task_item_prefix`/`open_task_item_prefix`/`bullet_item_prefix`/

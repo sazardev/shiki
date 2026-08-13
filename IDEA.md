@@ -296,6 +296,11 @@ A ` ```mermaid ` fence renders as an actual diagram instead of flat text: flowch
 columns with arrows between them. Same hand-rolled-parser approach as the math converter — a
 diagram it can't parse falls back to the previous flat styling rather than breaking.
 
+Every code fence renders as a block: a header row (`▌ rust  main.rs`, with an optional `file:`
+token), per-token syntax highlighting, and a right-aligned line-number gutter (`N │ `) that resets
+per fence — so code in PREVIEW reads like a real editor view, and discussing "line 3" of a
+highlighted block is unambiguous.
+
 Lists, blockquotes, and code render at any nesting depth: a list item indented two spaces per
 level keeps its indentation and steps the bullet glyph `•` → `◦` → `▪` (ordered items keep their
 `N.` marker); `>> nested quote` repeats the `▏` gutter once per `>`; a line with 4+ leading
