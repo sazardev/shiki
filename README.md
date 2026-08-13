@@ -113,9 +113,9 @@ the [website](https://sazardev.github.io/shiki/#themes).
 - **`shiki doctor`** — an environment health check that works even with a broken config; also
   flags duplicate/colliding keybindings, `/`-menu snippet triggers, unrecognized `config.toml` keys,
   and colliding notebook paths before they cause confusion.
-- **CLI commands** alongside the TUI (`new`, `list`, `edit`, `show`, `search`, `daily`, `sync`,
-  `export`, `publish`, `tasks`, `graph`, `query`, `notebook`, `theme`, `config`, `doctor`) for
-  quick one-off operations without opening the UI.
+- **CLI commands** alongside the TUI (`new`, `capture`, `list`, `edit`, `show`, `search`,
+  `daily`, `sync`, `export`, `publish`, `tasks`, `graph`, `query`, `notebook`, `theme`,
+  `config`, `doctor`) for quick one-off operations without opening the UI.
 
 ## Install
 

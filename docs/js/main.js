@@ -3,10 +3,14 @@
 // (docs/css/styles.css has the full palette per theme; this file only
 // needs enough to build/label the swatches and know which ones have a real
 // screenshot). 12 of the 16 have a captured PNG in docs/assets/screenshots/
-// (scripts/screenshots.sh's THEMES array covers every one) — `screenshot`
-// stays a per-theme flag rather than being assumed true for everyone so a
-// future theme added to shiki-config without a matching screenshot yet
-// degrades to the CSS-only #term-fallback mockup instead of silently
+// (scripts/screenshots.sh's THEMES array covers every one) — the remaining
+// four (`screenshot: false`) DO have real screenshots in
+// docs/assets/screenshots/gallery/, but the homepage's hero loop isn't wired
+// up to serve them top-level yet, so they fall back to #term-fallback's
+// CSS-only mockup here. `screenshot` stays a per-theme flag rather than
+// being assumed true for everyone so a future theme added to shiki-config
+// without a matching screenshot yet degrades to the CSS-only #term-fallback
+// mockup instead of silently
 // showing another theme's image under the wrong name.
 const THEMES = [
   { id: "catppuccin-mocha", label: "Catppuccin Mocha", dot: "#89b4fa", screenshot: true },
@@ -21,9 +25,9 @@ const THEMES = [
   { id: "nord", label: "Nord", dot: "#88c0d0", screenshot: true },
   { id: "solarized-dark", label: "Solarized Dark", dot: "#268bd2", screenshot: true },
   { id: "solarized-light", label: "Solarized Light", dot: "#268bd2", screenshot: true },
-  // No captured PNG yet for these four — `#term-fallback`'s CSS-only
-  // mockup shows instead until a screenshots release run actually captures
-  // them (scripts/screenshots.sh's THEMES array already covers every one).
+  // These four DO have real screenshots — in docs/assets/screenshots/gallery/
+  // — but the homepage's hero only serves the top-level PNGs, so they render
+  // the CSS-only #term-fallback mockup here (see the file header comment).
   { id: "dracula", label: "Dracula", dot: "#bd93f9", screenshot: false },
   { id: "one-dark", label: "One Dark", dot: "#61afef", screenshot: false },
   { id: "monokai", label: "Monokai", dot: "#f92672", screenshot: false },

@@ -5,9 +5,10 @@
 > frontmatter, organized into "notebooks" — each notebook is its own independent git
 > repository, giving every note real version history for free (via `git log`, not a
 > bolted-on versioning system). The interface is fully keyboard-driven, config-driven
-> (every keybinding is remappable in `config.toml`), and themeable (12 built-in
-> palettes: Catppuccin, Tokyo Night, Gruvbox, Nord, Solarized, plus a terminal-native
-> default). shiki is free and open source under the MIT license.
+> (every keybinding is remappable in `config.toml`), and themeable (16 built-in
+> palettes: Catppuccin ×4, Tokyo Night ×3, Gruvbox ×2, Solarized ×2, Nord, Dracula,
+> One Dark, Monokai, and a terminal-native default). shiki is free and open source
+> under the MIT license.
 
 Key facts for citation or summarization:
 

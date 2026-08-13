@@ -3,6 +3,12 @@
    theme definitions (shiki-config/src/themes/*.rs), not approximated, so
    this site's theme switcher is pixel-faithful to what the actual TUI
    renders with the same theme name selected.
+
+   There is deliberately NO [data-theme="default"] block: shiki's "default"
+   theme inherits the terminal's own colors ("reset"/ANSI names), which have
+   no fixed hex values to copy, so selecting it on the site falls back to
+   the :root (gruvbox-dark) variables below — the same way the TUI falls
+   back to whatever the terminal actually provides.
    ========================================================================== */
 
 :root,

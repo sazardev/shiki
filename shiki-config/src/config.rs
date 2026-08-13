@@ -1198,10 +1198,9 @@ pub struct NotebookGitOverride {
     /// Set when "delete notebook" was answered with "just remove the
     /// reference" instead of "delete the files" — the directory on disk is
     /// left completely untouched, this only tells `App::reload_notebooks`
-    /// to stop listing it as a tracked notebook. There's deliberately no
-    /// in-app "un-hide" yet; reversing this means clearing the flag (or the
-    /// whole `[notebooks.<name>]` table, if `path` isn't also set) by hand
-    /// in `config.toml` and relaunching.
+    /// to stop listing it as a tracked notebook. Reversible in-app: the
+    /// Settings → NOTEBOOKS tab lists hidden notebooks (marked `(hidden)`)
+    /// and drilling into one lets you clear this flag to restore it.
     #[serde(default)]
     pub hidden: bool,
     /// Whether this notebook's notes are encrypted at rest (`age::scrypt`,
@@ -1591,9 +1590,13 @@ fn section_comment(line: &str) -> Option<&'static str> {
         }
         "[editor]" => {
             "\
-# Inline note editor UX (Mode::Edit) — every key here is off unless noted,
-# so nothing about how the editor behaves changes until you opt in, e.g.
-# from the EDITOR tab in Settings (leader+`s`).
+# Inline note editor UX (Mode::Edit) — each key defaults independently; the
+# mostly-additive conveniences (mouse_selection, find_replace, auto_list_
+# continue, format_shortcuts, auto_pair_brackets, paste_url_as_link,
+# snippet_expand_tab, move_line, duplicate_line, block_indent_select) are on
+# by default, while the ones that change existing behavior (os_clipboard,
+# select_all_ctrl_a, line_numbers, multi_cursor, typewriter_scroll) are off
+# until you opt in from the EDITOR tab in Settings (leader+`s`).
 # - mouse_selection: click to position the cursor, drag to select,
 #   double-click for a word, triple-click for a line. Defaults to true.
 # - find_replace: Ctrl+F opens a find/replace bar. Defaults to true.

@@ -253,6 +253,7 @@ sync attempt (manual or automatic) just tries the push again.
 | `D` | Toggle each note's date next to its title in the list (off by default) |
 | `v` | Select mode (`Mode::Visual`) — anchors a multi-select range at the current item; `j`/`k` extend/shrink it, `v`/`Esc` cancels. `d`/`m` (above) act on the whole range instead of one item |
 | `y` | Select-mode only: copies every selected note/folder to a prompted target (same `notebook/path` syntax as `m`), leaving the originals in place |
+| `M` | Metadata editor — the selected note's tags plus every custom frontmatter field (`status`, `priority`, `due`, or anything else), add/edit/delete in place without leaving the TUI. Also on PREVIEW scope |
 
 #### `[keybindings.preview]` — active while PREVIEW is focused
 
@@ -263,6 +264,7 @@ sync attempt (manual or automatic) just tries the push again.
 | `H` | Note history — every commit that changed this specific note, newest first, real git history (not a separate versioning system). `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` views a revision's full content (frontmatter included, since that's what's actually in the commit), `d` views a real unified diff of that revision against its parent instead (colored `-`/`+` lines, computed by libgit2 itself, not a hand-rolled line algorithm — the first commit in a note's history has no parent, so every line comes back as an addition) — `d` also works from inside the full-content view to switch straight to the diff of the same revision, `r` reverts to the highlighted (or currently-viewed, either view) revision — behind a confirmation, since it overwrites the current content. The revert itself doesn't commit; it shows up as a normal pending change, picked up by `s`/`u`/`auto_sync` like any other edit. The footer shows the count while reading a note (`{n} changes`) |
 | `L` | Links — the selected note's outgoing `[[wikilinks]]` (resolved against every note in the notebook, any folder depth), every other note that links back to it, and notes that *mention* this note's title in plain text without linking to it ("Outgoing"/"Backlinks"/"Mentions (unlinked)" sections; a section with nothing in it is omitted). `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` jumps to the selected note (an unresolved outgoing link reports that instead of jumping), `c` on a mention row *repairs* the missed link — it wraps that note's plain-text mention into a real `[[wikilink]]` (preserving its casing) and the row visibly migrates to Backlinks — and `Esc`/`q` closes. Also reachable globally via leader+`B` |
 | `o` | Outline — every `#`..`######` heading in the selected note, indented by level. `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` scrolls PREVIEW to that heading, `Esc`/`q` closes. Also reachable as `Ctrl+O` from inside `Mode::Edit` itself — there, `Enter` moves the editor's own cursor to the heading instead of scrolling PREVIEW, and the headings come from the live, possibly-unsaved buffer rather than the note's last-saved body |
+| `M` | Metadata editor — same action as NOTES scope's `M`, bound here too so it works with PREVIEW focused as well |
 
 Mouse: a plain click over a note's rendered body jumps straight into the inline editor with the
 cursor on the clicked line — a mouse-only alternative to `i`/vim motions. Click-and-drag instead
@@ -270,6 +272,13 @@ selects the dragged rows (highlighted with the theme's `selection` color) and co
 clipboard the moment the button is released — no extra keypress needed, same OSC 52 mechanism as
 the logs modal's `y`/`c`. Both are controlled by `general.mouse_drag_selection` (on by default;
 toggle it in Settings' GENERAL tab or in `config.toml`).
+
+A `<details>`/`<summary>` block in a note's body renders as a real collapsible section in PREVIEW:
+expanded blocks show a `▾` handle (the summary text, the body below it), collapsed ones a `▸`
+handle plus a muted hidden-line count (`▸ More  (12 hidden)`) with everything inside omitted — a
+plain click on the summary row toggles it (instead of entering edit mode there), and the fold state
+is kept per note for the session, so folding a long section once keeps it folded while you browse.
+This is the same `<details>`/`<summary>` markup the `/`-menu's `details` block inserts.
 
 #### Inside the inline editor (`i`)
 
@@ -410,6 +419,7 @@ shiki notebook rename <old> <new>
 shiki notebook delete <name> --yes  # permanently deletes the notebook and every note in it
 shiki notebook encrypt <name>       # enable encryption at rest (prompts for a passphrase, twice)
 shiki notebook decrypt <name>       # reverse it — decrypts every note back to plain text
+shiki notebook rekey <name>         # change the passphrase (verifies the old one, re-encrypts in place)
 shiki query 'where status = pending sort due asc'   # Dataview-style filter/sort over frontmatter
 shiki query 'where due < today' --count             # for status bars, like `shiki tasks --count`
 shiki query --saved due-soon                        # run a query saved under [queries] in config.toml
@@ -584,11 +594,10 @@ Practical consequences worth knowing:
   revision decrypts it the same way a live read does, but the unified *diff* view (`d`) can't work
   at all — a tree diff of two ciphertext blobs is meaningless noise, so it falls back to showing the
   decrypted full content instead, with a status message explaining why.
-- Changing the passphrase isn't a per-machine setting you can pick independently — it means
-  decrypting and re-encrypting with the new one, and every other machine still holding the old
-  ciphertext needs the new passphrase from that point on (there's no `shiki notebook rekey`
-  convenience command yet — do it by hand: `shiki notebook decrypt <name>` with the old passphrase,
-  then `shiki notebook encrypt <name>` with the new one, then push).
+- Changing the passphrase is `shiki notebook rekey <name>` — it verifies the old passphrase
+  against the canary, prompts for the new one twice, and re-encrypts every note in place without
+  ever writing plaintext to disk mid-operation (no `decrypt` + `encrypt` two-step needed). Every
+  other machine still holding the old ciphertext needs the new passphrase from that point on.
 
 ---
 
@@ -628,9 +637,7 @@ file's mtime. It only gains real frontmatter once you touch it through shiki
 
 ```
 ~/.config/shiki/
-├── config.toml            # general configuration
-├── keybindings.toml       # custom shortcuts (optional)
-├── theme.toml             # custom theme (optional)
+├── config.toml            # general configuration (keybindings, theme, git, editor, snippets…)
 ├── shiki.log              # persistent status/log history (leader+l to view, x to clear)
 ├── capture.port           # port the capture daemon is listening on (only while a TUI has it enabled)
 ├── last-capture.toml      # backs `shiki capture --undo` — removed once undone
@@ -828,6 +835,8 @@ tree_view = "T"
 toggle_dates = "D"
 visual = "v"
 copy_entries = "y"
+# Metadata editor — tags plus custom frontmatter fields, add/edit/delete.
+metadata = "M"
 
 [keybindings.preview]
 edit_inline = "i"
@@ -835,6 +844,8 @@ edit_external = "E"
 history = "H"
 links = "L"
 outline = "o"
+# Same metadata editor as NOTES scope, bound here too.
+metadata = "M"
 
 [theme]
 name = "gruvbox-dark"
@@ -872,9 +883,10 @@ remote_template = ""
 # remote_template = "git@git.example.com:notes/{notebook}.git"
 
 # Native note editor (Mode::Edit) UX — every key here is independently
-# toggleable from the EDITOR tab in Settings (leader+`s`); nothing changes
-# until you opt in, except the two purely-additive ones below which default
-# to true.
+# toggleable from the EDITOR tab in Settings (leader+`s`); the mostly-additive
+# conveniences default to true, the ones that change existing behavior
+# (clipboard wiring, line-number gutter, multi-cursor, Ctrl+A select-all,
+# typewriter scrolling) default to false.
 [editor]
 mouse_selection = true   # click to position, drag/double/triple-click to select
 find_replace = true      # Ctrl+F opens a find/replace bar in the editor
@@ -923,11 +935,13 @@ auto_push = true
 # Encrypts every note at rest with a passphrase (prompted, never stored here
 # or anywhere else — see "Encryption at rest" above). No global default to
 # inherit from; this is opt-in per notebook, managed via `shiki notebook
-# encrypt/decrypt <name>` or Settings → NOTEBOOKS, not by hand-editing this.
+# encrypt/decrypt/rekey <name>` or Settings → NOTEBOOKS, not by hand-editing
+# this.
 # encrypt = true
 # `hidden` is set automatically when "delete notebook" is answered with "just
 # remove the reference": the directory on disk is left untouched, the notebook
-# just stops being listed. No in-app "un-hide" yet — clear it here by hand.
+# just stops being listed. Un-hide it from Settings → NOTEBOOKS (drill into
+# the `(hidden)` entry and clear the flag), not by hand-editing here.
 
 # Custom entries for the inline editor's `/`-menu, keyed by trigger. Empty by
 # default — the built-in commands (h1/h2/h3/code/math/table/check/quote/

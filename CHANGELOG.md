@@ -8,6 +8,26 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ### Added
 
+- `<details>`/`<summary>` blocks in a note's body are now truly collapsible in PREVIEW: a
+  collapsed block shows only its summary (`▸` plus a hidden-line count) and hides everything
+  inside it — a plain mouse click on the summary row toggles it (instead of entering edit mode
+  there), and the fold state is kept per note for the session (not persisted to `config.toml`).
+  Previously every `<details>` block rendered fully expanded with no way to fold it.
+- `shiki notebook rekey <name>`: changes an encrypted notebook's passphrase in one step —
+  verifies the old one against the canary, prompts for a new one twice, and re-encrypts every
+  note in place, never writing plaintext to disk mid-operation (the old `decrypt` then
+  `encrypt` two-step still works but leaves notes unencrypted in between).
+- Hidden notebooks can now be restored from Settings → NOTEBOOKS: the list includes notebooks
+  that were untracked via the notebook-delete dialog's "just remove the reference" answer
+  (marked `(hidden)`), and drilling into one has a `hidden` field whose `Enter` clears the flag
+  and brings the notebook back — previously the only way to un-hide was hand-editing
+  `config.toml`.
+- Cross-notebook `[[wikilink]]` resolution: a link that doesn't match any note in the current
+  notebook now falls back to every other notebook (local resolution always wins, so
+  same-titled notes in different notebooks still resolve to the current one). Both Ctrl+click in
+  PREVIEW and the links modal use it, and jumping to a cross-notebook result switches notebooks
+  automatically — this fixes the daily-note "Due today" agenda's links to tasks living in other
+  notebooks, which previously reported "doesn't match any note".
 - `shiki capture "text"`: near-instant note capture with no `$EDITOR` and no TUI drawn — meant for
   scripts, launchers (rofi/waybar/Raycast/AutoHotkey), or an OS hotkey. Targets
   `general.default_notebook` by default (`-n <notebook>` overrides), auto-generates a timestamped
