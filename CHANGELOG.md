@@ -28,6 +28,12 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   PREVIEW and the links modal use it, and jumping to a cross-notebook result switches notebooks
   automatically — this fixes the daily-note "Due today" agenda's links to tasks living in other
   notebooks, which previously reported "doesn't match any note".
+- Code fences in PREVIEW now render as real code blocks instead of literal ` ``` ` markers: the
+  opening fence becomes a header row (`▌ rust  main.rs` — accent-colored `▌` + language tag, with
+  an optional `file:<path>` token from the fence line shown muted after it), the closing fence
+  renders nothing, and the code body keeps its per-token syntax highlighting. The `file:` token is
+  shown exactly as written (only the language tag is lowercased), so a real path like `App.tsx`
+  isn't mangled; an untagged fence gets a plain `▌ code` header.
 - `shiki capture "text"`: near-instant note capture with no `$EDITOR` and no TUI drawn — meant for
   scripts, launchers (rofi/waybar/Raycast/AutoHotkey), or an OS hotkey. Targets
   `general.default_notebook` by default (`-n <notebook>` overrides), auto-generates a timestamped
