@@ -40,7 +40,7 @@ new_note() {
 }
 
 # --- Headings, lists, checkboxes, blockquotes -------------------------------
-new_note "Formatting overview" $'# Big heading\n\n## Second level\n\n### Third level\n\nIntro text with **bold**, *italic*, `inline code`, a [link](https://example.com) and an ![image](https://example.com/img.png).\n\n- bullet one\n- bullet two\n  - nested bullet\n\n1. ordered one\n2. ordered two\n\n- [ ] open task\n- [x] done task\n\n> A blockquote with **bold** inside.\n\n---\n\nTrailing paragraph after the rule.'
+new_note "Formatting overview" $'# Big heading\n\n## Second level\n\n### Third level\n\nIntro text with **bold**, *italic*, `inline code`, a [link](https://example.com) and an ![image](https://example.com/img.png).\n\n- bullet one\n- bullet two\n  - nested bullet\n    - deeper bullet\n\n1. ordered one\n  2. ordered nested\n\n- [ ] open task\n- [x] done task\n\n> A blockquote with **bold** inside.\n\n>> A nested blockquote.\n\n~~strikethrough text~~\n\n    indented code block\n\n---\n\nTrailing paragraph after the rule.'
 
 # --- Tables -----------------------------------------------------------------
 new_note "Data tables" $'# Tables\n\n| Name | Status | Priority |\n| --- | --- | --- |\n| login | done | high |\n| docs | pending | medium |\n| auth | in-progress | high |\n\nA paragraph after the table.'

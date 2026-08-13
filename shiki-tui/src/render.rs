@@ -266,6 +266,23 @@ fn inline_spans(text: &str, base: Style, link: Style, math: Style) -> Vec<Span<'
                 continue;
             }
         }
+        if chars[i] == '~' && chars.get(i + 1) == Some(&'~') {
+            // `~~strikethrough~~` — the only inline marker inline_spans didn't
+            // handle; rendered crossed-out, distinct from a done task's own
+            // strikethrough but the same modifier.
+            if let Some(end) =
+                find_pair(&chars, i + 2, '~').filter(|&e| chars.get(e + 1) == Some(&'~'))
+            {
+                flush(&mut plain, &mut spans, base);
+                let inner: String = chars[i + 2..end].iter().collect();
+                spans.push(Span::styled(
+                    inner,
+                    base.add_modifier(Modifier::CROSSED_OUT),
+                ));
+                i = end + 2;
+                continue;
+            }
+        }
         if chars[i] == '`' {
             if let Some(end) = find_pair(&chars, i + 1, '`') {
                 flush(&mut plain, &mut spans, base);
@@ -351,6 +368,71 @@ fn ordered_list_prefix(line: &str) -> Option<(&str, &str)> {
         return None;
     }
     Some((&line[..=digits], &line[digits + 2..]))
+}
+
+/// Leading-whitespace count for a line — how many nesting levels deep a list
+/// item/quote sits. 2 spaces per level (CommonMark's 2-space nested-list
+/// convention), clamped so pathological indentation can't explode the count.
+fn indent_level(line: &str) -> usize {
+    (line.len() - line.trim_start().len()) / 2
+}
+
+/// A done checkbox task item at any nesting depth: leading spaces, then
+/// `- [x] ` / `- [X] `. Returns (level, rest).
+fn done_task_item_prefix(line: &str) -> Option<(usize, &str)> {
+    let t = line.trim_start();
+    let rest = t
+        .strip_prefix("- [x] ")
+        .or_else(|| t.strip_prefix("- [X] "))?;
+    Some((indent_level(line), rest))
+}
+
+/// An open checkbox task item at any nesting depth: leading spaces, then
+/// `- [ ] `. Returns (level, rest).
+fn open_task_item_prefix(line: &str) -> Option<(usize, &str)> {
+    let t = line.trim_start();
+    let rest = t.strip_prefix("- [ ] ")?;
+    Some((indent_level(line), rest))
+}
+
+/// An unordered bullet item at any nesting depth: leading spaces, then
+/// `- `/`* `/`+ `. The bullet glyph steps through `•` → `◦` → `▪` by depth
+/// so nesting is readable without relying on the raw indentation alone.
+/// Returns (level, marker, rest).
+fn bullet_item_prefix(line: &str) -> Option<(usize, &str, &str)> {
+    let t = line.trim_start();
+    let rest = t
+        .strip_prefix("- ")
+        .or_else(|| t.strip_prefix("* "))
+        .or_else(|| t.strip_prefix("+ "))?;
+    let level = indent_level(line);
+    let marker = match level % 3 {
+        0 => "•",
+        1 => "◦",
+        _ => "▪",
+    };
+    Some((level, marker, rest))
+}
+
+/// An ordered-list item at any nesting depth: leading spaces, then `1. ` etc.
+/// Returns (level, marker, rest) — the numeric marker is kept as written.
+fn ordered_item_prefix(line: &str) -> Option<(usize, &str, &str)> {
+    let t = line.trim_start();
+    let (marker, rest) = ordered_list_prefix(t)?;
+    Some((indent_level(line), marker, rest))
+}
+
+/// A blockquote at any nesting depth: one or more leading `> ` markers.
+/// `>> nested quote` returns depth 2, so the gutter repeats `▏ ` once per
+/// level. Returns (depth, rest).
+fn blockquote_prefix(line: &str) -> Option<(usize, &str)> {
+    let t = line.trim_start();
+    let depth = t.bytes().take_while(|&b| b == b'>').count();
+    if depth == 0 {
+        return None;
+    }
+    let rest = t[depth..].trim_start();
+    Some((depth, rest))
 }
 
 /// A horizontal rule: 3+ of the same `-`/`*`/`_` character (optionally
@@ -720,38 +802,57 @@ pub(crate) fn markdown_to_lines_indexed(
                 link_style,
                 math,
             ))
-        } else if let Some(rest) = line.strip_prefix("- [x] ").or(line.strip_prefix("- [X] ")) {
-            Line::from(vec![
-                Span::styled(
-                    format!("{}", crate::icons::CHECK),
-                    Style::default().fg(accent),
-                ),
-                Span::styled(
-                    rest.to_string(),
-                    Style::default()
-                        .fg(muted)
-                        .add_modifier(Modifier::CROSSED_OUT),
-                ),
-            ])
-        } else if let Some(rest) = line.strip_prefix("- [ ] ") {
+        } else if let Some((level, rest)) = done_task_item_prefix(line) {
+            let mut spans = vec![Span::styled(
+                format!("{}", crate::icons::CHECK),
+                Style::default().fg(accent),
+            )];
+            spans.push(Span::styled(
+                rest.to_string(),
+                Style::default()
+                    .fg(muted)
+                    .add_modifier(Modifier::CROSSED_OUT),
+            ));
+            if level > 0 {
+                spans.insert(0, Span::styled(" ".repeat(level * 2), Style::default()));
+            }
+            Line::from(spans)
+        } else if let Some((level, rest)) = open_task_item_prefix(line) {
             let mut spans = vec![Span::styled("☐ ", Style::default().fg(muted))];
             spans.extend(inline_spans(rest, text, link_style, math));
+            if level > 0 {
+                spans.insert(0, Span::styled(" ".repeat(level * 2), Style::default()));
+            }
             Line::from(spans)
-        } else if let Some(rest) = line.strip_prefix("- ") {
-            let mut spans = vec![Span::styled("• ", Style::default().fg(accent))];
-            spans.extend(inline_spans(rest, text, link_style, math));
-            Line::from(spans)
-        } else if let Some((marker, rest)) = ordered_list_prefix(line) {
+        } else if let Some((level, marker, rest)) = bullet_item_prefix(line) {
             let mut spans = vec![Span::styled(
                 format!("{marker} "),
                 Style::default().fg(accent),
             )];
             spans.extend(inline_spans(rest, text, link_style, math));
+            if level > 0 {
+                spans.insert(0, Span::styled(" ".repeat(level * 2), Style::default()));
+            }
             Line::from(spans)
-        } else if let Some(rest) = line.strip_prefix("> ") {
-            let mut spans = vec![Span::styled("▏ ", dim)];
+        } else if let Some((level, marker, rest)) = ordered_item_prefix(line) {
+            let mut spans = vec![Span::styled(
+                format!("{marker} "),
+                Style::default().fg(accent),
+            )];
+            spans.extend(inline_spans(rest, text, link_style, math));
+            if level > 0 {
+                spans.insert(0, Span::styled(" ".repeat(level * 2), Style::default()));
+            }
+            Line::from(spans)
+        } else if let Some((depth, rest)) = blockquote_prefix(line) {
+            let gutter = "▏ ".repeat(depth);
+            let mut spans = vec![Span::styled(gutter, dim)];
             spans.extend(inline_spans(rest, dim, link_style, math));
             Line::from(spans)
+        } else if line.len() - line.trim_start().len() >= 4 {
+            // Indented code block: 4+ leading spaces and not a list/quote —
+            // render dim like fenced code (no language to highlight).
+            Line::from(Span::styled(line.trim_start().to_string(), dim))
         } else {
             Line::from(inline_spans(line, text, link_style, math))
         };
@@ -1142,5 +1243,60 @@ mod tests {
         let body = "```tsx file:App.tsx\nconst x = 1;\n```";
         let lines = markdown_to_lines(body, &PALETTE);
         assert_eq!(line_text(&lines[0]), "▌ tsx  App.tsx");
+    }
+
+    #[test]
+    fn nested_lists_render_with_indent_and_varying_bullets() {
+        let body = "- top\n  - nested\n    - deeper\n1. one\n  2. two";
+        let lines = markdown_to_lines(body, &PALETTE);
+        let t: Vec<String> = lines.iter().map(line_text).collect();
+        // Top-level bullet keeps •; nested levels get ◦ / ▪ and leading space.
+        assert_eq!(t[0], "• top");
+        assert_eq!(t[1], "  ◦ nested");
+        assert_eq!(t[2], "    ▪ deeper");
+        // Ordered items keep their numeric marker, indented by depth.
+        assert_eq!(t[3], "1. one");
+        assert_eq!(t[4], "  2. two");
+    }
+
+    #[test]
+    fn nested_tasks_and_checkboxes_render_with_indent() {
+        let body = "- [ ] open\n  - [x] done\n    - [ ] deep";
+        let lines = markdown_to_lines(body, &PALETTE);
+        let t: Vec<String> = lines.iter().map(line_text).collect();
+        assert_eq!(t[0], "☐ open");
+        // Done tasks use the Nerd Font CHECK glyph (icons::CHECK), which
+        // renders as ✔ in a patched terminal; compare the prefix here.
+        assert!(t[1].starts_with("  "), "{t:?}");
+        assert!(t[1].contains("done"), "{t:?}");
+        assert_eq!(t[2], "    ☐ deep");
+    }
+
+    #[test]
+    fn strikethrough_is_crossed_out_not_literal() {
+        let spans = inline_spans(
+            "a ~~gone~~ b",
+            Style::default(),
+            Style::default(),
+            Style::default(),
+        );
+        let full: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(full, "a gone b");
+        let struck = spans
+            .iter()
+            .find(|s| s.content.as_ref() == "gone")
+            .expect("strikethrough span present");
+        assert!(struck.style.add_modifier.contains(Modifier::CROSSED_OUT));
+    }
+
+    #[test]
+    fn nested_blockquotes_and_indented_code_render() {
+        let body = "> quote\n>> nested quote\n    indented code";
+        let lines = markdown_to_lines(body, &PALETTE);
+        let t: Vec<String> = lines.iter().map(line_text).collect();
+        assert_eq!(t[0], "▏ quote");
+        assert_eq!(t[1], "▏ ▏ nested quote");
+        // Indented code keeps its text (leading spaces stripped), dim-styled.
+        assert_eq!(t[2], "indented code");
     }
 }
