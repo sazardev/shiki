@@ -34,6 +34,11 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   renders nothing, and the code body keeps its per-token syntax highlighting. The `file:` token is
   shown exactly as written (only the language tag is lowercased), so a real path like `App.tsx`
   isn't mangled; an untagged fence gets a plain `▌ code` header.
+- `$$...$$` math blocks in PREVIEW no longer show the literal `$$` delimiters — a single-line
+  block like `$$E = mc^2$$` renders just the formula (accent/italic), and a multi-line block's
+  bare `$$` opener/closer lines produce no rows at all. This also fixes a real bug where a
+  single-line `$$...$$` block left the math state on, silently styling the following paragraphs
+  as math until the next `$$` line.
 - `shiki capture "text"`: near-instant note capture with no `$EDITOR` and no TUI drawn — meant for
   scripts, launchers (rofi/waybar/Raycast/AutoHotkey), or an OS hotkey. Targets
   `general.default_notebook` by default (`-n <notebook>` overrides), auto-generates a timestamped

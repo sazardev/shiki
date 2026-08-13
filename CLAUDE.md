@@ -21,7 +21,7 @@ cargo fmt --all                      # format (run after editing, before checkin
 cargo run -p shiki-cli -- <args>     # run the binary, e.g. `-- new "titulo"`, `-- daily`, no args launches the TUI
 ```
 
-There are ~268 `#[test]`s: 134 in `shiki-core`, 17 in `shiki-config`, 104 in `shiki-tui`, 13 in
+There are ~269 `#[test]`s: 134 in `shiki-core`, 17 in `shiki-config`, 105 in `shiki-tui`, 13 in
 `shiki-cli` — `cargo test --workspace` is green. They're all inline `#[cfg(test)]` modules inside
 the source files (no `tests/` dirs, no `#[ignore]`, no fixture setup), so the pattern set by
 `panel_drawer::tests` (`shiki-tui/src/panel_drawer.rs`) — covering `drawer_hit_at`'s mouse
