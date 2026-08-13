@@ -181,3 +181,67 @@ pub fn decrypt(store: &NotebookStore, config: &mut Config, name: &str) -> Result
     );
     Ok(())
 }
+
+/// Changes an encrypted notebook's passphrase in one step: verifies the old
+/// passphrase against the canary (wrong old passphrase fails before anything
+/// is touched), prompts for the new one twice, re-encrypts every note with
+/// the new passphrase, and rewrites the canary. Unlike the `decrypt` +
+/// `encrypt` two-step, the notes never sit unencrypted on disk in between.
+/// `config.toml` doesn't need touching — `encrypt = true` already holds; the
+/// passphrase was never stored anywhere, so the only thing that changes is
+/// what a future unlock must type.
+pub fn rekey(store: &NotebookStore, config: &mut Config, name: &str) -> Result<()> {
+    if !config.encrypt_for(name) {
+        anyhow::bail!("'{name}' is not encrypted");
+    }
+    let nb = store
+        .get(name)
+        .with_context(|| format!("notebook '{name}' not found"))?;
+
+    let old = rpassword::prompt_password("Current passphrase: ")?;
+    let old_crypto = NotebookCrypto::new(old);
+
+    let canary_path = nb.path.join(CANARY_FILE);
+    let canary = std::fs::read_to_string(&canary_path).with_context(|| {
+        format!("missing {CANARY_FILE} — was '{name}' really encrypted by shiki?")
+    })?;
+    match verify_canary(&old_crypto, &canary) {
+        Ok(true) => {}
+        Ok(false) => anyhow::bail!("canary file is corrupted, not just a wrong passphrase"),
+        Err(e) => anyhow::bail!("wrong passphrase: {e}"),
+    }
+
+    let passphrase = rpassword::prompt_password("New passphrase: ")?;
+    if passphrase.is_empty() {
+        anyhow::bail!("passphrase must not be empty");
+    }
+    let confirm = rpassword::prompt_password("Confirm new passphrase: ")?;
+    if passphrase != confirm {
+        anyhow::bail!("passphrases did not match");
+    }
+    let new_crypto = NotebookCrypto::new(passphrase);
+
+    let old_unlocked = nb.clone().with_crypto(Some(old_crypto));
+    let notes = old_unlocked
+        .all_notes_recursive()
+        .context("could not read existing notes (before any were touched)")?;
+    for note in &notes {
+        note.save_with_crypto(Some(&new_crypto))
+            .with_context(|| format!("could not re-encrypt '{}'", note.path.display()))?;
+    }
+
+    std::fs::write(nb.path.join(CANARY_FILE), canary_blob(&new_crypto)?)
+        .with_context(|| format!("could not rewrite {CANARY_FILE}"))?;
+
+    if let Err(e) = shiki_core::git::commit_all(&nb.path, "shiki: rekey encryption") {
+        println!("warning: could not commit the change: {e}");
+    }
+
+    println!(
+        "'{name}' re-keyed ({} note{} re-encrypted) — use the new passphrase from now on; \
+         any other machine still holding the old one needs it",
+        notes.len(),
+        if notes.len() == 1 { "" } else { "s" }
+    );
+    Ok(())
+}

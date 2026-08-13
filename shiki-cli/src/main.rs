@@ -269,6 +269,14 @@ enum NotebookAction {
     Decrypt {
         name: String,
     },
+    /// Changes an encrypted notebook's passphrase without first decrypting
+    /// to plain text in between: verifies the old passphrase against the
+    /// canary, re-encrypts every note with the new one, and rewrites the
+    /// canary. The `decrypt` + `encrypt` two-step also works, but this never
+    /// leaves the notes unencrypted on disk mid-operation.
+    Rekey {
+        name: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -532,6 +540,9 @@ fn main() -> Result<()> {
             }
             NotebookAction::Decrypt { name } => {
                 commands::notebook::decrypt(&ctx.store, &mut ctx.config, &name)
+            }
+            NotebookAction::Rekey { name } => {
+                commands::notebook::rekey(&ctx.store, &mut ctx.config, &name)
             }
         },
         Some(Commands::Theme { action }) => match action {
