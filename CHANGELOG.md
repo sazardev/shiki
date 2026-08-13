@@ -145,6 +145,11 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ### Fixed
 
+- The notebook drawer (`leader+b`) no longer hides the left edge of the panel underneath it:
+  while the drawer is open the panels are pushed right by `drawer_width` instead of being covered
+  by the overlay. Previously a pure left-anchored overlay sat on top of the panels, so the first
+  ~28 columns of every PREVIEW line — the first half of a long math formula, the start of a code
+  fence, the beginning of any wrapped line — disappeared behind the drawer the moment it opened.
 - The template picker's `{{cursor}}` marker (`a` → title → pick a template) was never actually
   handled — it saved the literal text `{{cursor}}` into the new note's file and always opened the
   editor at the top, unlike the identical marker in `/`-menu snippets, which already worked

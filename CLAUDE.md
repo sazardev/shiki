@@ -91,8 +91,13 @@ key. It's also the first overlay in this codebase that's **left-anchored** rathe
 center-flexed: every other popup (`centered_rect`, used by the theme picker/logs/tree/history/
 tags/confirm) sits in the middle of the screen, but `App::drawer_area` builds a fixed-width
 (`DRAWER_WIDTH`) `Rect` pinned to `x: 0` instead, so it reads as a persistent sidebar rather than a
-dialog — deliberately not using `centered_rect` for this one. `App::drawer_statuses: Vec<(String,
-GitStatus)>` (every notebook, not just the selected one — contrast with `git_status`, which is
+dialog — deliberately not using `centered_rect` for this one. **While the drawer is open, the
+panels are *pushed* right by `drawer_width` rather than covered: `layout::split` takes the drawer's
+width as an extra argument (`App::drawer_offset`, 0 when closed) and shifts `main` right by it,
+because a pure overlay otherwise hid the left edge of whatever panel sat underneath — the first
+~28 columns of every PREVIEW line (e.g. the first half of a long math formula) disappeared behind
+the drawer.** `App::drawer_statuses: Vec<(String, GitStatus)>` (every notebook, not just the
+selected one — contrast with `git_status`, which is
 just the selected notebook) is only populated while `show_drawer` is true (`refresh_drawer_statuses`,
 called from `toggle_drawer` and again from `refresh_git_status`/`apply_git_op_result` whenever it's
 open), since computing it for every notebook on every draw tick would be pure waste when nothing's

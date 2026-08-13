@@ -40,7 +40,15 @@ const SINGLE_HEIGHT: u16 = 14;
 /// `App::zen_mode` (`leader z`) opts into it regardless of actual terminal
 /// size, to hide NOTEBOOKS/NOTES for distraction-free writing. No new
 /// layout math: it's the exact same tier a small terminal already gets.
-pub fn split(area: Rect, focus: Focus, zen_mode: bool) -> Areas {
+///
+/// `drawer_width` is the notebook drawer's overlay width (`leader+b`, default
+/// 30) while it's open, 0 otherwise — the drawer is a left-anchored sidebar
+/// drawn on top of the panels, so the panels' main area is *pushed* right by
+/// that much while it's open rather than letting it cover the first columns
+/// of whatever panel sits underneath (which hid the left edge of every
+/// PREVIEW line, e.g. the first half of a long math formula, behind the
+/// drawer). The status bar stays full-width below.
+pub fn split(area: Rect, focus: Focus, zen_mode: bool, drawer_width: u16) -> Areas {
     // No outer margin and no gap between constraints: panels go edge-to-edge
     // with the terminal and with each other, so the only "padding" visible
     // anywhere is each panel's own border.
@@ -52,6 +60,15 @@ pub fn split(area: Rect, focus: Focus, zen_mode: bool) -> Areas {
         .split(area);
     let main = rows[0];
     let status_bar = rows[1];
+    let main = if drawer_width > 0 {
+        Rect {
+            x: main.x + drawer_width,
+            width: main.width.saturating_sub(drawer_width),
+            ..main
+        }
+    } else {
+        main
+    };
 
     if zen_mode || main.width < SINGLE_WIDTH || main.height < SINGLE_HEIGHT {
         return single(main, status_bar, focus);

@@ -1950,10 +1950,15 @@ impl App {
                     .selected_note()
                     .map(|n| n.body.lines().count() as u16)
                     .unwrap_or(0);
-                let content_height = layout::split(self.last_frame_area, self.focus, self.zen_mode)
-                    .preview
-                    .height
-                    .saturating_sub(2);
+                let content_height = layout::split(
+                    self.last_frame_area,
+                    self.focus,
+                    self.zen_mode,
+                    self.drawer_offset(),
+                )
+                .preview
+                .height
+                .saturating_sub(2);
                 self.preview_scroll = total_lines.saturating_sub(content_height);
             }
         }
@@ -2199,10 +2204,15 @@ impl App {
             hex_to_color(&self.theme.success),
             hex_to_color(&self.theme.warning),
         ];
-        let width = layout::split(self.last_frame_area, self.focus, self.zen_mode)
-            .preview
-            .width
-            .saturating_sub(2);
+        let width = layout::split(
+            self.last_frame_area,
+            self.focus,
+            self.zen_mode,
+            self.drawer_offset(),
+        )
+        .preview
+        .width
+        .saturating_sub(2);
         if self
             .note_preview_cache
             .as_ref()
@@ -2415,6 +2425,20 @@ impl App {
         let mut segments = vec![nb.name.clone()];
         segments.extend(self.notes_path.iter().cloned());
         segments.join("/")
+    }
+
+    /// The drawer's layout offset: `config.general.drawer_width` while the
+    /// drawer is open, 0 otherwise. `layout::split` pushes the panels right
+    /// by this much so the drawer (a left-anchored overlay) never covers the
+    /// first columns of a panel — without it, the left edge of every PREVIEW
+    /// line (e.g. the first half of a long math formula) hid behind the
+    /// drawer whenever it was open.
+    pub(crate) fn drawer_offset(&self) -> u16 {
+        if self.show_drawer {
+            self.config.general.drawer_width
+        } else {
+            0
+        }
     }
 
     /// First segment is always a notebook name — it must already exist

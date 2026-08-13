@@ -3332,7 +3332,13 @@ impl App {
         if !self.can_start_preview_selection() {
             return false;
         }
-        let preview = layout::split(self.last_frame_area, self.focus, self.zen_mode).preview;
+        let preview = layout::split(
+            self.last_frame_area,
+            self.focus,
+            self.zen_mode,
+            self.drawer_offset(),
+        )
+        .preview;
         let content_left = preview.x + 1;
         if column < content_left {
             return false;
@@ -3416,7 +3422,12 @@ impl App {
         // click reaching the layout underneath an open popup can't be
         // misread as a panel click.
         if self.mode == Mode::Normal && self.no_modal_open() {
-            let areas = layout::split(self.last_frame_area, self.focus, self.zen_mode);
+            let areas = layout::split(
+                self.last_frame_area,
+                self.focus,
+                self.zen_mode,
+                self.drawer_offset(),
+            );
             if let Some(index) = panel_notebooks::notebooks_hit_at(
                 self.notebooks.len(),
                 areas.notebooks,
@@ -3441,7 +3452,13 @@ impl App {
         }
 
         if self.can_start_preview_selection() {
-            let preview = layout::split(self.last_frame_area, self.focus, self.zen_mode).preview;
+            let preview = layout::split(
+                self.last_frame_area,
+                self.focus,
+                self.zen_mode,
+                self.drawer_offset(),
+            )
+            .preview;
             let row_count = self.note_preview_lines().map(|l| l.len()).unwrap_or(0);
             if let Some(hit) =
                 panel_preview::preview_row_at(preview, self.preview_scroll, row_count, column, row)
@@ -3455,7 +3472,13 @@ impl App {
             }
         }
 
-        let footer = layout::split(self.last_frame_area, self.focus, self.zen_mode).status_bar;
+        let footer = layout::split(
+            self.last_frame_area,
+            self.focus,
+            self.zen_mode,
+            self.drawer_offset(),
+        )
+        .status_bar;
         if status_bar::coffee_hit_at(footer, column, row, self.config.general.show_coffee_link) {
             self.open_coffee_link();
         }
@@ -3476,7 +3499,13 @@ impl App {
         // `PreviewSelection::dragged`'s own doc comment for why that
         // distinction is what `on_mouse_up` branches on.
         self.preview_selection.as_mut().unwrap().dragged = true;
-        let preview = layout::split(self.last_frame_area, self.focus, self.zen_mode).preview;
+        let preview = layout::split(
+            self.last_frame_area,
+            self.focus,
+            self.zen_mode,
+            self.drawer_offset(),
+        )
+        .preview;
         let row_count = self.note_preview_lines().map(|l| l.len()).unwrap_or(0);
         let scroll = self.preview_scroll;
         // Dragging outside the panel clamps to its nearest edge instead of
@@ -3576,7 +3605,13 @@ impl App {
     /// an already-present cursor's exact cell is a harmless no-op rather
     /// than a duplicate.
     fn on_editor_alt_click(&mut self, column: u16, row: u16) {
-        let preview = layout::split(self.last_frame_area, self.focus, self.zen_mode).preview;
+        let preview = layout::split(
+            self.last_frame_area,
+            self.focus,
+            self.zen_mode,
+            self.drawer_offset(),
+        )
+        .preview;
         let line_numbers = self.config.editor.line_numbers;
         let Some(editor) = &self.editor else {
             return;
@@ -3599,7 +3634,13 @@ impl App {
     /// word/line just selected); `false` for a plain single click, which
     /// hasn't anchored anything yet.
     fn on_editor_mouse_down(&mut self, column: u16, row: u16) {
-        let preview = layout::split(self.last_frame_area, self.focus, self.zen_mode).preview;
+        let preview = layout::split(
+            self.last_frame_area,
+            self.focus,
+            self.zen_mode,
+            self.drawer_offset(),
+        )
+        .preview;
         let line_numbers = self.config.editor.line_numbers;
         let Some(editor) = &mut self.editor else {
             return;
@@ -3671,7 +3712,13 @@ impl App {
     /// skips re-anchoring since one already exists (see `editor_drag_active`'s
     /// own doc comment).
     fn on_editor_mouse_drag(&mut self, column: u16, row: u16) {
-        let preview = layout::split(self.last_frame_area, self.focus, self.zen_mode).preview;
+        let preview = layout::split(
+            self.last_frame_area,
+            self.focus,
+            self.zen_mode,
+            self.drawer_offset(),
+        )
+        .preview;
         let line_numbers = self.config.editor.line_numbers;
         let Some(editor) = &mut self.editor else {
             return;

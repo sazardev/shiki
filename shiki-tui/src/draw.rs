@@ -21,7 +21,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .style(ratatui::style::Style::default().bg(hex_to_color(&app.theme.bg)));
     frame.render_widget(background, frame.area());
 
-    let areas = layout::split(frame.area(), app.focus, app.zen_mode);
+    let areas = layout::split(frame.area(), app.focus, app.zen_mode, app.drawer_offset());
     panel_notebooks::render(frame, areas.notebooks, app);
     panel_notes::render(frame, areas.notes, app);
     if app.mode == Mode::Edit {
