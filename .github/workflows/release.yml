@@ -537,7 +537,7 @@ jobs:
       # Chromium binary instead, the same class of fix documented for the
       # sandbox's own capped-viewport headless-Chromium render CLAUDE.md
       # already describes for the original, hand-built og-image.png.
-      - uses: browser-actions/setup-chrome@v1
+      - uses: browser-actions/setup-chrome@v2
         id: setup-chrome
 
       - name: Generate release page + OG card + feed.xml for this version
