@@ -21,7 +21,7 @@ cargo fmt --all                      # format (run after editing, before checkin
 cargo run -p shiki-cli -- <args>     # run the binary, e.g. `-- new "titulo"`, `-- daily`, no args launches the TUI
 ```
 
-There are ~288 `#[test]`s: 134 in `shiki-core`, 17 in `shiki-config`, 124 in `shiki-tui`, 13 in
+There are ~292 `#[test]`s: 134 in `shiki-core`, 17 in `shiki-config`, 128 in `shiki-tui`, 13 in
 `shiki-cli` — `cargo test --workspace` is green. They're all inline `#[cfg(test)]` modules inside
 the source files (no `tests/` dirs, no `#[ignore]`, no fixture setup), so the pattern set by
 `panel_drawer::tests` (`shiki-tui/src/panel_drawer.rs`) — covering `drawer_hit_at`'s mouse
@@ -969,6 +969,21 @@ accent/bold for labels, muted for the shape brackets and connectors — same col
 `math`/`render`. `kind_of` only treats a fence as a diagram when its first content line is a real
 `graph`/`flowchart`/`sequenceDiagram` header, so arbitrary text under a ` ```mermaid ` fence
 falls back instead of being mangled.
+
+**List items, blockquotes, and indented code all render at any nesting depth, via five small
+prefix helpers (`done_task_item_prefix`/`open_task_item_prefix`/`bullet_item_prefix`/
+`ordered_item_prefix`/`blockquote_prefix`) that `markdown_to_lines_indexed`'s render chain uses
+instead of the old flat `strip_prefix("- ")`/`strip_prefix("> ")` checks.** A line's nesting level
+is `indent_level` (leading spaces ÷ 2, CommonMark's 2-space rule); bullets step the glyph
+`•` → `◦` → `▪` by `level % 3` so depth is readable even if the leading spaces scroll past,
+ordered items keep their `N.` marker, tasks (`- [ ]`/`- [x]`) at any depth keep their checkbox,
+and blockquotes repeat the `▏ ` gutter once per `>` (`>> quote` → `▏ ▏ quote`). Lines with 4+
+leading spaces that aren't a list/quote fall through to a dim "indented code block" row (like a
+language-less fence). `inline_spans` gained `~~strikethrough~~` (crossed-out) alongside the
+existing bold/italic/code/link cases. The order in the render chain matters: done-task, then
+open-task, then bullet, then ordered, then blockquote, then indented-code — each prefix helper
+trims leading whitespace first so an indented list item is still recognized as a list, not
+mistaken for indented code.
 
 **Both caches store the already-*formatted* `Vec<Line<'static>>`, not just the raw listing/body —
 an earlier version of `folder_preview_cache` only cached `Notebook::list_dir`'s raw output and

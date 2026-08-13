@@ -296,6 +296,12 @@ A ` ```mermaid ` fence renders as an actual diagram instead of flat text: flowch
 columns with arrows between them. Same hand-rolled-parser approach as the math converter — a
 diagram it can't parse falls back to the previous flat styling rather than breaking.
 
+Lists, blockquotes, and code render at any nesting depth: a list item indented two spaces per
+level keeps its indentation and steps the bullet glyph `•` → `◦` → `▪` (ordered items keep their
+`N.` marker); `>> nested quote` repeats the `▏` gutter once per `>`; a line with 4+ leading
+spaces that isn't a list or quote is an indented code block, rendered dim like fenced code.
+Inline `~~strikethrough~~` renders crossed-out rather than literally.
+
 #### Inside the inline editor (`i`)
 
 Long lines wrap to the panel's width, the same as PREVIEW — they never scroll off the edge of the

@@ -53,6 +53,11 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   diagrams (`sequenceDiagram` with `participant` + `->>`/`-->>`/`->`/`--x` messages) render as
   participant columns with arrows drawn between them. A diagram that can't be parsed falls back to
   the previous flat styling rather than breaking.
+- PREVIEW's Markdown renderer now handles nested lists, nested blockquotes, strikethrough, and
+  indented code blocks, which previously rendered as literal text: list items at any nesting depth
+  (leading spaces then `- `/`* `/`+ ` or `N. `) indent and step the bullet glyph `•` → `◦` → `▪`;
+  `>> nested quote` repeats the `▏` gutter per level; `~~struck~~` renders crossed-out; a line
+  with 4+ leading spaces that isn't a list/quote renders dim like fenced code.
 - `shiki capture "text"`: near-instant note capture with no `$EDITOR` and no TUI drawn — meant for
   scripts, launchers (rofi/waybar/Raycast/AutoHotkey), or an OS hotkey. Targets
   `general.default_notebook` by default (`-n <notebook>` overrides), auto-generates a timestamped
