@@ -524,8 +524,19 @@ pub(crate) fn markdown_to_lines_indexed(
             continue;
         }
         if line.trim_start().starts_with("$$") {
+            // A `$$...$$` formula. Could be a self-contained single-line
+            // block (`$$E = mc^2$$` — the delimiters are never rendered,
+            // only the content between them, the same "markers are syntax,
+            // not display" rule code fences now follow), or the opening or
+            // closing line of a multi-line block (`$$` alone), which toggles
+            // `in_math_block` and produces no row of its own.
+            let rest = line.trim_start().trim_start_matches("$$");
+            if let Some(end) = rest.find("$$") {
+                let content = rest[..end].trim();
+                lines.push((idx, Line::from(Span::styled(content.to_string(), math))));
+                continue;
+            }
             in_math_block = !in_math_block;
-            lines.push((idx, Line::from(Span::styled(line.to_string(), math))));
             continue;
         }
         if in_math_block {
@@ -943,10 +954,28 @@ mod tests {
     fn math_block_is_styled_distinctly_from_code_block() {
         let body = "$$\nx = y\n$$";
         let lines = markdown_to_lines(body, &PALETTE);
-        assert_eq!(lines.len(), 3);
+        // The bare `$$` delimiters produce no rows at all; only the content
+        // line in between survives.
+        assert_eq!(lines.len(), 1);
         // Content line inside the math block uses `accent`, not `muted`
         // (which code fences use) — the whole point of the distinction.
-        assert_eq!(lines[1].spans[0].style.fg, Some(ACCENT));
+        assert_eq!(lines[0].spans[0].style.fg, Some(ACCENT));
+    }
+
+    #[test]
+    fn single_line_math_block_strips_delimiters_and_does_not_leak_state() {
+        let body = "$$E = mc^2$$\n\nplain paragraph";
+        let lines = markdown_to_lines(body, &PALETTE);
+        // The `$$` markers are syntax, not display — only the formula text
+        // renders (math-styled), the `$$` are never shown. The blank line
+        // between still produces its own (empty) row, like any other blank.
+        assert_eq!(lines.len(), 3);
+        assert_eq!(line_text(&lines[0]), "E = mc^2");
+        assert_eq!(line_text(&lines[1]), "");
+        assert_eq!(line_text(&lines[2]), "plain paragraph");
+        // And the single-line block must NOT leave in_math_block on: the
+        // following paragraph is plain body text, not math-styled.
+        assert_eq!(lines[2].spans[0].style.fg, Some(FG));
     }
 
     #[test]
