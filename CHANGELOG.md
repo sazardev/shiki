@@ -39,6 +39,12 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   bare `$$` opener/closer lines produce no rows at all. This also fixes a real bug where a
   single-line `$$...$$` block left the math state on, silently styling the following paragraphs
   as math until the next `$$` line.
+- `$$...$$` math content is now prettified to readable Unicode instead of raw LaTeX source
+  (`shiki-tui/src/mathfmt.rs`): `\frac{a}{b}` → `a/b`, `\sqrt{x}` → `√x`, `^2` → `²`, `_0` → `₀`,
+  `\pi` → `π`, `\int` → `∫`, `\infty` → `∞`, `\times` → `×`, Greek letters and common operators —
+  so `$$\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}$$` renders as `∫₀^∞ e⁻ˣ² dx = √π/2`
+  instead of the markup verbatim. A lightweight hand-rolled converter, not a TeX engine: anything
+  it doesn't recognize passes through unchanged.
 - `shiki capture "text"`: near-instant note capture with no `$EDITOR` and no TUI drawn — meant for
   scripts, launchers (rofi/waybar/Raycast/AutoHotkey), or an OS hotkey. Targets
   `general.default_notebook` by default (`-n <notebook>` overrides), auto-generates a timestamped

@@ -280,6 +280,13 @@ plain click on the summary row toggles it (instead of entering edit mode there),
 is kept per note for the session, so folding a long section once keeps it folded while you browse.
 This is the same `<details>`/`<summary>` markup the `/`-menu's `details` block inserts.
 
+A `$$…$$` math block (the `/`-menu's `math` block, or any `$$...$$`/`$$\n...\n$$` in the body)
+renders with its content prettified from raw LaTeX to readable Unicode — `\frac{a}{b}` → `a/b`,
+`\sqrt{x}` → `√x`, `^2` → `²`, `_0` → `₀`, `\pi` → `π`, `\int` → `∫`, `\infty` → `∞`, Greek
+letters and common operators — so `$$\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}$$` reads as
+`∫₀^∞ e⁻ˣ² dx = √π/2`. A lightweight hand-rolled converter, not a TeX engine: constructs it
+doesn't recognize pass through unchanged rather than being mangled.
+
 #### Inside the inline editor (`i`)
 
 Long lines wrap to the panel's width, the same as PREVIEW — they never scroll off the edge of the
