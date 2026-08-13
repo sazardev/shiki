@@ -461,35 +461,54 @@ pub(crate) fn markdown_to_lines_indexed(
         if line.trim_start().starts_with("```") {
             in_code_block = !in_code_block;
             if in_code_block {
-                let lang = line
-                    .trim_start()
-                    .trim_start_matches("```")
-                    .trim()
-                    .to_ascii_lowercase();
+                // The fence line's own text after ``` — `<lang>` plus an
+                // optional `file:<path>` token (` ```rust file:main.rs `).
+                // The literal ` ``` ` markers are never rendered themselves:
+                // the opening fence becomes a header row carrying the
+                // language name (and file name when one was given), the
+                // closing fence produces no row at all. Only the language
+                // token is lowercased (syntax detection is case-insensitive)
+                // — the file name is shown exactly as written, so a real
+                // path like `App.tsx` isn't mangled to `app.tsx`.
+                let info = line.trim_start().trim_start_matches("```").trim();
+                let mut parts = info.split_whitespace();
+                let lang = parts.next().unwrap_or("").to_ascii_lowercase();
+                let file = parts.find_map(|p| p.strip_prefix("file:").map(str::to_string));
                 code_highlighter = if lang.is_empty() || lang == "mermaid" {
                     None
                 } else {
                     crate::syntax::CodeHighlighter::new(&lang, colors)
                 };
-                // The opening fence line itself gets a distinct style when
-                // the language is recognized (real highlighting follows) or
-                // is a mermaid diagram (styled like the math-block accent
-                // below, not the flat code dim — a terminal can't render an
-                // actual diagram, but at least the fence reads as "special"
-                // rather than indistinguishable from an unrecognized one).
-                let fence_style = if lang == "mermaid" {
+                let lang_label = if lang.is_empty() {
+                    "code".to_string()
+                } else {
+                    lang.clone()
+                };
+                // Mermaid diagrams get the math-block accent (a terminal
+                // can't render an actual diagram); a recognized language's
+                // header reads as an accent-bold tag (it's about to get real
+                // highlighting below), an unrecognized one as dim — the same
+                // "known = special, unknown = flat" split the old literal
+                // fence styling used. The file name, when one was given,
+                // is muted after the language label.
+                let label_style = if lang == "mermaid" {
                     math
                 } else if crate::syntax::is_known_language(&lang) {
                     heading
                 } else {
                     dim
                 };
+                let mut spans = vec![Span::styled("▌ ", label_style)];
+                spans.push(Span::styled(lang_label, label_style));
+                if let Some(file) = file {
+                    spans.push(Span::styled(format!("  {file}"), dim));
+                }
+                lines.push((idx, Line::from(spans)));
                 code_lang = Some(lang);
-                lines.push((idx, Line::from(Span::styled(line.to_string(), fence_style))));
             } else {
                 code_highlighter = None;
                 code_lang = None;
-                lines.push((idx, Line::from(Span::styled(line.to_string(), dim))));
+                // Closing fence — no row at all; the code block just ends.
             }
             continue;
         }
@@ -934,7 +953,10 @@ mod tests {
     fn tsx_fence_gets_real_per_token_highlighting_not_flat_dim() {
         let body = "```tsx\nconst x = 1;\n```";
         let lines = markdown_to_lines(body, &PALETTE);
-        assert_eq!(lines.len(), 3);
+        // Opening fence -> header row, one code row, closing fence -> nothing.
+        assert_eq!(lines.len(), 2);
+        // The header row is `▌ tsx`, not a literal ```tsx fence line.
+        assert_eq!(line_text(&lines[0]), "▌ tsx");
         // Before real highlighting existed (and before `tsx` was a
         // recognized language at all — plain syntect's bundled defaults
         // don't include TypeScript/TSX), every span on this row shared the
@@ -952,5 +974,29 @@ mod tests {
             distinct_colors.len() > 1,
             "expected multiple distinct token colors, got {distinct_colors:?}"
         );
+    }
+
+    #[test]
+    fn fence_header_shows_language_and_optional_file_name() {
+        let body = "```rust file:main.rs\nlet x = 1;\n```";
+        let lines = markdown_to_lines(body, &PALETTE);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(line_text(&lines[0]), "▌ rust  main.rs");
+        assert_eq!(line_text(&lines[1]), "let x = 1;");
+
+        let body = "```python\nprint(1)\n```";
+        let lines = markdown_to_lines(body, &PALETTE);
+        assert_eq!(line_text(&lines[0]), "▌ python");
+
+        // An untagged fence still gets a header, not a literal ``` row.
+        let body = "```\nplain\n```";
+        let lines = markdown_to_lines(body, &PALETTE);
+        assert_eq!(line_text(&lines[0]), "▌ code");
+
+        // The file name keeps its original casing — only the language tag
+        // is lowercased (real-world path `App.tsx` must not become `app.tsx`).
+        let body = "```tsx file:App.tsx\nconst x = 1;\n```";
+        let lines = markdown_to_lines(body, &PALETTE);
+        assert_eq!(line_text(&lines[0]), "▌ tsx  App.tsx");
     }
 }
