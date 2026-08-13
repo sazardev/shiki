@@ -539,6 +539,9 @@ pub(crate) fn markdown_to_lines_indexed(
     let mut in_code_block = false;
     let mut in_math_block = false;
     let mut code_highlighter: Option<crate::syntax::CodeHighlighter> = None;
+    // Line-number gutter counter for the current code fence — resets each
+    // time a fence opens, incremented per source line inside it.
+    let mut code_line_no: u32 = 0;
     // Mermaid fences are buffered whole: a diagram can't be laid out line by
     // line, so all its source lines are accumulated while the fence is open
     // and rendered once (as a tree/sequence) when the closing fence arrives.
@@ -614,6 +617,7 @@ pub(crate) fn markdown_to_lines_indexed(
                 } else {
                     None
                 };
+                code_line_no = 0;
             } else {
                 code_highlighter = None;
                 // Closing fence. If this was a mermaid fence, flush the
@@ -650,10 +654,18 @@ pub(crate) fn markdown_to_lines_indexed(
                 buf.push(line.to_string());
                 continue;
             }
+            code_line_no += 1;
+            let gutter = Style::default().fg(muted);
+            let num = format!("{code_line_no:>3} │ ");
             let rendered = if let Some(hl) = code_highlighter.as_mut() {
-                Line::from(hl.highlight(line))
+                let mut spans = vec![Span::styled(num, gutter)];
+                spans.extend(hl.highlight(line));
+                Line::from(spans)
             } else {
-                Line::from(Span::styled(line.to_string(), dim))
+                Line::from(vec![
+                    Span::styled(num, gutter),
+                    Span::styled(line.to_string(), dim),
+                ])
             };
             lines.push((idx, rendered));
             continue;
@@ -1227,7 +1239,8 @@ mod tests {
         let lines = markdown_to_lines(body, &PALETTE);
         assert_eq!(lines.len(), 2);
         assert_eq!(line_text(&lines[0]), "▌ rust  main.rs");
-        assert_eq!(line_text(&lines[1]), "let x = 1;");
+        // Code lines carry a line-number gutter before the code itself.
+        assert_eq!(line_text(&lines[1]), "  1 │ let x = 1;");
 
         let body = "```python\nprint(1)\n```";
         let lines = markdown_to_lines(body, &PALETTE);
@@ -1243,6 +1256,23 @@ mod tests {
         let body = "```tsx file:App.tsx\nconst x = 1;\n```";
         let lines = markdown_to_lines(body, &PALETTE);
         assert_eq!(line_text(&lines[0]), "▌ tsx  App.tsx");
+    }
+
+    #[test]
+    fn code_line_numbers_increment_across_the_fence() {
+        let body = "```rust\nlet a = 1;\nlet b = 2;\nlet c = 3;\n```";
+        let lines = markdown_to_lines(body, &PALETTE);
+        let t: Vec<String> = lines.iter().map(line_text).collect();
+        assert_eq!(t[0], "▌ rust");
+        assert_eq!(t[1], "  1 │ let a = 1;");
+        assert_eq!(t[2], "  2 │ let b = 2;");
+        assert_eq!(t[3], "  3 │ let c = 3;");
+        // The gutter span is muted (not the italic dim of plain code).
+        assert_eq!(lines[1].spans[0].content.as_ref(), "  1 │ ");
+        assert!(!lines[1].spans[0]
+            .style
+            .add_modifier
+            .contains(Modifier::ITALIC));
     }
 
     #[test]
