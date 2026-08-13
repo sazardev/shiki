@@ -456,8 +456,11 @@ pub(crate) fn markdown_to_lines_indexed(
 
     let mut in_code_block = false;
     let mut in_math_block = false;
-    let mut code_lang: Option<String> = None;
     let mut code_highlighter: Option<crate::syntax::CodeHighlighter> = None;
+    // Mermaid fences are buffered whole: a diagram can't be laid out line by
+    // line, so all its source lines are accumulated while the fence is open
+    // and rendered once (as a tree/sequence) when the closing fence arrives.
+    let mut mermaid_buf: Option<Vec<String>> = None;
     let mut lines: Vec<(usize, Line<'static>)> = Vec::new();
 
     // Per-`<details>`-block content line counts (document order), computed
@@ -524,18 +527,48 @@ pub(crate) fn markdown_to_lines_indexed(
                     spans.push(Span::styled(format!("  {file}"), dim));
                 }
                 lines.push((idx, Line::from(spans)));
-                code_lang = Some(lang);
+                mermaid_buf = if lang == "mermaid" {
+                    Some(Vec::new())
+                } else {
+                    None
+                };
             } else {
                 code_highlighter = None;
-                code_lang = None;
-                // Closing fence — no row at all; the code block just ends.
+                // Closing fence. If this was a mermaid fence, flush the
+                // buffered source through the diagram renderer now — the
+                // whole diagram lands as its own rows (a rendered tree or
+                // sequence), falling back to the flat accent styling if the
+                // source couldn't be parsed as a diagram.
+                if let Some(buf) = mermaid_buf.take() {
+                    let src = buf.join("\n");
+                    match crate::mermaid::render(&src, fg, accent, muted) {
+                        Some((_, diagram)) => {
+                            for diagram_line in diagram {
+                                lines.push((idx, diagram_line));
+                            }
+                        }
+                        None => {
+                            for mermaid_line in &buf {
+                                lines.push((
+                                    idx,
+                                    Line::from(Span::styled(mermaid_line.clone(), math)),
+                                ));
+                            }
+                        }
+                    }
+                }
             }
             continue;
         }
         if in_code_block {
-            let rendered = if code_lang.as_deref() == Some("mermaid") {
-                Line::from(Span::styled(line.to_string(), math))
-            } else if let Some(hl) = code_highlighter.as_mut() {
+            // Inside a mermaid fence, just accumulate the source — the whole
+            // diagram renders on the closing fence. Every other language
+            // renders its lines individually as before.
+            if let Some(buf) = &mut mermaid_buf {
+                buf.push(line.to_string());
+                continue;
+            }
+            let rendered = if let Some(hl) = code_highlighter.as_mut() {
                 Line::from(hl.highlight(line))
             } else {
                 Line::from(Span::styled(line.to_string(), dim))

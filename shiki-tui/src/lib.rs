@@ -11,6 +11,7 @@ pub mod keybindings;
 pub mod layout;
 pub mod links_panel;
 pub(crate) mod mathfmt;
+pub(crate) mod mermaid;
 pub(crate) mod multicursor;
 pub mod panel_drawer;
 pub mod panel_metadata;
