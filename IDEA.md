@@ -285,7 +285,9 @@ renders with its content prettified from raw LaTeX to readable Unicode — `\fra
 `\sqrt{x}` → `√x`, `^2` → `²`, `_0` → `₀`, `\pi` → `π`, `\int` → `∫`, `\infty` → `∞`, Greek
 letters and common operators — so `$$\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}$$` reads as
 `∫₀^∞ e⁻ˣ² dx = √π/2`. A lightweight hand-rolled converter, not a TeX engine: constructs it
-doesn't recognize pass through unchanged rather than being mangled.
+doesn't recognize pass through unchanged rather than being mangled. Inline `$$...$$` in the middle
+of a line ("so $$a^2 + b^2 = c^2$$ and more") is prettified the same way, styled with the math
+accent/italic.
 
 #### Inside the inline editor (`i`)
 

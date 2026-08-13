@@ -21,7 +21,7 @@ cargo fmt --all                      # format (run after editing, before checkin
 cargo run -p shiki-cli -- <args>     # run the binary, e.g. `-- new "titulo"`, `-- daily`, no args launches the TUI
 ```
 
-There are ~278 `#[test]`s: 134 in `shiki-core`, 17 in `shiki-config`, 114 in `shiki-tui`, 13 in
+There are ~279 `#[test]`s: 134 in `shiki-core`, 17 in `shiki-config`, 115 in `shiki-tui`, 13 in
 `shiki-cli` — `cargo test --workspace` is green. They're all inline `#[cfg(test)]` modules inside
 the source files (no `tests/` dirs, no `#[ignore]`, no fixture setup), so the pattern set by
 `panel_drawer::tests` (`shiki-tui/src/panel_drawer.rs`) — covering `drawer_hit_at`'s mouse
@@ -933,9 +933,11 @@ deliberately NOT persisted to `config.toml` (same "view state, not config" rule 
 fold state is keyed by note path, not by the `App.notes` index, so switching notes and back keeps a
 note's folds.
 
-**`$$...$$` math blocks render their content through `mathfmt::latex_to_unicode`, a lightweight
-hand-rolled LaTeX→Unicode converter (`shiki-tui/src/mathfmt.rs`), applied in `render.rs` at both
-the single-line block (`$$E = mc^2$$`) and multi-line block (`in_math_block`) paths.** A terminal
+**`$$...$$` math renders its content through `mathfmt::latex_to_unicode`, a lightweight
+hand-rolled LaTeX→Unicode converter (`shiki-tui/src/mathfmt.rs`), applied in `render.rs` at three
+paths: the single-line block (`$$E = mc^2$$`), the multi-line block (`in_math_block`), and —
+via `inline_spans` taking a `math` style parameter — inline `$$...$$` mid-line (a line like
+"so $$a^2 + b^2 = c^2$$ and more" splits into plain prose + a math-styled span).** A terminal
 can't typeset LaTeX, but it can beat echoing the markup verbatim: `\frac{a}{b}` → `a/b`,
 `\sqrt{x}` → `√x`, `^2` → `²`, `_0` → `₀`, `\pi` → `π`, `\int` → `∫`, Greek letters and common
 operators — so the math-blocks note's formula reads as `∫₀^∞ e⁻ˣ² dx = √π/2` instead of
@@ -945,7 +947,8 @@ and anything unrecognized passes through unchanged (a note with an exotic macro 
 `{}`-grouping, `^`/`_` scripts with Unicode super/subscript maps, script-glyph pass-through so
 nested exponents like `e^{-x^2}` → `⁻ˣ²` work) rather than a parser-combinator dependency,
 consistent with `tasks.rs`/`query.rs`'s hand-rolled-parser convention. Pure function of a string —
-unit-testable without a TUI, same as `details_content_counts`.
+unit-testable without a TUI, same as `details_content_counts`. The inline case deliberately
+requires `$$` (not a single `$`), so a price or shell prompt isn't swallowed as math.
 
 **Both caches store the already-*formatted* `Vec<Line<'static>>`, not just the raw listing/body —
 an earlier version of `folder_preview_cache` only cached `Notebook::list_dir`'s raw output and
