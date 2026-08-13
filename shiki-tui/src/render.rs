@@ -529,18 +529,21 @@ pub(crate) fn markdown_to_lines_indexed(
             // only the content between them, the same "markers are syntax,
             // not display" rule code fences now follow), or the opening or
             // closing line of a multi-line block (`$$` alone), which toggles
-            // `in_math_block` and produces no row of its own.
+            // `in_math_block` and produces no row of its own. The content is
+            // run through `mathfmt::latex_to_unicode` so `\frac{\sqrt{\pi}}{2}`
+            // renders as `√π/2` rather than raw LaTeX source.
             let rest = line.trim_start().trim_start_matches("$$");
             if let Some(end) = rest.find("$$") {
-                let content = rest[..end].trim();
-                lines.push((idx, Line::from(Span::styled(content.to_string(), math))));
+                let content = crate::mathfmt::latex_to_unicode(rest[..end].trim());
+                lines.push((idx, Line::from(Span::styled(content, math))));
                 continue;
             }
             in_math_block = !in_math_block;
             continue;
         }
         if in_math_block {
-            lines.push((idx, Line::from(Span::styled(line.to_string(), math))));
+            let content = crate::mathfmt::latex_to_unicode(line);
+            lines.push((idx, Line::from(Span::styled(content, math))));
             continue;
         }
 
@@ -967,15 +970,24 @@ mod tests {
         let body = "$$E = mc^2$$\n\nplain paragraph";
         let lines = markdown_to_lines(body, &PALETTE);
         // The `$$` markers are syntax, not display — only the formula text
-        // renders (math-styled), the `$$` are never shown. The blank line
-        // between still produces its own (empty) row, like any other blank.
+        // renders (math-styled), the `$$` are never shown. The LaTeX content
+        // is prettified (`^2` → `²`). The blank line between still produces
+        // its own (empty) row, like any other blank.
         assert_eq!(lines.len(), 3);
-        assert_eq!(line_text(&lines[0]), "E = mc^2");
+        assert_eq!(line_text(&lines[0]), "E = mc²");
         assert_eq!(line_text(&lines[1]), "");
         assert_eq!(line_text(&lines[2]), "plain paragraph");
         // And the single-line block must NOT leave in_math_block on: the
         // following paragraph is plain body text, not math-styled.
         assert_eq!(lines[2].spans[0].style.fg, Some(FG));
+    }
+
+    #[test]
+    fn math_block_prettifies_latex_fractions_and_integrals() {
+        let body = "$$\\int_0^\\infty e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}$$";
+        let lines = markdown_to_lines(body, &PALETTE);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(line_text(&lines[0]), "∫₀^∞ e⁻ˣ² dx = √π/2");
     }
 
     #[test]
