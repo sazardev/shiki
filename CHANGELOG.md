@@ -46,6 +46,13 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   instead of the markup verbatim. A lightweight hand-rolled converter, not a TeX engine: anything
   it doesn't recognize passes through unchanged. Inline `$$...$$` mid-line (e.g. "Inline math
   $$a^2 + b^2 = c^2$$ stays on its line.") gets the same prettification as full blocks.
+- ` ```mermaid ` fences now render as real diagrams in PREVIEW instead of flat accent-colored text
+  (`shiki-tui/src/mermaid.rs`, a small hand-rolled parser): flowcharts (`graph TD`/`flowchart LR`
+  …) are laid out as an indented tree with box-drawing connectors, node shapes
+  (`A[Label]`/`A(Label)`/`A{Label}`/`A((Label))`/`A[[Label]]`) and edge labels, and sequence
+  diagrams (`sequenceDiagram` with `participant` + `->>`/`-->>`/`->`/`--x` messages) render as
+  participant columns with arrows drawn between them. A diagram that can't be parsed falls back to
+  the previous flat styling rather than breaking.
 - `shiki capture "text"`: near-instant note capture with no `$EDITOR` and no TUI drawn — meant for
   scripts, launchers (rofi/waybar/Raycast/AutoHotkey), or an OS hotkey. Targets
   `general.default_notebook` by default (`-n <notebook>` overrides), auto-generates a timestamped

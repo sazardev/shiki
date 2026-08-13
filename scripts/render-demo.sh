@@ -62,6 +62,9 @@ new_note "Daily notes" $'# Daily notes\n\nA short note that is a backlink target
 # --- A task-heavy note with @due tags ------------------------------------------
 new_note "Task list" $'# Tasks\n\n- [ ] review the demo @due(tomorrow)\n- [ ] write more tests @due(+3d)\n- [ ] deploy the release @due(2026-12-31)\n- [x] ship v0.9.0 @due(2026-08-04)\n- [ ] someday maybe'
 
+# --- Mermaid diagrams (flowchart + sequence) -----------------------------------
+new_note "Mermaid diagrams" $'# Mermaid\n\nFlowchart:\n\n```mermaid\ngraph TD\n    A[Christmas] -->|Get money| B(Go shopping)\n    B --> C{Let me think}\n    C -->|One| D[Laptop]\n    C -->|Two| E[iPhone]\n```\n\nSequence:\n\n```mermaid\nsequenceDiagram\n    participant Alice\n    participant Bob\n    Alice->>Bob: Hello Bob, how are you?\n    Bob-->>Alice: I am good thanks!\n```'
+
 echo
 echo "==> demo notebook ready at \$XDG_DATA_HOME/shiki/demo"
 echo

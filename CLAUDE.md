@@ -21,7 +21,7 @@ cargo fmt --all                      # format (run after editing, before checkin
 cargo run -p shiki-cli -- <args>     # run the binary, e.g. `-- new "titulo"`, `-- daily`, no args launches the TUI
 ```
 
-There are ~279 `#[test]`s: 134 in `shiki-core`, 17 in `shiki-config`, 115 in `shiki-tui`, 13 in
+There are ~288 `#[test]`s: 134 in `shiki-core`, 17 in `shiki-config`, 124 in `shiki-tui`, 13 in
 `shiki-cli` — `cargo test --workspace` is green. They're all inline `#[cfg(test)]` modules inside
 the source files (no `tests/` dirs, no `#[ignore]`, no fixture setup), so the pattern set by
 `panel_drawer::tests` (`shiki-tui/src/panel_drawer.rs`) — covering `drawer_hit_at`'s mouse
@@ -949,6 +949,26 @@ nested exponents like `e^{-x^2}` → `⁻ˣ²` work) rather than a parser-combin
 consistent with `tasks.rs`/`query.rs`'s hand-rolled-parser convention. Pure function of a string —
 unit-testable without a TUI, same as `details_content_counts`. The inline case deliberately
 requires `$$` (not a single `$`), so a price or shell prompt isn't swallowed as math.
+
+**` ```mermaid ` fences are buffered whole and rendered as a real diagram through
+`mermaid::render` (`shiki-tui/src/mermaid.rs`), the same hand-rolled-parser convention as
+`mathfmt`, instead of the flat accent-colored text they used to get.** A diagram can't be laid out
+line by line, so `markdown_to_lines_indexed` accumulates the fence's source in `mermaid_buf`
+(`Vec<String>`) while open and, on the closing fence, hands it all to `mermaid::render` —
+which returns `None` for anything it can't parse, falling back to the old per-line flat styling
+(rather than failing). Flowcharts (`graph TD`/`flowchart LR`, …) parse node definitions
+(`A[Label]`/`A(Label)`/`A{Label}`/`A((Label))`/`A[[Label]]`/`A>Label]`), edge operators
+(`-->`, `---`, `-.->`, `==>`, `~~~`, `-- label -->`, `-->|label|`), and `subgraph` blocks, then
+lay the graph out as an indented tree — roots are nodes with no incoming edge, children recurse
+under `└─`/`├─` connectors, and a node reached twice (a cycle or a second parent) is drawn as a
+muted `… [Label]` reference line instead of recursing forever. Sequence diagrams parse
+`participant X`/`actor X` and messages (`->>`, `-->>`, `->`, `-->`, `--x`, `-)`, with
+`A->>B: text` syntax), rendering each participant as a fixed-width column with pipes under every
+participant and `─`/`·` fill + a `▶`/`◀` arrowhead between source and target. Diagram nodes are
+accent/bold for labels, muted for the shape brackets and connectors — same color vocabulary as
+`math`/`render`. `kind_of` only treats a fence as a diagram when its first content line is a real
+`graph`/`flowchart`/`sequenceDiagram` header, so arbitrary text under a ` ```mermaid ` fence
+falls back instead of being mangled.
 
 **Both caches store the already-*formatted* `Vec<Line<'static>>`, not just the raw listing/body —
 an earlier version of `folder_preview_cache` only cached `Notebook::list_dir`'s raw output and

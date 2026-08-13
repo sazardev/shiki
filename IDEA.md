@@ -289,6 +289,13 @@ doesn't recognize pass through unchanged rather than being mangled. Inline `$$..
 of a line ("so $$a^2 + b^2 = c^2$$ and more") is prettified the same way, styled with the math
 accent/italic.
 
+A ` ```mermaid ` fence renders as an actual diagram instead of flat text: flowcharts
+(`graph TD`/`flowchart LR`, …) become an indented tree with box-drawing connectors, node shapes
+(`A[Label]`/`A(Label)`/`A{Label}`/`A((Label))`/`A[[Label]]`), and edge labels; sequence diagrams
+(`sequenceDiagram` with `participant` + `->>`/`-->>`/`->`/`--x` messages) render as participant
+columns with arrows between them. Same hand-rolled-parser approach as the math converter — a
+diagram it can't parse falls back to the previous flat styling rather than breaking.
+
 #### Inside the inline editor (`i`)
 
 Long lines wrap to the panel's width, the same as PREVIEW — they never scroll off the edge of the
