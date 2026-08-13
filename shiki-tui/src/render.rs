@@ -188,7 +188,7 @@ pub fn render_scrollbar(
 /// style, so e.g. bold text inside a dim/italic blockquote still reads as
 /// dim+bold, not a jarring unrelated color — the same reason `inline_spans`
 /// takes `base` as a parameter instead of assuming plain body-text style.
-fn inline_spans(text: &str, base: Style, link: Style) -> Vec<Span<'static>> {
+fn inline_spans(text: &str, base: Style, link: Style, math: Style) -> Vec<Span<'static>> {
     fn flush(plain: &mut String, spans: &mut Vec<Span<'static>>, style: Style) {
         if !plain.is_empty() {
             spans.push(Span::styled(std::mem::take(plain), style));
@@ -274,6 +274,26 @@ fn inline_spans(text: &str, base: Style, link: Style) -> Vec<Span<'static>> {
                 // below, since both would otherwise render identically.
                 spans.push(Span::styled(inner, base.add_modifier(Modifier::DIM)));
                 i = end + 1;
+                continue;
+            }
+        }
+        if chars[i] == '$' && chars.get(i + 1) == Some(&'$') {
+            // Inline math: `$$...$$` mid-line (e.g. "so $$a^2 + b^2$$ and
+            // so on") renders as a math-styled span with the LaTeX content
+            // prettified, the same `mathfmt::latex_to_unicode` pass full
+            // `$$` blocks get. A stray single `$` (a price, a shell prompt)
+            // is left as literal text.
+            if let Some(end) = chars[i + 2..]
+                .iter()
+                .position(|&c| c == '$')
+                .filter(|&p| chars.get(i + 2 + p + 1) == Some(&'$'))
+                .map(|p| p + i + 2)
+            {
+                flush(&mut plain, &mut spans, base);
+                let inner: String = chars[i + 2..end].iter().collect();
+                let rendered = crate::mathfmt::latex_to_unicode(&inner);
+                spans.push(Span::styled(rendered, math));
+                i = end + 2;
                 continue;
             }
         }
@@ -657,14 +677,15 @@ pub(crate) fn markdown_to_lines_indexed(
         }
 
         let rendered = if let Some(rest) = line.strip_prefix("### ") {
-            Line::from(inline_spans(rest, heading, link_style))
+            Line::from(inline_spans(rest, heading, link_style, math))
         } else if let Some(rest) = line.strip_prefix("## ") {
-            Line::from(inline_spans(rest, heading, link_style))
+            Line::from(inline_spans(rest, heading, link_style, math))
         } else if let Some(rest) = line.strip_prefix("# ") {
             Line::from(inline_spans(
                 rest,
                 heading.add_modifier(Modifier::UNDERLINED),
                 link_style,
+                math,
             ))
         } else if let Some(rest) = line.strip_prefix("- [x] ").or(line.strip_prefix("- [X] ")) {
             Line::from(vec![
@@ -681,25 +702,25 @@ pub(crate) fn markdown_to_lines_indexed(
             ])
         } else if let Some(rest) = line.strip_prefix("- [ ] ") {
             let mut spans = vec![Span::styled("☐ ", Style::default().fg(muted))];
-            spans.extend(inline_spans(rest, text, link_style));
+            spans.extend(inline_spans(rest, text, link_style, math));
             Line::from(spans)
         } else if let Some(rest) = line.strip_prefix("- ") {
             let mut spans = vec![Span::styled("• ", Style::default().fg(accent))];
-            spans.extend(inline_spans(rest, text, link_style));
+            spans.extend(inline_spans(rest, text, link_style, math));
             Line::from(spans)
         } else if let Some((marker, rest)) = ordered_list_prefix(line) {
             let mut spans = vec![Span::styled(
                 format!("{marker} "),
                 Style::default().fg(accent),
             )];
-            spans.extend(inline_spans(rest, text, link_style));
+            spans.extend(inline_spans(rest, text, link_style, math));
             Line::from(spans)
         } else if let Some(rest) = line.strip_prefix("> ") {
             let mut spans = vec![Span::styled("▏ ", dim)];
-            spans.extend(inline_spans(rest, dim, link_style));
+            spans.extend(inline_spans(rest, dim, link_style, math));
             Line::from(spans)
         } else {
-            Line::from(inline_spans(line, text, link_style))
+            Line::from(inline_spans(line, text, link_style, math))
         };
         lines.push((idx, rendered));
     }
@@ -760,7 +781,12 @@ mod tests {
 
     #[test]
     fn bold_is_stripped_and_styled() {
-        let spans = inline_spans("hello **world** today", Style::default(), Style::default());
+        let spans = inline_spans(
+            "hello **world** today",
+            Style::default(),
+            Style::default(),
+            Style::default(),
+        );
         let bold = spans
             .iter()
             .find(|s| s.content.as_ref() == "world")
@@ -773,14 +799,24 @@ mod tests {
 
     #[test]
     fn italic_is_stripped_and_styled() {
-        let spans = inline_spans("a *b* c", Style::default(), Style::default());
+        let spans = inline_spans(
+            "a *b* c",
+            Style::default(),
+            Style::default(),
+            Style::default(),
+        );
         let italic = spans.iter().find(|s| s.content.as_ref() == "b").unwrap();
         assert!(italic.style.add_modifier.contains(Modifier::ITALIC));
     }
 
     #[test]
     fn inline_code_is_stripped_and_styled() {
-        let spans = inline_spans("run `cargo test` now", Style::default(), Style::default());
+        let spans = inline_spans(
+            "run `cargo test` now",
+            Style::default(),
+            Style::default(),
+            Style::default(),
+        );
         let code = spans
             .iter()
             .find(|s| s.content.as_ref() == "cargo test")
@@ -792,7 +828,12 @@ mod tests {
     fn unterminated_marker_is_left_literal() {
         // No closing `*` anywhere — must not swallow the rest of the line
         // looking for one, and must not panic.
-        let spans = inline_spans("a * b c", Style::default(), Style::default());
+        let spans = inline_spans(
+            "a * b c",
+            Style::default(),
+            Style::default(),
+            Style::default(),
+        );
         let full: String = spans.iter().map(|s| s.content.as_ref()).collect();
         assert_eq!(full, "a * b c");
     }
@@ -801,6 +842,7 @@ mod tests {
     fn markdown_link_shows_only_the_label() {
         let spans = inline_spans(
             "see [the docs](https://example.com) here",
+            Style::default(),
             Style::default(),
             Style::default(),
         );
@@ -814,16 +856,44 @@ mod tests {
             "see [[Some Note]] please",
             Style::default(),
             Style::default(),
+            Style::default(),
         );
         assert!(spans.iter().any(|s| s.content.as_ref() == "[[Some Note]]"));
     }
 
     #[test]
     fn image_becomes_an_icon_plus_alt_text() {
-        let spans = inline_spans("![a photo](pic.png)", Style::default(), Style::default());
+        let spans = inline_spans(
+            "![a photo](pic.png)",
+            Style::default(),
+            Style::default(),
+            Style::default(),
+        );
         let full: String = spans.iter().map(|s| s.content.as_ref()).collect();
         assert!(full.contains("a photo"));
         assert!(!full.contains("pic.png"));
+    }
+
+    #[test]
+    fn inline_math_is_prettified_and_math_styled() {
+        let spans = inline_spans(
+            "so $$a^2 + b^2 = c^2$$ and more",
+            Style::default(),
+            Style::default(),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::ITALIC),
+        );
+        let full: String = spans.iter().map(|s| s.content.as_ref()).collect();
+        // The $$ delimiters are gone and the LaTeX is prettified; the
+        // surrounding prose stays plain.
+        assert_eq!(full, "so a² + b² = c² and more");
+        let math_span = spans
+            .iter()
+            .find(|s| s.content.as_ref() == "a² + b² = c²")
+            .expect("math span present");
+        assert_eq!(math_span.style.fg, Some(Color::Cyan));
+        assert!(math_span.style.add_modifier.contains(Modifier::ITALIC));
     }
 
     #[test]
