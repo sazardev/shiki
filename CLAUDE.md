@@ -386,9 +386,11 @@ crate reusable outside a TUI context. The `"default"` built-in theme (`Theme::te
 uses `"reset"`/ANSI names throughout specifically so it doesn't impose a fixed palette.
 Included theme palettes live one-per-file under `shiki-config/src/themes/` (catppuccin, tokyo_night,
 gruvbox, nord, solarized, the League of Legends champion palettes in `lol.rs` — `LoL (Jinx)`,
-`LoL (Teemo)`, `LoL (Ahri)` — and the video-game palettes in `games.rs` — Pokémon, Zelda, Portal,
-Mario, Overwatch, Halo, Stardew Valley), registered in `themes/mod.rs::all()`/`by_name()`. Every
-palette's hex values are taken directly from each project's own official spec (verified against
+`LoL (Teemo)`, `LoL (Ahri)` — the video-game palettes in `games.rs` — Pokémon, Zelda, Portal,
+Mario, Overwatch, Halo, Stardew Valley — and the hacker/cyberpunk palettes in `hacker.rs` —
+Matrix, Cyberpunk 2077, Arasaka, Synthwave, Tron, Fallout, Blade Runner, Doom, GitS, Mr. Robot),
+registered in `themes/mod.rs::all()`/`by_name()`. Every palette's hex values are taken directly
+from each project's own official spec (verified against
 morhetz/gruvbox, tokyonight.nvim, nordtheme.com, solarized, and catppuccin — not approximated).
 
 **`theme.selection` used to be defined by every palette but rendered nowhere.** Every `List` widget

@@ -2,6 +2,7 @@ mod catppuccin;
 mod dracula;
 mod games;
 mod gruvbox;
+mod hacker;
 mod lol;
 mod monokai;
 mod nord;
@@ -12,36 +13,49 @@ mod tokyo_night;
 use crate::theme::Theme;
 
 /// All themes included out of the box, in the order they're shown in the config.
+/// Alphabetical (case-insensitive) except for `default` (the terminal-inherit
+/// theme), which stays last on purpose. `docs/js/main.js`'s THEMES array
+/// mirrors this exactly — same order, same names.
 pub fn all() -> Vec<Theme> {
     vec![
-        catppuccin::mocha(),
-        catppuccin::macchiato(),
+        hacker::arasaka(),
+        hacker::blade_runner(),
         catppuccin::frappe(),
         catppuccin::latte(),
-        tokyo_night::storm(),
-        tokyo_night::night(),
-        tokyo_night::moon(),
+        catppuccin::macchiato(),
+        catppuccin::mocha(),
+        hacker::cyberpunk(),
+        hacker::doom(),
+        dracula::dracula(),
+        hacker::fallout_terminal(),
+        hacker::ghost_in_the_shell(),
         gruvbox::dark(),
         gruvbox::light(),
-        nord::nord(),
-        solarized::dark(),
-        solarized::light(),
-        dracula::dracula(),
-        one_dark::one_dark(),
-        monokai::monokai(),
+        games::halo(),
+        lol::ahri(),
         lol::jinx(),
         lol::teemo(),
-        lol::ahri(),
-        games::pokemon_pikachu(),
+        hacker::matrix(),
+        monokai::monokai(),
+        hacker::mr_robot(),
+        nord::nord(),
+        one_dark::one_dark(),
+        games::overwatch(),
         games::pokemon_charizard(),
         games::pokemon_gengar(),
-        games::zelda(),
+        games::pokemon_pikachu(),
         games::portal(),
+        solarized::dark(),
+        solarized::light(),
+        games::stardew(),
         games::super_mario(),
         games::super_mario_luigi(),
-        games::overwatch(),
-        games::halo(),
-        games::stardew(),
+        hacker::synthwave(),
+        tokyo_night::night(),
+        tokyo_night::moon(),
+        tokyo_night::storm(),
+        hacker::tron(),
+        games::zelda(),
         Theme::terminal_default(),
     ]
 }

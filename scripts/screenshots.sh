@@ -75,15 +75,32 @@ sleep 1
 export DISPLAY="$XVFB_DISPLAY"
 
 THEMES=(
-  catppuccin-mocha catppuccin-macchiato catppuccin-frappe catppuccin-latte
-  tokyo-night-storm tokyo-night tokyo-night-moon
+  Arasaka
+  "Blade Runner"
+  catppuccin-frappe catppuccin-latte catppuccin-macchiato catppuccin-mocha
+  "Cyberpunk 2077"
+  Doom
+  dracula
+  "Fallout Terminal"
+  "Ghost in the Shell"
   gruvbox-dark gruvbox-light
+  Halo
+  "LoL (Ahri)" "LoL (Jinx)" "LoL (Teemo)"
+  Matrix
+  monokai
+  "Mr. Robot"
   nord
+  one-dark
+  Overwatch
+  "Pokémon (Charizard)" "Pokémon (Gengar)" "Pokémon (Pikachu)"
+  Portal
   solarized-dark solarized-light
-  dracula one-dark monokai
-  "LoL (Jinx)" "LoL (Teemo)" "LoL (Ahri)"
-  "Pokémon (Pikachu)" "Pokémon (Charizard)" "Pokémon (Gengar)"
-  Zelda Portal "Super Mario" "Super Mario (Luigi)" Overwatch Halo "Stardew Valley"
+  "Stardew Valley"
+  "Super Mario" "Super Mario (Luigi)"
+  Synthwave
+  tokyo-night tokyo-night-moon tokyo-night-storm
+  Tron
+  Zelda
   default
 )
 

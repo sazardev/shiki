@@ -86,7 +86,8 @@ shiki/
 │           ├── one_dark.rs
 │           ├── monokai.rs
 │           ├── lol.rs             # LoL (Jinx), LoL (Teemo), LoL (Ahri)
-│           └── games.rs           # Pokémon, Zelda, Portal, Mario, Overwatch, Halo, Stardew
+│           ├── games.rs           # Pokémon, Zelda, Portal, Mario, Overwatch, Halo, Stardew
+│           └── hacker.rs          # Matrix, Cyberpunk 2077, Arasaka, Tron, Doom, ...
 │
 ├── shiki-tui/                     # the interface
 │   ├── Cargo.toml

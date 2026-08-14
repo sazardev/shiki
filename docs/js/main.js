@@ -1,54 +1,59 @@
 // Theme list mirrors shiki-config/src/themes/mod.rs::all() exactly (same
-// order, same names) — "dot" colors are each theme's own `accent` value
+// order, same names — alphabetical, `default` last) — "dot" colors are each
+// theme's own `accent` value
 // (docs/css/styles.css has the full palette per theme; this file only
 // needs enough to build/label the swatches and know which ones have a real
-// screenshot). 12 of the 29 have a captured PNG in docs/assets/screenshots/
+// screenshot). 12 of the 39 have a captured PNG in docs/assets/screenshots/
 // (scripts/screenshots.sh's THEMES array covers every one) — of the
-// remaining seventeen, dracula/one-dark/monokai/default DO have real
+// remaining twenty-seven, dracula/one-dark/monokai/default DO have real
 // screenshots in docs/assets/screenshots/gallery/, but the homepage's hero
-// loop isn't wired up to serve them top-level yet, while the LoL and
-// video-game palettes are brand new and have no screenshot captured at all —
-// both fall back to #term-fallback's CSS-only mockup here. `screenshot`
-// stays a per-theme flag rather than
+// loop isn't wired up to serve them top-level yet, while the LoL,
+// video-game, and hacker/cyber palettes are brand new and have no
+// screenshot captured at all — both fall back to #term-fallback's CSS-only
+// mockup here. `screenshot` stays a per-theme flag rather than
 // being assumed true for everyone so a future theme added to shiki-config
 // without a matching screenshot yet degrades to the CSS-only #term-fallback
 // mockup instead of silently
 // showing another theme's image under the wrong name.
 const THEMES = [
-  { id: "catppuccin-mocha", label: "Catppuccin Mocha", dot: "#89b4fa", screenshot: true },
-  { id: "catppuccin-macchiato", label: "Catppuccin Macchiato", dot: "#8aadf4", screenshot: true },
+  { id: "Arasaka", label: "Arasaka", dot: "#ff003c", screenshot: false },
+  { id: "Blade Runner", label: "Blade Runner", dot: "#ff9e3d", screenshot: false },
   { id: "catppuccin-frappe", label: "Catppuccin Frappé", dot: "#8caaee", screenshot: true },
   { id: "catppuccin-latte", label: "Catppuccin Latte", dot: "#1e66f5", screenshot: true },
-  { id: "tokyo-night-storm", label: "Tokyo Night Storm", dot: "#7aa2f7", screenshot: true },
-  { id: "tokyo-night", label: "Tokyo Night", dot: "#7aa2f7", screenshot: true },
-  { id: "tokyo-night-moon", label: "Tokyo Night Moon", dot: "#82aaff", screenshot: true },
+  { id: "catppuccin-macchiato", label: "Catppuccin Macchiato", dot: "#8aadf4", screenshot: true },
+  { id: "catppuccin-mocha", label: "Catppuccin Mocha", dot: "#89b4fa", screenshot: true },
+  { id: "Cyberpunk 2077", label: "Cyberpunk 2077", dot: "#fcee0a", screenshot: false },
+  { id: "Doom", label: "Doom", dot: "#e62525", screenshot: false },
+  { id: "dracula", label: "Dracula", dot: "#bd93f9", screenshot: false },
+  { id: "Fallout Terminal", label: "Fallout Terminal", dot: "#00ff00", screenshot: false },
+  { id: "Ghost in the Shell", label: "Ghost in the Shell", dot: "#2dd4bf", screenshot: false },
   { id: "gruvbox-dark", label: "Gruvbox Dark", dot: "#fabd2f", screenshot: true },
   { id: "gruvbox-light", label: "Gruvbox Light", dot: "#b57614", screenshot: true },
-  { id: "nord", label: "Nord", dot: "#88c0d0", screenshot: true },
-  { id: "solarized-dark", label: "Solarized Dark", dot: "#268bd2", screenshot: true },
-  { id: "solarized-light", label: "Solarized Light", dot: "#268bd2", screenshot: true },
-  // These four DO have real screenshots — in docs/assets/screenshots/gallery/
-  // — but the homepage's hero only serves the top-level PNGs, so they render
-  // the CSS-only #term-fallback mockup here (see the file header comment).
-  { id: "dracula", label: "Dracula", dot: "#bd93f9", screenshot: false },
-  { id: "one-dark", label: "One Dark", dot: "#61afef", screenshot: false },
-  { id: "monokai", label: "Monokai", dot: "#f92672", screenshot: false },
-  // New League of Legends champion palettes — no screenshots captured yet,
-  // so they render the CSS-only mockup too.
+  { id: "Halo", label: "Halo", dot: "#6fa55c", screenshot: false },
+  { id: "LoL (Ahri)", label: "LoL (Ahri)", dot: "#e8448f", screenshot: false },
   { id: "LoL (Jinx)", label: "LoL (Jinx)", dot: "#ff3da5", screenshot: false },
   { id: "LoL (Teemo)", label: "LoL (Teemo)", dot: "#8bc34a", screenshot: false },
-  { id: "LoL (Ahri)", label: "LoL (Ahri)", dot: "#e8448f", screenshot: false },
-  // Video-game franchise palettes — brand new, CSS-only mockup for now.
-  { id: "Pokémon (Pikachu)", label: "Pokémon (Pikachu)", dot: "#f6c344", screenshot: false },
+  { id: "Matrix", label: "Matrix", dot: "#00ff41", screenshot: false },
+  { id: "monokai", label: "Monokai", dot: "#f92672", screenshot: false },
+  { id: "Mr. Robot", label: "Mr. Robot", dot: "#ff3b3b", screenshot: false },
+  { id: "nord", label: "Nord", dot: "#88c0d0", screenshot: true },
+  { id: "one-dark", label: "One Dark", dot: "#61afef", screenshot: false },
+  { id: "Overwatch", label: "Overwatch", dot: "#f99e1a", screenshot: false },
   { id: "Pokémon (Charizard)", label: "Pokémon (Charizard)", dot: "#ff6b35", screenshot: false },
   { id: "Pokémon (Gengar)", label: "Pokémon (Gengar)", dot: "#9d6bff", screenshot: false },
-  { id: "Zelda", label: "Zelda", dot: "#c6a45c", screenshot: false },
+  { id: "Pokémon (Pikachu)", label: "Pokémon (Pikachu)", dot: "#f6c344", screenshot: false },
   { id: "Portal", label: "Portal", dot: "#ff8a3d", screenshot: false },
+  { id: "solarized-dark", label: "Solarized Dark", dot: "#268bd2", screenshot: true },
+  { id: "solarized-light", label: "Solarized Light", dot: "#268bd2", screenshot: true },
+  { id: "Stardew Valley", label: "Stardew Valley", dot: "#6aa84f", screenshot: false },
   { id: "Super Mario", label: "Super Mario", dot: "#e52521", screenshot: false },
   { id: "Super Mario (Luigi)", label: "Super Mario (Luigi)", dot: "#4a9e5c", screenshot: false },
-  { id: "Overwatch", label: "Overwatch", dot: "#f99e1a", screenshot: false },
-  { id: "Halo", label: "Halo", dot: "#6fa55c", screenshot: false },
-  { id: "Stardew Valley", label: "Stardew Valley", dot: "#6aa84f", screenshot: false },
+  { id: "Synthwave", label: "Synthwave", dot: "#ff2ec4", screenshot: false },
+  { id: "tokyo-night", label: "Tokyo Night", dot: "#7aa2f7", screenshot: true },
+  { id: "tokyo-night-moon", label: "Tokyo Night Moon", dot: "#82aaff", screenshot: true },
+  { id: "tokyo-night-storm", label: "Tokyo Night Storm", dot: "#7aa2f7", screenshot: true },
+  { id: "Tron", label: "Tron", dot: "#00f6ff", screenshot: false },
+  { id: "Zelda", label: "Zelda", dot: "#c6a45c", screenshot: false },
   { id: "default", label: "Default", dot: "#8b949e", screenshot: false },
 ];
 

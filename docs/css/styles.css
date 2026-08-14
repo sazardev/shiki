@@ -2,7 +2,9 @@
    Theme palettes — hex values copied verbatim from shiki-config's own
    theme definitions (shiki-config/src/themes/*.rs), not approximated, so
    this site's theme switcher is pixel-faithful to what the actual TUI
-   renders with the same theme name selected.
+   renders with the same theme name selected. Blocks are alphabetical
+   (matching themes/mod.rs::all()), except gruvbox-dark which shares the
+   `:root` fallback rule at the top.
 
    There is deliberately NO [data-theme="default"] block: shiki's "default"
    theme inherits the terminal's own colors ("reset"/ANSI names), which have
@@ -26,46 +28,32 @@
   --panel-title: #d3869b;
 }
 
-[data-theme="gruvbox-light"] {
-  --bg: #fbf1c7;
-  --fg: #3c3836;
-  --accent: #b57614;
-  --selection: #ebdbb2;
-  --border: #d5c4a1;
-  --statusbar: #f2e5bc;
-  --success: #98971a;
-  --warning: #d79921;
-  --error: #cc241d;
-  --muted: #7c6f64;
-  --panel-title: #8f3f71;
+[data-theme="Arasaka"] {
+  --bg: #120808;
+  --fg: #f5e6e6;
+  --accent: #ff003c;
+  --selection: #241010;
+  --border: #331717;
+  --statusbar: #0c0505;
+  --success: #ff6b6b;
+  --warning: #ffb700;
+  --error: #ff003c;
+  --muted: #8a5a5a;
+  --panel-title: #ff003c;
 }
 
-[data-theme="catppuccin-mocha"] {
-  --bg: #1e1e2e;
-  --fg: #cdd6f4;
-  --accent: #89b4fa;
-  --selection: #45475a;
-  --border: #313244;
-  --statusbar: #181825;
-  --success: #a6e3a1;
-  --warning: #fab387;
-  --error: #f38ba8;
-  --muted: #a6adc8;
-  --panel-title: #f5c2e7;
-}
-
-[data-theme="catppuccin-macchiato"] {
-  --bg: #24273a;
-  --fg: #cad3f5;
-  --accent: #8aadf4;
-  --selection: #494d64;
-  --border: #363a4f;
-  --statusbar: #1e2030;
-  --success: #a6da95;
-  --warning: #f5a97f;
-  --error: #ed8796;
-  --muted: #a5adcb;
-  --panel-title: #f5bde6;
+[data-theme="Blade Runner"] {
+  --bg: #0e0a08;
+  --fg: #f2e9de;
+  --accent: #ff9e3d;
+  --selection: #1d150f;
+  --border: #2b1f15;
+  --statusbar: #090705;
+  --success: #37c8ab;
+  --warning: #ff9e3d;
+  --error: #ff5a5a;
+  --muted: #8a7660;
+  --panel-title: #ff9e3d;
 }
 
 [data-theme="catppuccin-frappe"] {
@@ -96,88 +84,60 @@
   --panel-title: #ea76cb;
 }
 
-[data-theme="tokyo-night-storm"] {
-  --bg: #24283b;
-  --fg: #c0caf5;
-  --accent: #7aa2f7;
-  --selection: #364a82;
-  --border: #414868;
-  --statusbar: #1f2335;
-  --success: #9ece6a;
-  --warning: #e0af68;
-  --error: #f7768e;
-  --muted: #565f89;
-  --panel-title: #7dcfff;
-}
-
-[data-theme="tokyo-night"] {
-  --bg: #1a1b26;
-  --fg: #c0caf5;
-  --accent: #7aa2f7;
-  --selection: #283457;
-  --border: #292e42;
-  --statusbar: #16161e;
-  --success: #9ece6a;
-  --warning: #e0af68;
-  --error: #f7768e;
-  --muted: #565f89;
-  --panel-title: #7dcfff;
-}
-
-[data-theme="tokyo-night-moon"] {
-  --bg: #222436;
-  --fg: #c8d3f5;
-  --accent: #82aaff;
-  --selection: #2d3f76;
-  --border: #2f334d;
+[data-theme="catppuccin-macchiato"] {
+  --bg: #24273a;
+  --fg: #cad3f5;
+  --accent: #8aadf4;
+  --selection: #494d64;
+  --border: #363a4f;
   --statusbar: #1e2030;
-  --success: #c3e88d;
-  --warning: #ffc777;
-  --error: #ff757f;
-  --muted: #636da6;
-  --panel-title: #86e1fc;
+  --success: #a6da95;
+  --warning: #f5a97f;
+  --error: #ed8796;
+  --muted: #a5adcb;
+  --panel-title: #f5bde6;
 }
 
-[data-theme="nord"] {
-  --bg: #2e3440;
-  --fg: #d8dee9;
-  --accent: #88c0d0;
-  --selection: #434c5e;
-  --border: #3b4252;
-  --statusbar: #242933;
-  --success: #a3be8c;
-  --warning: #d08770;
-  --error: #bf616a;
-  --muted: #8fbcbb;
-  --panel-title: #81a1c1;
+[data-theme="catppuccin-mocha"] {
+  --bg: #1e1e2e;
+  --fg: #cdd6f4;
+  --accent: #89b4fa;
+  --selection: #45475a;
+  --border: #313244;
+  --statusbar: #181825;
+  --success: #a6e3a1;
+  --warning: #fab387;
+  --error: #f38ba8;
+  --muted: #a6adc8;
+  --panel-title: #f5c2e7;
 }
 
-[data-theme="solarized-dark"] {
-  --bg: #002b36;
-  --fg: #839496;
-  --accent: #268bd2;
-  --selection: #073642;
-  --border: #586e75;
-  --statusbar: #073642;
-  --success: #859900;
-  --warning: #cb4b16;
-  --error: #dc322f;
-  --muted: #657b83;
-  --panel-title: #d33682;
+[data-theme="Cyberpunk 2077"] {
+  --bg: #100a18;
+  --fg: #e8e6f0;
+  --accent: #fcee0a;
+  --selection: #22143a;
+  --border: #33204f;
+  --statusbar: #0a0610;
+  --success: #00f0ff;
+  --warning: #fcee0a;
+  --error: #ff003c;
+  --muted: #7d6f96;
+  --panel-title: #fcee0a;
 }
 
-[data-theme="solarized-light"] {
-  --bg: #fdf6e3;
-  --fg: #657b83;
-  --accent: #268bd2;
-  --selection: #eee8d5;
-  --border: #93a1a1;
-  --statusbar: #eee8d5;
-  --success: #859900;
-  --warning: #cb4b16;
-  --error: #dc322f;
-  --muted: #839496;
-  --panel-title: #d33682;
+[data-theme="Doom"] {
+  --bg: #0d0505;
+  --fg: #f2e0e0;
+  --accent: #e62525;
+  --selection: #1f0a0a;
+  --border: #2d0f0f;
+  --statusbar: #080303;
+  --success: #7bc25e;
+  --warning: #ff9e3d;
+  --error: #ff2e2e;
+  --muted: #8a5050;
+  --panel-title: #ff7b3d;
 }
 
 [data-theme="dracula"] {
@@ -194,32 +154,74 @@
   --panel-title: #8be9fd;
 }
 
-[data-theme="one-dark"] {
-  --bg: #282c34;
-  --fg: #abb2bf;
-  --accent: #61afef;
-  --selection: #3e4451;
-  --border: #3e4451;
-  --statusbar: #21252b;
-  --success: #98c379;
-  --warning: #d19a66;
-  --error: #e06c75;
-  --muted: #5c6370;
-  --panel-title: #c678dd;
+[data-theme="Fallout Terminal"] {
+  --bg: #0a0f0a;
+  --fg: #00ff00;
+  --accent: #00ff00;
+  --selection: #0f2410;
+  --border: #1a3a1a;
+  --statusbar: #060a06;
+  --success: #00ff00;
+  --warning: #ffb000;
+  --error: #ff5555;
+  --muted: #3a6b3a;
+  --panel-title: #00ff00;
 }
 
-[data-theme="monokai"] {
-  --bg: #272822;
-  --fg: #f8f8f2;
-  --accent: #f92672;
-  --selection: #49483e;
-  --border: #3e3d32;
-  --statusbar: #1e1f1c;
-  --success: #a6e22e;
-  --warning: #fd971f;
-  --error: #f92672;
-  --muted: #75715e;
-  --panel-title: #66d9ef;
+[data-theme="Ghost in the Shell"] {
+  --bg: #0a1214;
+  --fg: #d8f2ee;
+  --accent: #2dd4bf;
+  --selection: #122024;
+  --border: #1a2f34;
+  --statusbar: #060a0c;
+  --success: #2dd4bf;
+  --warning: #ffc05a;
+  --error: #ff5a7a;
+  --muted: #5d7a80;
+  --panel-title: #2dd4bf;
+}
+
+[data-theme="gruvbox-light"] {
+  --bg: #fbf1c7;
+  --fg: #3c3836;
+  --accent: #b57614;
+  --selection: #ebdbb2;
+  --border: #d5c4a1;
+  --statusbar: #f2e5bc;
+  --success: #98971a;
+  --warning: #d79921;
+  --error: #cc241d;
+  --muted: #7c6f64;
+  --panel-title: #8f3f71;
+}
+
+[data-theme="Halo"] {
+  --bg: #0d1420;
+  --fg: #dbe6f2;
+  --accent: #6fa55c;
+  --selection: #18233a;
+  --border: #212f4d;
+  --statusbar: #090d16;
+  --success: #7bbfe0;
+  --warning: #ff9f43;
+  --error: #ff5a5a;
+  --muted: #64708c;
+  --panel-title: #6fa55c;
+}
+
+[data-theme="LoL (Ahri)"] {
+  --bg: #241529;
+  --fg: #f7e9f2;
+  --accent: #e8448f;
+  --selection: #351d40;
+  --border: #482957;
+  --statusbar: #1b0f1f;
+  --success: #6ee7b7;
+  --warning: #ffa25c;
+  --error: #ff3d6e;
+  --muted: #9c7fb0;
+  --panel-title: #ff7ab8;
 }
 
 [data-theme="LoL (Jinx)"] {
@@ -250,32 +252,88 @@
   --panel-title: #fbc02d;
 }
 
-[data-theme="LoL (Ahri)"] {
-  --bg: #241529;
-  --fg: #f7e9f2;
-  --accent: #e8448f;
-  --selection: #351d40;
-  --border: #482957;
-  --statusbar: #1b0f1f;
-  --success: #6ee7b7;
-  --warning: #ffa25c;
-  --error: #ff3d6e;
-  --muted: #9c7fb0;
-  --panel-title: #ff7ab8;
+[data-theme="Matrix"] {
+  --bg: #0d0208;
+  --fg: #00ff41;
+  --accent: #00ff41;
+  --selection: #003b00;
+  --border: #008f11;
+  --statusbar: #080100;
+  --success: #00ff41;
+  --warning: #ffb000;
+  --error: #ff4444;
+  --muted: #008f11;
+  --panel-title: #00ff41;
 }
 
-[data-theme="Pokémon (Pikachu)"] {
-  --bg: #1a1c2e;
-  --fg: #fff5d6;
-  --accent: #f6c344;
-  --selection: #2a2d45;
-  --border: #383c5e;
-  --statusbar: #13141f;
-  --success: #7bed9f;
+[data-theme="monokai"] {
+  --bg: #272822;
+  --fg: #f8f8f2;
+  --accent: #f92672;
+  --selection: #49483e;
+  --border: #3e3d32;
+  --statusbar: #1e1f1c;
+  --success: #a6e22e;
+  --warning: #fd971f;
+  --error: #f92672;
+  --muted: #75715e;
+  --panel-title: #66d9ef;
+}
+
+[data-theme="Mr. Robot"] {
+  --bg: #0c0c10;
+  --fg: #e8e8f0;
+  --accent: #ff3b3b;
+  --selection: #1c1c24;
+  --border: #292933;
+  --statusbar: #08080b;
+  --success: #37c8ab;
+  --warning: #ff9e3d;
+  --error: #ff3b3b;
+  --muted: #7d7d8f;
+  --panel-title: #ff3b3b;
+}
+
+[data-theme="nord"] {
+  --bg: #2e3440;
+  --fg: #d8dee9;
+  --accent: #88c0d0;
+  --selection: #434c5e;
+  --border: #3b4252;
+  --statusbar: #242933;
+  --success: #a3be8c;
+  --warning: #d08770;
+  --error: #bf616a;
+  --muted: #8fbcbb;
+  --panel-title: #81a1c1;
+}
+
+[data-theme="one-dark"] {
+  --bg: #282c34;
+  --fg: #abb2bf;
+  --accent: #61afef;
+  --selection: #3e4451;
+  --border: #3e4451;
+  --statusbar: #21252b;
+  --success: #98c379;
+  --warning: #d19a66;
+  --error: #e06c75;
+  --muted: #5c6370;
+  --panel-title: #c678dd;
+}
+
+[data-theme="Overwatch"] {
+  --bg: #14161c;
+  --fg: #e8eaf0;
+  --accent: #f99e1a;
+  --selection: #23262f;
+  --border: #30343f;
+  --statusbar: #0e0f14;
+  --success: #218ffe;
   --warning: #ff9f43;
-  --error: #ff5252;
-  --muted: #858aa8;
-  --panel-title: #f6c344;
+  --error: #ff5a5a;
+  --muted: #7d828c;
+  --panel-title: #f99e1a;
 }
 
 [data-theme="Pokémon (Charizard)"] {
@@ -306,18 +364,18 @@
   --panel-title: #9d6bff;
 }
 
-[data-theme="Zelda"] {
-  --bg: #0c1710;
-  --fg: #e8f0dc;
-  --accent: #c6a45c;
-  --selection: #15261a;
-  --border: #1e3526;
-  --statusbar: #080f0a;
-  --success: #6bbf59;
-  --warning: #ffa63d;
-  --error: #e5533d;
-  --muted: #7a8d7e;
-  --panel-title: #c6a45c;
+[data-theme="Pokémon (Pikachu)"] {
+  --bg: #1a1c2e;
+  --fg: #fff5d6;
+  --accent: #f6c344;
+  --selection: #2a2d45;
+  --border: #383c5e;
+  --statusbar: #13141f;
+  --success: #7bed9f;
+  --warning: #ff9f43;
+  --error: #ff5252;
+  --muted: #858aa8;
+  --panel-title: #f6c344;
 }
 
 [data-theme="Portal"] {
@@ -332,6 +390,48 @@
   --error: #e0362c;
   --muted: #8a8a85;
   --panel-title: #ff8a3d;
+}
+
+[data-theme="solarized-dark"] {
+  --bg: #002b36;
+  --fg: #839496;
+  --accent: #268bd2;
+  --selection: #073642;
+  --border: #586e75;
+  --statusbar: #073642;
+  --success: #859900;
+  --warning: #cb4b16;
+  --error: #dc322f;
+  --muted: #657b83;
+  --panel-title: #d33682;
+}
+
+[data-theme="solarized-light"] {
+  --bg: #fdf6e3;
+  --fg: #657b83;
+  --accent: #268bd2;
+  --selection: #eee8d5;
+  --border: #93a1a1;
+  --statusbar: #eee8d5;
+  --success: #859900;
+  --warning: #cb4b16;
+  --error: #dc322f;
+  --muted: #839496;
+  --panel-title: #d33682;
+}
+
+[data-theme="Stardew Valley"] {
+  --bg: #1a1812;
+  --fg: #f0e8d8;
+  --accent: #6aa84f;
+  --selection: #2a251a;
+  --border: #3a3426;
+  --statusbar: #12100c;
+  --success: #8bc34a;
+  --warning: #d4881f;
+  --error: #c23b22;
+  --muted: #8a8270;
+  --panel-title: #e0a020;
 }
 
 [data-theme="Super Mario"] {
@@ -362,46 +462,88 @@
   --panel-title: #4a9e5c;
 }
 
-[data-theme="Overwatch"] {
-  --bg: #14161c;
-  --fg: #e8eaf0;
-  --accent: #f99e1a;
-  --selection: #23262f;
-  --border: #30343f;
-  --statusbar: #0e0f14;
-  --success: #218ffe;
-  --warning: #ff9f43;
-  --error: #ff5a5a;
-  --muted: #7d828c;
-  --panel-title: #f99e1a;
+[data-theme="Synthwave"] {
+  --bg: #16082e;
+  --fg: #f0e6ff;
+  --accent: #ff2ec4;
+  --selection: #241246;
+  --border: #33206a;
+  --statusbar: #0f0520;
+  --success: #00ffff;
+  --warning: #ff9e2e;
+  --error: #ff2e6e;
+  --muted: #8a74b8;
+  --panel-title: #ff2ec4;
 }
 
-[data-theme="Halo"] {
-  --bg: #0d1420;
-  --fg: #dbe6f2;
-  --accent: #6fa55c;
-  --selection: #18233a;
-  --border: #212f4d;
-  --statusbar: #090d16;
-  --success: #7bbfe0;
-  --warning: #ff9f43;
-  --error: #ff5a5a;
-  --muted: #64708c;
-  --panel-title: #6fa55c;
+[data-theme="tokyo-night"] {
+  --bg: #1a1b26;
+  --fg: #c0caf5;
+  --accent: #7aa2f7;
+  --selection: #283457;
+  --border: #292e42;
+  --statusbar: #16161e;
+  --success: #9ece6a;
+  --warning: #e0af68;
+  --error: #f7768e;
+  --muted: #565f89;
+  --panel-title: #7dcfff;
 }
 
-[data-theme="Stardew Valley"] {
-  --bg: #1a1812;
-  --fg: #f0e8d8;
-  --accent: #6aa84f;
-  --selection: #2a251a;
-  --border: #3a3426;
-  --statusbar: #12100c;
-  --success: #8bc34a;
-  --warning: #d4881f;
-  --error: #c23b22;
-  --muted: #8a8270;
-  --panel-title: #e0a020;
+[data-theme="tokyo-night-moon"] {
+  --bg: #222436;
+  --fg: #c8d3f5;
+  --accent: #82aaff;
+  --selection: #2d3f76;
+  --border: #2f334d;
+  --statusbar: #1e2030;
+  --success: #c3e88d;
+  --warning: #ffc777;
+  --error: #ff757f;
+  --muted: #636da6;
+  --panel-title: #86e1fc;
+}
+
+[data-theme="tokyo-night-storm"] {
+  --bg: #24283b;
+  --fg: #c0caf5;
+  --accent: #7aa2f7;
+  --selection: #364a82;
+  --border: #414868;
+  --statusbar: #1f2335;
+  --success: #9ece6a;
+  --warning: #e0af68;
+  --error: #f7768e;
+  --muted: #565f89;
+  --panel-title: #7dcfff;
+}
+
+[data-theme="Tron"] {
+  --bg: #0a1014;
+  --fg: #d6f4ff;
+  --accent: #00f6ff;
+  --selection: #0e2026;
+  --border: #122d36;
+  --statusbar: #060a0d;
+  --success: #00f6ff;
+  --warning: #ffb84d;
+  --error: #ff4d4d;
+  --muted: #4d7a86;
+  --panel-title: #00f6ff;
+}
+
+[data-theme="Zelda"] {
+  --bg: #0c1710;
+  --fg: #e8f0dc;
+  --accent: #c6a45c;
+  --selection: #15261a;
+  --border: #1e3526;
+  --statusbar: #080f0a;
+  --success: #6bbf59;
+  --warning: #ffa63d;
+  --error: #e5533d;
+  --muted: #7a8d7e;
+  --panel-title: #c6a45c;
 }
 
 /* ==========================================================================
