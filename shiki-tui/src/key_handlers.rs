@@ -36,20 +36,55 @@ enum ConflictSideChoice {
 
 impl App {
     fn open_theme_picker(&mut self) {
+        self.theme_search.clear();
         self.theme_picker_index = self.theme_index;
         self.show_theme_picker = true;
+    }
+    /// Themes whose name contains the search query (case-insensitive), in
+    /// built-in order — all of them while the query is empty. Backs both the
+    /// picker's rendering and its key handling, so navigation and selection
+    /// always operate on exactly what's on screen, same pattern as
+    /// `which_key_filtered_entries`.
+    pub fn theme_picker_filtered(&self) -> Vec<shiki_config::theme::Theme> {
+        let query = self.theme_search.value.to_lowercase();
+        self.available_themes
+            .iter()
+            .filter(|t| query.is_empty() || t.name.to_lowercase().contains(&query))
+            .cloned()
+            .collect()
     }
     fn handle_theme_picker_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => {
-                // Cancel: revert the live preview back to the theme that was active.
+                // First Esc clears the filter (keeping the picker open and
+                // the theme you're browsing applied); only a second Esc on an
+                // already-empty query cancels: revert the live preview back
+                // to the theme that was active.
+                if !self.theme_search.value.is_empty() {
+                    self.theme_search.clear();
+                    self.theme_picker_index = 0;
+                    self.preview_theme_at(0);
+                    return;
+                }
                 if let Some(t) = self.available_themes.get(self.theme_index) {
                     self.theme = t.clone();
                 }
                 self.close_theme_picker();
             }
             KeyCode::Enter => {
-                self.theme_index = self.theme_picker_index;
+                // With no filter match under the cursor there's nothing to
+                // select — don't "commit" the theme that happened to be
+                // live-previewed before the query narrowed to nothing.
+                let filtered = self.theme_picker_filtered();
+                let Some(t) = filtered.get(self.theme_picker_index) else {
+                    return;
+                };
+                self.theme = t.clone();
+                self.theme_index = self
+                    .available_themes
+                    .iter()
+                    .position(|a| a.name == t.name)
+                    .unwrap_or(self.theme_index);
                 // Only reset overrides when actually switching to a
                 // different base theme — compared against `config.theme.name`
                 // (the last *committed* value), not `self.theme.name` (the
@@ -68,6 +103,22 @@ impl App {
             }
             KeyCode::Char('j') | KeyCode::Down => self.preview_theme_at(1),
             KeyCode::Char('k') | KeyCode::Up => self.preview_theme_at(-1),
+            KeyCode::PageDown => self.preview_theme_at(10),
+            KeyCode::PageUp => self.preview_theme_at(-10),
+            KeyCode::Home => self.select_theme_picker(0),
+            KeyCode::End => self.select_theme_picker(usize::MAX),
+            KeyCode::Backspace => {
+                if !self.theme_search.value.is_empty() {
+                    self.theme_search.backspace();
+                    self.theme_picker_index = 0;
+                    self.preview_theme_at(0);
+                }
+            }
+            KeyCode::Char(c) => {
+                self.theme_search.push(c);
+                self.theme_picker_index = 0;
+                self.preview_theme_at(0);
+            }
             _ => {}
         }
     }
@@ -77,6 +128,7 @@ impl App {
     /// for the normal standalone leader+`c` picker.
     fn close_theme_picker(&mut self) {
         self.show_theme_picker = false;
+        self.theme_search.clear();
         if self.reopen_settings_after_theme_picker {
             self.reopen_settings_after_theme_picker = false;
             self.show_settings = true;
@@ -84,13 +136,28 @@ impl App {
     }
     /// Moves the picker cursor and immediately applies that theme so the
     /// whole UI re-themes live while browsing, before you've committed to it.
+    /// Operates on the filtered list (`theme_picker_filtered`), so j/k/PageUp/
+    /// PageDown all move within whatever the current search matches.
     fn preview_theme_at(&mut self, delta: isize) {
-        if self.available_themes.is_empty() {
+        let filtered = self.theme_picker_filtered();
+        if filtered.is_empty() {
             return;
         }
-        self.theme_picker_index =
-            shift(self.theme_picker_index, delta, self.available_themes.len());
-        if let Some(t) = self.available_themes.get(self.theme_picker_index) {
+        self.theme_picker_index = shift(self.theme_picker_index, delta, filtered.len());
+        if let Some(t) = filtered.get(self.theme_picker_index) {
+            self.theme = t.clone();
+        }
+    }
+    /// Absolute jump (Home/End) to a row of the filtered list — clamps to the
+    /// last match rather than wrapping, so End with a query lands on the
+    /// final match, not the last theme overall.
+    fn select_theme_picker(&mut self, idx: usize) {
+        let filtered = self.theme_picker_filtered();
+        if filtered.is_empty() {
+            return;
+        }
+        self.theme_picker_index = idx.min(filtered.len() - 1);
+        if let Some(t) = filtered.get(self.theme_picker_index) {
             self.theme = t.clone();
         }
     }

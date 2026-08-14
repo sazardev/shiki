@@ -913,7 +913,13 @@ pub struct App {
     pub(crate) last_frame_area: Rect,
     pub(crate) available_themes: Vec<Theme>,
     pub(crate) theme_index: usize,
+    /// Selected row among the *filtered* theme list (what `theme_picker_index`
+    /// now indexes since the picker got its search box) — the full-list
+    /// position of the current theme stays in `theme_index`. The search box
+    /// itself is `theme_search`, filtered case-insensitively on the theme
+    /// name by `App::theme_picker_filtered`.
     pub(crate) theme_picker_index: usize,
+    pub(crate) theme_search: InputBox,
     note_sort: NoteSort,
     pub(crate) pending_input: Option<PendingInput>,
     /// Overrides `PendingInput::title()`'s static text when set — only
@@ -1378,6 +1384,7 @@ impl App {
             available_themes,
             theme_index,
             theme_picker_index: theme_index,
+            theme_search: InputBox::default(),
             note_sort,
             pending_input: None,
             pending_input_title: None,

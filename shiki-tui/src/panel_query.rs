@@ -48,6 +48,7 @@ pub fn render(frame: &mut Frame, frame_area: Rect, app: &App) {
             icons::FILTER
         ),
         accent,
+        hex_to_color(&app.theme.bg),
     );
 
     render_result_table(

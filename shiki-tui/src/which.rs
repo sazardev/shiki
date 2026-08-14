@@ -37,6 +37,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             icons::KEYBOARD
         ),
         hex_to_color(&app.theme.accent),
+        hex_to_color(&app.theme.bg),
     );
 
     let accent = hex_to_color(&app.theme.accent);

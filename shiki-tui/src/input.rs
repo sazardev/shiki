@@ -25,23 +25,31 @@ impl InputBox {
         self.value.clear();
     }
 
+    /// `bg` fills both the block and the text area — modals `Clear` their
+    /// popup rect first (which resets those cells to the terminal default,
+    /// *not* the theme's `bg`), so without an explicit background every input
+    /// box showed a flat terminal-colored band that visibly clashed while the
+    /// theme picker live-previews different palettes.
     pub fn render(
         &self,
         frame: &mut Frame,
         area: Rect,
         title: &str,
         border_color: ratatui::style::Color,
+        bg: ratatui::style::Color,
     ) {
         let display: std::borrow::Cow<str> = if self.masked {
             "*".repeat(self.value.chars().count()).into()
         } else {
             self.value.as_str().into()
         };
-        let paragraph = Paragraph::new(display.into_owned()).block(
+        let style = Style::default().bg(bg);
+        let paragraph = Paragraph::new(display.into_owned()).style(style).block(
             Block::default()
                 .title(title.to_string())
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(border_color)),
+                .border_style(Style::default().fg(border_color))
+                .style(style),
         );
         frame.render_widget(paragraph, area);
 
