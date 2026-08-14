@@ -1,5 +1,8 @@
 use crate::theme::Theme;
 
+/// Only the classic `solarized-dark` palette ships now — the light variant
+/// was dropped from the catalog to keep the theme list lean, but the values
+/// here are unchanged from Ethan Schoonover's official spec.
 pub fn dark() -> Theme {
     Theme {
         name: "solarized-dark".into(),
@@ -22,30 +25,5 @@ pub fn dark() -> Theme {
         link: "#268bd2".into(),
         tag: "#6c71c4".into(),
         muted: "#657b83".into(),
-    }
-}
-
-pub fn light() -> Theme {
-    Theme {
-        name: "solarized-light".into(),
-        bg: "#fdf6e3".into(),
-        fg: "#657b83".into(),
-        accent: "#268bd2".into(),
-        selection: "#eee8d5".into(),
-        border: "#93a1a1".into(),
-        statusbar: "#eee8d5".into(),
-        highlight: "#b58900".into(),
-        error: "#dc322f".into(),
-        warning: "#cb4b16".into(),
-        success: "#859900".into(),
-        inactive: "#93a1a1".into(),
-        scrollbar: "#eee8d5".into(),
-        tab_active: "#6c71c4".into(),
-        tab_inactive: "#93a1a1".into(),
-        panel_title: "#d33682".into(),
-        cursor: "#586e75".into(),
-        link: "#268bd2".into(),
-        tag: "#6c71c4".into(),
-        muted: "#839496".into(),
     }
 }
