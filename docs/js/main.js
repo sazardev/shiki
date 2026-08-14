@@ -2,11 +2,12 @@
 // order, same names) — "dot" colors are each theme's own `accent` value
 // (docs/css/styles.css has the full palette per theme; this file only
 // needs enough to build/label the swatches and know which ones have a real
-// screenshot). 12 of the 16 have a captured PNG in docs/assets/screenshots/
-// (scripts/screenshots.sh's THEMES array covers every one) — the remaining
-// four (`screenshot: false`) DO have real screenshots in
-// docs/assets/screenshots/gallery/, but the homepage's hero loop isn't wired
-// up to serve them top-level yet, so they fall back to #term-fallback's
+// screenshot). 12 of the 19 have a captured PNG in docs/assets/screenshots/
+// (scripts/screenshots.sh's THEMES array covers every one) — of the
+// remaining seven, dracula/one-dark/monokai/default DO have real screenshots
+// in docs/assets/screenshots/gallery/, but the homepage's hero loop isn't wired
+// up to serve them top-level yet, while the three LoL palettes are brand new
+// and have no screenshot captured at all — both fall back to #term-fallback's
 // CSS-only mockup here. `screenshot` stays a per-theme flag rather than
 // being assumed true for everyone so a future theme added to shiki-config
 // without a matching screenshot yet degrades to the CSS-only #term-fallback
@@ -31,6 +32,11 @@ const THEMES = [
   { id: "dracula", label: "Dracula", dot: "#bd93f9", screenshot: false },
   { id: "one-dark", label: "One Dark", dot: "#61afef", screenshot: false },
   { id: "monokai", label: "Monokai", dot: "#f92672", screenshot: false },
+  // New League of Legends champion palettes — no screenshots captured yet,
+  // so they render the CSS-only mockup too.
+  { id: "LoL (Jinx)", label: "LoL (Jinx)", dot: "#ff3da5", screenshot: false },
+  { id: "LoL (Teemo)", label: "LoL (Teemo)", dot: "#8bc34a", screenshot: false },
+  { id: "LoL (Ahri)", label: "LoL (Ahri)", dot: "#e8448f", screenshot: false },
   { id: "default", label: "Default", dot: "#8b949e", screenshot: false },
 ];
 

@@ -222,6 +222,48 @@
   --panel-title: #66d9ef;
 }
 
+[data-theme="LoL (Jinx)"] {
+  --bg: #0e1b2c;
+  --fg: #eaf2fb;
+  --accent: #ff3da5;
+  --selection: #1a2c44;
+  --border: #243a56;
+  --statusbar: #091321;
+  --success: #2ee6ff;
+  --warning: #ffa63d;
+  --error: #ff3860;
+  --muted: #7e92a8;
+  --panel-title: #ff3da5;
+}
+
+[data-theme="LoL (Teemo)"] {
+  --bg: #16220f;
+  --fg: #e9f2dc;
+  --accent: #8bc34a;
+  --selection: #22331a;
+  --border: #2d4423;
+  --statusbar: #101a0b;
+  --success: #9ccc65;
+  --warning: #f79b2e;
+  --error: #e5533d;
+  --muted: #7e9170;
+  --panel-title: #fbc02d;
+}
+
+[data-theme="LoL (Ahri)"] {
+  --bg: #241529;
+  --fg: #f7e9f2;
+  --accent: #e8448f;
+  --selection: #351d40;
+  --border: #482957;
+  --statusbar: #1b0f1f;
+  --success: #6ee7b7;
+  --warning: #ffa25c;
+  --error: #ff3d6e;
+  --muted: #9c7fb0;
+  --panel-title: #ff7ab8;
+}
+
 /* ==========================================================================
    Base
    ========================================================================== */

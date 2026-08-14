@@ -1,6 +1,7 @@
 mod catppuccin;
 mod dracula;
 mod gruvbox;
+mod lol;
 mod monokai;
 mod nord;
 mod one_dark;
@@ -27,6 +28,9 @@ pub fn all() -> Vec<Theme> {
         dracula::dracula(),
         one_dark::one_dark(),
         monokai::monokai(),
+        lol::jinx(),
+        lol::teemo(),
+        lol::ahri(),
         Theme::terminal_default(),
     ]
 }

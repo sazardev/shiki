@@ -81,6 +81,7 @@ THEMES=(
   nord
   solarized-dark solarized-light
   dracula one-dark monokai
+  "LoL (Jinx)" "LoL (Teemo)" "LoL (Ahri)"
   default
 )
 
@@ -95,8 +96,12 @@ THEMES=(
 # a reasonable generic terminal background for that one capture.
 theme_bg() {
   local theme="$1" hex
+  # `index()` is a literal substring search rather than a regex match: theme
+  # names like "LoL (Jinx)" contain regex-special characters (parens) that a
+  # `~` pattern would mangle, and this file's capture loop already uses the
+  # same space/paren-bearing names for directory names and xterm titles.
   hex="$(awk -v name="\"$theme\"" '
-    $0 ~ ("name: " name) { found=1; next }
+    index($0, "name: " name) { found=1; next }
     found { if (match($0, /#[0-9a-fA-F]{6}/)) print substr($0, RSTART, RLENGTH); exit }
   ' "$ROOT"/shiki-config/src/themes/*.rs 2>/dev/null)"
   echo "${hex:-#000000}"
