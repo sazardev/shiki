@@ -456,18 +456,34 @@ jobs:
       - name: Generate demo GIF
         run: bash scripts/demo-gif.sh
 
+      - name: Generate per-theme hero demo videos
+        # The homepage's theme switcher swaps the hero `<video>` to a
+        # recording shot in that theme when one exists (see main.js's
+        # HERO_DEMO_THEMES). Keep that curated set fresh alongside the
+        # default gruvbox-dark demo above. Each recording takes ~2-3 min.
+        run: |
+          set -euo pipefail
+          for t in catppuccin-mocha tokyo-night "Cyberpunk 2077" "LoL (Jinx)" Matrix; do
+            THEME="$t" bash scripts/demo-gif.sh "/tmp/demo-$t.gif"
+            cp "/tmp/demo-$t.mp4" "docs/assets/demo/$t.mp4"
+          done
+
       - name: Update docs site screenshots and demo GIF
         id: update
         env:
           HAS_PAT: ${{ secrets.RELEASE_TAG_PAT }}
         run: |
           set -euo pipefail
-          for theme in \
-            catppuccin-mocha catppuccin-macchiato catppuccin-frappe catppuccin-latte \
-            tokyo-night-storm tokyo-night tokyo-night-moon \
-            gruvbox-dark gruvbox-light \
-            nord \
-            solarized-dark solarized-light; do
+          # Homepage hero loop's top-level PNGs — every theme's wide-01
+          # capture, globbed over what screenshots.sh actually produced (so
+          # a theme added/removed from the catalog tracks automatically,
+          # with no matching edit needed here). `default` (terminal-inherit)
+          # and `cli` are deliberately excluded: default has no fixed hex
+          # and stays a CSS mockup, cli isn't a theme.
+          for theme_dir in screenshots/*/; do
+            theme="$(basename "$theme_dir")"
+            [ "$theme" = "default" ] && continue
+            [ "$theme" = "cli" ] && continue
             cp "screenshots/$theme/wide-01-notebooks.png" "docs/assets/screenshots/$theme.png"
           done
           # documentation.html's per-feature screenshot gallery — every
@@ -496,7 +512,7 @@ jobs:
             docs/assets/screenshots/gallery/*/*.png
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/assets/screenshots docs/assets/demo.gif
+          git add docs/assets/screenshots docs/assets/demo.gif docs/assets/demo.mp4 docs/assets/demo
           if git diff --cached --quiet; then
             echo "No screenshot/demo-gif changes to commit"
           elif [ -z "$HAS_PAT" ]; then

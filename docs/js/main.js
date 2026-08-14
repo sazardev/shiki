@@ -3,66 +3,71 @@
 // theme's own `accent` value
 // (docs/css/styles.css has the full palette per theme; this file only
 // needs enough to build/label the swatches and know which ones have a real
-// screenshot). 12 of the 43 have a captured PNG in docs/assets/screenshots/
-// (scripts/screenshots.sh's THEMES array covers every one) — of the
-// remaining thirty-one, dracula/one-dark/monokai/default DO have real
-// screenshots in docs/assets/screenshots/gallery/, but the homepage's hero
-// loop isn't wired up to serve them top-level yet, while the LoL,
-// video-game, and hacker/cyber palettes are brand new and have no
-// screenshot captured at all — both fall back to #term-fallback's CSS-only
-// mockup here. `screenshot` stays a per-theme flag rather than
+// screenshot). 36 of the 37 have a captured PNG in docs/assets/screenshots/
+// (scripts/screenshots.sh covers every one; the release job copies each
+// theme's wide-01-notebooks capture to a top-level PNG). Only `default` —
+// the terminal-inherit theme — stays `screenshot: false` and renders the
+// CSS-only #term-fallback mockup, since it has no fixed hex values of its
+// own. `screenshot` stays a per-theme flag rather than
 // being assumed true for everyone so a future theme added to shiki-config
 // without a matching screenshot yet degrades to the CSS-only #term-fallback
 // mockup instead of silently
 // showing another theme's image under the wrong name.
 const THEMES = [
-  { id: "Arasaka", label: "Arasaka", dot: "#ff003c", screenshot: false },
-  { id: "Blade Runner", label: "Blade Runner", dot: "#ff9e3d", screenshot: false },
-  { id: "catppuccin-frappe", label: "Catppuccin Frappé", dot: "#8caaee", screenshot: true },
-  { id: "catppuccin-latte", label: "Catppuccin Latte", dot: "#1e66f5", screenshot: true },
-  { id: "catppuccin-macchiato", label: "Catppuccin Macchiato", dot: "#8aadf4", screenshot: true },
+  { id: "Arasaka", label: "Arasaka", dot: "#ff003c", screenshot: true },
+  { id: "Blade Runner", label: "Blade Runner", dot: "#ff9e3d", screenshot: true },
   { id: "catppuccin-mocha", label: "Catppuccin Mocha", dot: "#89b4fa", screenshot: true },
-  { id: "Cyberpunk 2077", label: "Cyberpunk 2077", dot: "#fcee0a", screenshot: false },
-  { id: "Doom", label: "Doom", dot: "#e62525", screenshot: false },
-  { id: "dracula", label: "Dracula", dot: "#bd93f9", screenshot: false },
-  { id: "Fallout Terminal", label: "Fallout Terminal", dot: "#00ff00", screenshot: false },
-  { id: "Ghost in the Shell", label: "Ghost in the Shell", dot: "#2dd4bf", screenshot: false },
+  { id: "Cyberpunk 2077", label: "Cyberpunk 2077", dot: "#fcee0a", screenshot: true },
+  { id: "Doom", label: "Doom", dot: "#e62525", screenshot: true },
+  { id: "dracula", label: "Dracula", dot: "#bd93f9", screenshot: true },
+  { id: "Fallout Terminal", label: "Fallout Terminal", dot: "#00ff00", screenshot: true },
+  { id: "Ghost in the Shell", label: "Ghost in the Shell", dot: "#2dd4bf", screenshot: true },
   { id: "gruvbox-dark", label: "Gruvbox Dark", dot: "#fabd2f", screenshot: true },
-  { id: "gruvbox-dark-hard", label: "Gruvbox Dark Hard", dot: "#fabd2f", screenshot: false },
-  { id: "gruvbox-dark-soft", label: "Gruvbox Dark Soft", dot: "#fabd2f", screenshot: false },
+  { id: "gruvbox-dark-hard", label: "Gruvbox Dark Hard", dot: "#fabd2f", screenshot: true },
+  { id: "gruvbox-dark-soft", label: "Gruvbox Dark Soft", dot: "#fabd2f", screenshot: true },
   { id: "gruvbox-light", label: "Gruvbox Light", dot: "#b57614", screenshot: true },
-  { id: "gruvbox-light-hard", label: "Gruvbox Light Hard", dot: "#b57614", screenshot: false },
-  { id: "gruvbox-light-soft", label: "Gruvbox Light Soft", dot: "#b57614", screenshot: false },
-  { id: "Halo", label: "Halo", dot: "#6fa55c", screenshot: false },
-  { id: "LoL (Ahri)", label: "LoL (Ahri)", dot: "#e8448f", screenshot: false },
-  { id: "LoL (Jinx)", label: "LoL (Jinx)", dot: "#ff3da5", screenshot: false },
-  { id: "LoL (Teemo)", label: "LoL (Teemo)", dot: "#8bc34a", screenshot: false },
-  { id: "Matrix", label: "Matrix", dot: "#00ff41", screenshot: false },
-  { id: "monokai", label: "Monokai", dot: "#f92672", screenshot: false },
-  { id: "Mr. Robot", label: "Mr. Robot", dot: "#ff3b3b", screenshot: false },
+  { id: "gruvbox-light-hard", label: "Gruvbox Light Hard", dot: "#b57614", screenshot: true },
+  { id: "gruvbox-light-soft", label: "Gruvbox Light Soft", dot: "#b57614", screenshot: true },
+  { id: "Halo", label: "Halo", dot: "#6fa55c", screenshot: true },
+  { id: "LoL (Ahri)", label: "LoL (Ahri)", dot: "#e8448f", screenshot: true },
+  { id: "LoL (Jinx)", label: "LoL (Jinx)", dot: "#ff3da5", screenshot: true },
+  { id: "LoL (Teemo)", label: "LoL (Teemo)", dot: "#8bc34a", screenshot: true },
+  { id: "Matrix", label: "Matrix", dot: "#00ff41", screenshot: true },
+  { id: "monokai", label: "Monokai", dot: "#f92672", screenshot: true },
+  { id: "Mr. Robot", label: "Mr. Robot", dot: "#ff3b3b", screenshot: true },
   { id: "nord", label: "Nord", dot: "#88c0d0", screenshot: true },
-  { id: "one-dark", label: "One Dark", dot: "#61afef", screenshot: false },
-  { id: "Overwatch", label: "Overwatch", dot: "#f99e1a", screenshot: false },
-  { id: "Pokémon (Charizard)", label: "Pokémon (Charizard)", dot: "#ff6b35", screenshot: false },
-  { id: "Pokémon (Gengar)", label: "Pokémon (Gengar)", dot: "#9d6bff", screenshot: false },
-  { id: "Pokémon (Pikachu)", label: "Pokémon (Pikachu)", dot: "#f6c344", screenshot: false },
-  { id: "Portal", label: "Portal", dot: "#ff8a3d", screenshot: false },
+  { id: "one-dark", label: "One Dark", dot: "#61afef", screenshot: true },
+  { id: "Overwatch", label: "Overwatch", dot: "#f99e1a", screenshot: true },
+  { id: "Pokémon (Charizard)", label: "Pokémon (Charizard)", dot: "#ff6b35", screenshot: true },
+  { id: "Pokémon (Gengar)", label: "Pokémon (Gengar)", dot: "#9d6bff", screenshot: true },
+  { id: "Pokémon (Pikachu)", label: "Pokémon (Pikachu)", dot: "#f6c344", screenshot: true },
+  { id: "Portal", label: "Portal", dot: "#ff8a3d", screenshot: true },
   { id: "solarized-dark", label: "Solarized Dark", dot: "#268bd2", screenshot: true },
-  { id: "solarized-light", label: "Solarized Light", dot: "#268bd2", screenshot: true },
-  { id: "Stardew Valley", label: "Stardew Valley", dot: "#6aa84f", screenshot: false },
-  { id: "Super Mario", label: "Super Mario", dot: "#e52521", screenshot: false },
-  { id: "Super Mario (Luigi)", label: "Super Mario (Luigi)", dot: "#4a9e5c", screenshot: false },
-  { id: "Synthwave", label: "Synthwave", dot: "#ff2ec4", screenshot: false },
+  { id: "Stardew Valley", label: "Stardew Valley", dot: "#6aa84f", screenshot: true },
+  { id: "Super Mario", label: "Super Mario", dot: "#e52521", screenshot: true },
+  { id: "Super Mario (Luigi)", label: "Super Mario (Luigi)", dot: "#4a9e5c", screenshot: true },
+  { id: "Synthwave", label: "Synthwave", dot: "#ff2ec4", screenshot: true },
   { id: "tokyo-night", label: "Tokyo Night", dot: "#7aa2f7", screenshot: true },
-  { id: "tokyo-night-moon", label: "Tokyo Night Moon", dot: "#82aaff", screenshot: true },
-  { id: "tokyo-night-storm", label: "Tokyo Night Storm", dot: "#7aa2f7", screenshot: true },
-  { id: "Tron", label: "Tron", dot: "#00f6ff", screenshot: false },
-  { id: "Zelda", label: "Zelda", dot: "#c6a45c", screenshot: false },
+  { id: "Tron", label: "Tron", dot: "#00f6ff", screenshot: true },
+  { id: "Zelda", label: "Zelda", dot: "#c6a45c", screenshot: true },
   { id: "default", label: "Default", dot: "#8b949e", screenshot: false },
 ];
 
 const STORAGE_KEY = "shiki-site-theme";
 const DEFAULT_THEME = "gruvbox-dark"; // matches ThemeConfig::default() as of shiki 0.8.1+
+
+// Themes with their own hero demo video (`assets/demo/{id}.mp4`, recorded
+// with that theme active — see scripts/demo-gif.sh's `THEME` env var). Any
+// other theme falls back to the default gruvbox-dark recording. Kept as an
+// explicit list rather than probed per-switch so the site never shows a
+// stale 404'd video; add a theme here when a recording for it is committed.
+const HERO_DEMO_THEMES = [
+  "catppuccin-mocha",
+  "tokyo-night",
+  "Cyberpunk 2077",
+  "LoL (Jinx)",
+  "Matrix",
+];
 
 function applyTheme(themeId) {
   const theme = THEMES.find((t) => t.id === themeId) || THEMES.find((t) => t.id === DEFAULT_THEME);
@@ -72,6 +77,21 @@ function applyTheme(themeId) {
   document.querySelectorAll(".swatch").forEach((el) => {
     el.classList.toggle("active", el.dataset.themeId === theme.id);
   });
+
+  // Hero demo video: swap to that theme's own recording when one exists,
+  // otherwise the default (gruvbox-dark) demo plays. Only present on the
+  // home page; `.hero-demo` is gone on every other page, so guard on it.
+  const heroVideo = document.getElementById("hero-screenshot");
+  if (heroVideo) {
+    const themedDemo = HERO_DEMO_THEMES.includes(theme.id)
+      ? `assets/demo/${theme.id}.mp4`
+      : "assets/demo.mp4";
+    if (heroVideo.getAttribute("src") !== themedDemo) {
+      heroVideo.setAttribute("src", themedDemo);
+      heroVideo.load();
+      heroVideo.play().catch(() => {});
+    }
+  }
 
   // Only present on the home page's Themes section — pages like
   // documentation.html apply the chosen theme's colors via the CSS

@@ -48,18 +48,18 @@ always recorded against that release's own binary — not a workflow from severa
     <td align="center"><sub>Catppuccin Mocha</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/assets/screenshots/tokyo-night-storm.png" width="290" /></td>
-    <td><img src="docs/assets/screenshots/catppuccin-latte.png" width="290" /></td>
+    <td><img src="docs/assets/screenshots/Cyberpunk%202077.png" width="290" /></td>
+    <td><img src="docs/assets/screenshots/LoL%20(Jinx).png" width="290" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Tokyo Night Storm</sub></td>
-    <td align="center"><sub>Catppuccin Latte</sub></td>
+    <td align="center"><sub>Cyberpunk 2077</sub></td>
+    <td align="center"><sub>LoL (Jinx)</sub></td>
   </tr>
 </table>
 
 These update automatically after every release (`update-screenshots` job in
 [`release.yml`](.github/workflows/release.yml)), so they always reflect the current version — not
-a screenshot from three releases ago. All 16 built-in themes have a live, interactive preview on
+a screenshot from three releases ago. All 37 built-in themes have a live, interactive preview on
 the [website](https://sazardev.github.io/shiki/#themes).
 
 ## Features
@@ -80,8 +80,9 @@ the [website](https://sazardev.github.io/shiki/#themes).
   automatically every N changes), per-notebook policy overrides, robust HTTPS/SSH auth that
   reuses your system's own git credential store, and automatic fallback to the remote's actual
   default branch.
-- **16 built-in themes** (Catppuccin ×4, Tokyo Night ×3, Gruvbox ×2, Solarized ×2, Nord, Dracula,
-  One Dark, Monokai, and a
+- **37 built-in themes** (Catppuccin Mocha, Tokyo Night, Gruvbox ×6, Solarized Dark, Nord,
+  Dracula, One Dark, Monokai, League of Legends champions, video-game and hacker/cyberpunk
+  palettes, and a
   terminal-native default that inherits your terminal's own palette) with a live-preview picker.
 - **Config-driven keybindings**, scoped by focus, fully remappable in `config.toml` — nothing
   hardcoded except plain navigation.

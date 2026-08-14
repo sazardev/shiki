@@ -8,6 +8,29 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ### Added
 
+- The theme picker (leader+`c`) grew a live filter box: type to narrow the list
+  case-insensitively (same behavior as the which-key modal), `Esc` clears the query before
+  cancelling, `Enter` is a no-op on zero matches, and `PageUp`/`PageDown`/`Home`/`End` join
+  `j`/`k` — handy now that the catalog is 37 themes. Input boxes across modals also render the
+  active theme's background instead of the terminal default.
+- 23 new palettes in the theme catalog, in three groups:
+  - **League of Legends champions** (`LoL (Jinx)`, `LoL (Teemo)`, `LoL (Ahri)`) — neon pink/
+    electric-blue, scout-green/mushroom-yellow, and magenta/purple fox-tail palettes.
+  - **Video games** — Pokémon (Pikachu/Charizard/Gengar), Zelda, Portal (the one light
+    "Aperture laboratory" palette), Super Mario and Luigi, Overwatch, Halo, Stardew Valley.
+  - **Hacker / cyberpunk** — Matrix, Cyberpunk 2077, Arasaka, Synthwave, Tron, Fallout
+    Terminal, Blade Runner, Doom, Ghost in the Shell, Mr. Robot.
+  Plus Gruvbox's official **hard/soft contrast variants** (dark and light).
+- The catalog was trimmed to 37 themes to stay browsable: one Catppuccin (Mocha), one Tokyo
+  Night (Night), one Solarized (Dark), and the list is alphabetical in the picker (`default`
+  stays last).
+- The homepage's hero demo is now an mp4 `<video>` (autoplays reliably, ~3x smaller than the
+  GIF it replaced), and it's **theme-aware**: a curated set of themes (Catppuccin Mocha, Tokyo
+  Night, Cyberpunk 2077, LoL (Jinx), Matrix) each have their own demo recording shot in that
+  theme — picking one on the site swaps the hero video to match, falling back to the default
+  gruvbox-dark recording otherwise. `scripts/demo-gif.sh` gained a `THEME` env var so the same
+  recording can be shot per theme, and reduced-motion users still get a static screenshot.
+
 - `Ctrl+D` in the inline editor inserts today's date (`YYYY-MM-DD`) at the cursor, anywhere in
   the buffer, as a single undo step — the `/date` slash-menu snippet only works at line start.
   `[editor] timestamp_with_time` (off by default) appends the current time

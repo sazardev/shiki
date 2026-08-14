@@ -77,11 +77,11 @@ shiki/
 │       ├── theme.rs               # Theme struct, palettes
 │       └── themes/
 │           ├── mod.rs
-│           ├── catppuccin.rs      # mocha, latte, frappe, macchiato
-│           ├── tokyo_night.rs     # storm, night, moon
+│           ├── catppuccin.rs      # mocha
+│           ├── tokyo_night.rs     # night
 │           ├── gruvbox.rs         # dark, light + hard/soft variants
 │           ├── nord.rs
-│           ├── solarized.rs       # dark, light
+│           ├── solarized.rs       # dark
 │           ├── dracula.rs
 │           ├── one_dark.rs
 │           ├── monokai.rs
@@ -746,19 +746,27 @@ created as `.md`; renaming a `.txt`/`.mdx` note preserves its original extension
 
 ---
 
-## Included themes (from the start)
+## Included themes (37 built-in)
 
-- **Catppuccin** — Mocha, Macchiato, Frappé, Latte
-- **Tokyo Night** — Storm, Night, Moon
-- **Gruvbox** — Dark, Light
-- **Solarized** — Dark, Light
+- **Catppuccin** — Mocha
+- **Tokyo Night** — Night
+- **Gruvbox** — Dark, Light, each with Hard/Soft contrast variants
+- **Solarized** — Dark
 - **Nord**
 - **Dracula**
 - **One Dark**
 - **Monokai**
+- **League of Legends** — LoL (Jinx), LoL (Teemo), LoL (Ahri)
+- **Video games** — Pokémon (Pikachu/Charizard/Gengar), Zelda, Portal, Super Mario (+ Luigi),
+  Overwatch, Halo, Stardew Valley
+- **Hacker / cyberpunk** — Matrix, Cyberpunk 2077, Arasaka, Synthwave, Tron, Fallout Terminal,
+  Blade Runner, Doom, Ghost in the Shell, Mr. Robot
 - **Default** — inherits the terminal's own colors (fallback; `bg`/`fg`/`border` are
   `"reset"`, accents use the terminal's native ANSI colors) instead of imposing a
   fixed palette
+
+The list is alphabetical in the picker (default stays last); the theme picker (leader+`c`) has a
+live filter box, so with 37 themes you just type to narrow it down.
 
 Each theme defines ~20 configurable color slots:
 `bg`, `fg`, `accent`, `selection`, `border`, `statusbar`,

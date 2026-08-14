@@ -16,7 +16,7 @@
   <meta property="og:url" content="https://sazardev.github.io/shiki/" />
   <meta property="og:site_name" content="shiki" />
   <meta property="og:title" content="shiki (私記) — a TUI note-taking app for people who live in the terminal" />
-  <meta property="og:description" content="Three-pane, Yazi-inspired TUI note-taking app in Rust. Notebooks are independent git repos, every note has real version history, 16 built-in themes, fully keyboard-driven." />
+  <meta property="og:description" content="Three-pane, Yazi-inspired TUI note-taking app in Rust. Notebooks are independent git repos, every note has real version history, 37 built-in themes, fully keyboard-driven." />
   <meta property="og:image" content="https://sazardev.github.io/shiki/assets/og-image.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -25,7 +25,7 @@
 
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="shiki (私記) — a TUI note-taking app for people who live in the terminal" />
-  <meta name="twitter:description" content="Three-pane, Yazi-inspired TUI note-taking app in Rust. Notebooks are independent git repos, every note has real version history, 16 built-in themes, fully keyboard-driven." />
+  <meta name="twitter:description" content="Three-pane, Yazi-inspired TUI note-taking app in Rust. Notebooks are independent git repos, every note has real version history, 37 built-in themes, fully keyboard-driven." />
   <meta name="twitter:image" content="https://sazardev.github.io/shiki/assets/og-image.png" />
   <meta name="twitter:image:alt" content="shiki (私記) — a TUI note-taking app, shown running in a terminal window" />
 
@@ -133,14 +133,20 @@
             <span class="term-dot green"></span>
             <span class="term-title">shiki — demo</span>
           </div>
-          <picture>
-            <!-- A GIF can't be paused, so a visitor with the OS-level
-                 "reduce motion" preference set gets a static frame instead
-                 of a forced looping animation — `<source media>` is
-                 evaluated before the `<img>` fallback, no JS needed. -->
-            <source srcset="assets/screenshots/gruvbox-dark.png" media="(prefers-reduced-motion: reduce)" />
-            <img id="hero-screenshot" src="assets/demo.gif" alt="Animated demo of shiki: browsing notebooks and nested folders, global and in-notebook fuzzy search, tags, multi-select batch delete, creating and moving folders, writing a full note, a git commit, and live theme switching" />
-          </picture>
+          <div class="hero-demo">
+            <!-- The demo is an mp4 `<video>`: it autoplays reliably on every
+                 browser and loads ~3x faster than the 5.5MB animated GIF it
+                 was converted from. A video can't be paused though, so a
+                 visitor with the OS-level "reduce motion" preference gets
+                 the static screenshot instead (CSS swaps it in, no JS). -->
+            <video id="hero-screenshot" autoplay loop muted playsinline preload="auto" poster="assets/demo-poster.jpg"
+                   aria-label="Animated demo of shiki: browsing notebooks and nested folders, global and in-notebook fuzzy search, tags, multi-select batch delete, creating and moving folders, writing a full note, a git commit, and live theme switching">
+              <source src="assets/demo.mp4" type="video/mp4" />
+              <img src="assets/demo.gif" alt="Animated demo of shiki: browsing notebooks and nested folders, global and in-notebook fuzzy search, tags, multi-select batch delete, creating and moving folders, writing a full note, a git commit, and live theme switching" />
+            </video>
+            <img class="hero-demo-static" src="assets/screenshots/gruvbox-dark.png"
+                 alt="shiki running with the Gruvbox Dark theme" />
+          </div>
         </div>
       </div>
     </div>
@@ -149,7 +155,7 @@
   <section id="themes">
     <div class="container">
       <span class="eyebrow">Make it yours</span>
-      <h2>16 built-in themes. Pick one below — this whole page changes with it.</h2>
+      <h2>37 built-in themes. Pick one below — this whole page changes with it.</h2>
       <p class="muted" style="max-width: 62ch;">
         Go on, click around. Whatever you land on is exactly what's waiting for you in your
         terminal — no surprises.

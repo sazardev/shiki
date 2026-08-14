@@ -77,7 +77,7 @@ export DISPLAY="$XVFB_DISPLAY"
 THEMES=(
   Arasaka
   "Blade Runner"
-  catppuccin-frappe catppuccin-latte catppuccin-macchiato catppuccin-mocha
+  catppuccin-mocha
   "Cyberpunk 2077"
   Doom
   dracula
@@ -95,11 +95,11 @@ THEMES=(
   Overwatch
   "Pokémon (Charizard)" "Pokémon (Gengar)" "Pokémon (Pikachu)"
   Portal
-  solarized-dark solarized-light
+  solarized-dark
   "Stardew Valley"
   "Super Mario" "Super Mario (Luigi)"
   Synthwave
-  tokyo-night tokyo-night-moon tokyo-night-storm
+  tokyo-night
   Tron
   Zelda
   default
@@ -127,7 +127,15 @@ theme_bg() {
   echo "${hex:-#000000}"
 }
 
-rm -rf "$OUT"
+# Optional `ONLY` env var limits the run to a subset of themes, as a
+# newline-separated list (theme names contain spaces, so newlines are the
+# one unambiguous delimiter). Only wipe the whole output tree for a full
+# run — an incremental `ONLY` run appends into the existing dir instead of
+# deleting the other themes.
+: "${ONLY:=}"
+if [ -z "$ONLY" ]; then
+  rm -rf "$OUT"
+fi
 mkdir -p "$OUT"
 
 # --- Sample data: a couple of notebooks with real-looking notes, committed
@@ -368,8 +376,15 @@ capture() {
   sleep 1.2
 
   local win=""
+  # `xdotool search --name` treats the pattern as a *regex*, and several
+  # theme names contain regex-special characters (e.g. `LoL (Ahri)`, where
+  # the parens read as a capture group) — without escaping, the search
+  # matches nothing and the window is "never found". Escape every
+  # metacharacter so the title is matched literally.
+  local title_regex
+  title_regex="$(printf '%s' "$title" | sed 's/[][(){}.*+?^$\\|]/\\&/g')"
   for _ in $(seq 1 30); do
-    win="$(xdotool search --name "$title" 2>/dev/null | head -1)"
+    win="$(xdotool search --name "$title_regex" 2>/dev/null | head -1)"
     [ -n "$win" ] && break
     sleep 0.2
   done
@@ -378,11 +393,15 @@ capture() {
     kill -9 "$xterm_pid" 2>/dev/null || true
     return
   fi
-  xdotool windowfocus "$win"
+  # Focus failures are transient under Xvfb (a window closing mid-capture can
+  # make X_SetInputFocus return BadMatch and abort the whole run under
+  # `set -e`) — `type --window`/`key --window` target the window by id anyway,
+  # so an un-focused window still receives the keystrokes. Best-effort focus.
+  xdotool windowfocus "$win" 2>/dev/null || true
   sleep 0.2
 
-  send_text() { xdotool windowfocus "$win"; xdotool type --window "$win" --clearmodifiers -- "$1"; }
-  send_key() { xdotool windowfocus "$win"; xdotool key --window "$win" --clearmodifiers "$1"; }
+  send_text() { xdotool windowfocus "$win" 2>/dev/null || true; xdotool type --window "$win" --clearmodifiers -- "$1"; }
+  send_key() { xdotool windowfocus "$win" 2>/dev/null || true; xdotool key --window "$win" --clearmodifiers "$1"; }
   shot() {
     mkdir -p "$OUT/$theme"
     sleep 0.35
@@ -557,6 +576,9 @@ capture() {
 }
 
 for theme in "${THEMES[@]}"; do
+  if [ -n "$ONLY" ] && ! grep -Fqx "$theme" <<<"$ONLY"; then
+    continue
+  fi
   echo "== $theme =="
   capture "$theme" wide 140 40
   capture "$theme" stacked 60 40

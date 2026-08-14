@@ -84,48 +84,6 @@
   --panel-title: #ff9e3d;
 }
 
-[data-theme="catppuccin-frappe"] {
-  --bg: #303446;
-  --fg: #c6d0f5;
-  --accent: #8caaee;
-  --selection: #484d6d;
-  --border: #414559;
-  --statusbar: #292c3c;
-  --success: #a6d189;
-  --warning: #ef9f76;
-  --error: #e78284;
-  --muted: #a5adce;
-  --panel-title: #f4b8e4;
-}
-
-[data-theme="catppuccin-latte"] {
-  --bg: #eff1f5;
-  --fg: #4c4f69;
-  --accent: #1e66f5;
-  --selection: #ccd0da;
-  --border: #bcc0cc;
-  --statusbar: #e6e9ef;
-  --success: #40a02b;
-  --warning: #fe640b;
-  --error: #d20f39;
-  --muted: #6c6f85;
-  --panel-title: #ea76cb;
-}
-
-[data-theme="catppuccin-macchiato"] {
-  --bg: #24273a;
-  --fg: #cad3f5;
-  --accent: #8aadf4;
-  --selection: #494d64;
-  --border: #363a4f;
-  --statusbar: #1e2030;
-  --success: #a6da95;
-  --warning: #f5a97f;
-  --error: #ed8796;
-  --muted: #a5adcb;
-  --panel-title: #f5bde6;
-}
-
 [data-theme="catppuccin-mocha"] {
   --bg: #1e1e2e;
   --fg: #cdd6f4;
@@ -462,20 +420,6 @@
   --panel-title: #d33682;
 }
 
-[data-theme="solarized-light"] {
-  --bg: #fdf6e3;
-  --fg: #657b83;
-  --accent: #268bd2;
-  --selection: #eee8d5;
-  --border: #93a1a1;
-  --statusbar: #eee8d5;
-  --success: #859900;
-  --warning: #cb4b16;
-  --error: #dc322f;
-  --muted: #839496;
-  --panel-title: #d33682;
-}
-
 [data-theme="Stardew Valley"] {
   --bg: #1a1812;
   --fg: #f0e8d8;
@@ -539,34 +483,6 @@
   --selection: #283457;
   --border: #292e42;
   --statusbar: #16161e;
-  --success: #9ece6a;
-  --warning: #e0af68;
-  --error: #f7768e;
-  --muted: #565f89;
-  --panel-title: #7dcfff;
-}
-
-[data-theme="tokyo-night-moon"] {
-  --bg: #222436;
-  --fg: #c8d3f5;
-  --accent: #82aaff;
-  --selection: #2d3f76;
-  --border: #2f334d;
-  --statusbar: #1e2030;
-  --success: #c3e88d;
-  --warning: #ffc777;
-  --error: #ff757f;
-  --muted: #636da6;
-  --panel-title: #86e1fc;
-}
-
-[data-theme="tokyo-night-storm"] {
-  --bg: #24283b;
-  --fg: #c0caf5;
-  --accent: #7aa2f7;
-  --selection: #364a82;
-  --border: #414868;
-  --statusbar: #1f2335;
   --success: #9ece6a;
   --warning: #e0af68;
   --error: #f7768e;
@@ -903,11 +819,31 @@ code, .code {
   color: var(--muted);
 }
 
-.term-window img {
+.term-window img,
+.term-window video {
   display: block;
   width: 100%;
   height: auto;
   background: var(--bg);
+}
+
+/* Reduced-motion handling for the hero demo: a `<video>` can't be paused,
+   so under `prefers-reduced-motion` the static screenshot replaces it (the
+   video element stays in the DOM but is hidden; both are children of
+   `.hero-demo`). */
+.hero-demo-static {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-demo video {
+    display: none;
+  }
+  .hero-demo-static {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: var(--bg);
+  }
 }
 
 /* `.term-window img`'s own `display: block` above is more specific than the
@@ -922,13 +858,12 @@ code, .code {
   display: none;
 }
 
-/* CSS-only fallback mockup, shown instead of a real screenshot for the 4
-   palettes that don't have one captured yet (dracula, one-dark, monokai,
-   default — scripts/screenshots.sh's THEMES array covers all 16, so these
-   just haven't had a screenshots run capture them) — showing a *real*
-   screenshot baked with the wrong theme's pixel colors would be more
-   misleading than a simple live mockup that genuinely recolors with the CSS
-   variables above. */
+/* CSS-only fallback mockup, shown instead of a real screenshot for themes
+   that don't have a captured top-level PNG yet (only the terminal-inherit
+   "default" theme, which has no fixed hex values to screenshot — the other
+   36 all have real captures) — showing a *real* screenshot baked with the
+   wrong theme's pixel colors would be more misleading than a simple live
+   mockup that genuinely recolors with the CSS variables above. */
 .term-fallback {
   display: grid;
   grid-template-columns: 1fr 1.4fr 1.8fr;

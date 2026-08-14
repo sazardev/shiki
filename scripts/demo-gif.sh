@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Generates docs/assets/demo.gif: a fast-paced, scripted tour of shiki
+# Generates docs/assets/demo.gif (plus an mp4 transcode of it, which the
+# marketing site's hero actually serves as a `<video>`): a fast-paced,
+# scripted tour of shiki
 # against a deliberately rich dataset (3 notebooks, 30 notes, nested
 # folders 2 levels deep, long note bodies, varied tags) — meant to show
 # the app handling real volume, not a 3-note toy example. Beyond browsing/
@@ -11,8 +13,9 @@
 # fully-interactive Settings screen (v0.8.5 — every tab, including creating
 # a brand-new `/`-menu snippet from inside it), the native editor's mouse/
 # keyboard UX overhaul (multi-cursor via repeated Ctrl+D, live find/
-# replace), and live-cycling into the 3 newest built-in themes (Dracula/
-# One Dark/Monokai, v0.8.4) — not just read-only navigation. Runs
+# replace), and live-cycling through the theme picker's alphabetical list
+# (Cyberpunk 2077 / LoL (Jinx) — the newest catalog flagships) — not just
+# read-only navigation. Runs
 # automatically on every release now
 # (release.yml's update-screenshots job calls this right alongside
 # scripts/screenshots.sh, committing docs/assets/demo.gif back to `main`
@@ -46,6 +49,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${1:-$ROOT/docs/assets/demo.gif}"
 WORK="$(mktemp -d)"
+# Built-in theme the recording is shot in (used in the config heredoc
+# below) — defaults to gruvbox-dark; the docs site records one video per
+# theme so the on-site theme switcher can swap the hero to match.
+THEME="${THEME:-gruvbox-dark}"
 
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
@@ -323,7 +330,7 @@ write_note personal "projects/shiki-app/roadmap.md" "shiki roadmap" "2026-07-01"
 - Three-pane Yazi-style layout, responsive to terminal size
 - Notebooks as independent git repos
 - Real per-note version history via git log
-- 12 built-in themes, live picker
+- 37 built-in themes, live picker
 - In-TUI self-update
 
 ## In progress
@@ -782,14 +789,17 @@ echo "Sample data written under $DATA"
 
 # --- Config: a real theme active, matching the version currently being
 # recorded, plus enough of a keybindings/git setup that the demo doesn't
-# hit any first-run prompts.
+# hit any first-run prompts. `THEME` (default `gruvbox-dark`) picks which
+# built-in theme the whole recording is shot in — the docs site uses this
+# to produce one hero demo video per theme, so the on-site theme switcher
+# can swap the video to match your selection.
 mkdir -p "$CFG"
 cat >"$CFG/config.toml" <<EOF
 [general]
 default_notebook = "personal"
 
 [theme]
-name = "gruvbox-dark"
+name = "$THEME"
 
 [git]
 auto_commit = false
@@ -814,10 +824,18 @@ done
 mkdir -p "$(dirname "$OUT")"
 
 TAPE="$WORK/demo.tape"
-cat >"$TAPE" <<TAPEEOF
-Output "$OUT"
+# The tape heredoc is *quoted* (`<<'TAPEEOF'`) so nothing inside is expanded
+# by bash — the tape's explanatory comments are full of backticks (`code`)
+# and `$VAR` references, and in an unquoted heredoc bash runs those as
+# command substitutions (a pre-existing bug that spewed "command not found"/
+# "unbound variable" errors into every recording run and could even corrupt
+# the tape after a syntax error). Only four real values need the shell's
+# expansion, so they're written as `__PLACEHOLDER__` and substituted by the
+# `sed` right after the heredoc.
+cat >"$TAPE" <<'TAPEEOF'
+Output "__OUT__"
 Set Shell "bash"
-Set FontFamily "$NERD_FONT"
+Set FontFamily "__NERD_FONT__"
 Set FontSize 15
 Set Width 1200
 Set Height 750
@@ -841,7 +859,7 @@ Hide
 # added and *didn't* match its own (false) default, which is what actually
 # exposed this. `XDG_DATA_HOME` already did this correctly (`$WORK/data`,
 # not `$DATA`); only `$XDG_CONFIG_HOME` had the bug.
-Type "XDG_CONFIG_HOME='$WORK/config' XDG_DATA_HOME='$WORK/data' '$BIN'"
+Type "XDG_CONFIG_HOME='__WORK__/config' XDG_DATA_HOME='__WORK__/data' '__BIN__'"
 Enter
 Sleep 1200ms
 Show
@@ -1372,20 +1390,17 @@ Escape
 Sleep 600ms
 
 # --- Phase 14: theme picker, standalone (leader+`c`) — live-cycle through
-# the 3 newest built-in themes (Dracula, One Dark, Monokai — v0.8.4 grew
-# the set from 12 to 15) before cancelling back to the notebook's actual
-# gruvbox-dark. `available_themes` order comes straight from
-# `shiki-config/src/themes/mod.rs`'s `all()`, checked directly rather than
-# guessed: gruvbox-dark sits at index 7, so 5 Downs lands on dracula (12),
-# then one more each for one-dark (13) and monokai (14).
+# two of the new catalog's flagships (Cyberpunk 2077, then LoL (Jinx))
+# before cancelling back to the notebook's actual gruvbox-dark. The list is
+# alphabetical now, straight from `shiki-config/src/themes/mod.rs`'s
+# `all()`: gruvbox-dark sits at index 8, Cyberpunk 2077 at index 3 (5 Ups
+# up), and LoL (Jinx) at index 16 (13 Downs back down).
 Space
 Type "c"
 Sleep 500ms
-Down@200ms 5
+Up@200ms 5
 Sleep 500ms
-Down@200ms 1
-Sleep 500ms
-Down@200ms 1
+Down@200ms 13
 Sleep 700ms
 Escape
 Sleep 500ms
@@ -1505,8 +1520,20 @@ Hide
 Type "q"
 Sleep 300ms
 TAPEEOF
+# Substitute the four placeholders back to their real values (see the
+# comment above the heredoc for why the heredoc itself is quoted).
+sed -i "s|__OUT__|$OUT|g; s|__NERD_FONT__|$NERD_FONT|g; s|__WORK__|$WORK|g; s|__BIN__|$BIN|g" "$TAPE"
 
 echo "Recording with VHS..."
 vhs "$TAPE"
 
 echo "Wrote $OUT"
+
+# The docs site's hero uses an mp4 `<video>` (autoplay/reduced-size), not the
+# raw GIF — transcode it here so a release lands both artifacts at once. Only
+# the frame timing of the GIF is carried over; a fast-start mp4 with
+# yuv420p plays on every browser. `ffmpeg` is a vhs runtime dep already.
+MP4="${OUT%.gif}.mp4"
+ffmpeg -y -loglevel error -i "$OUT" -movflags +faststart -pix_fmt yuv420p \
+  -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" "$MP4"
+echo "Wrote $MP4"
