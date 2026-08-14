@@ -86,10 +86,13 @@ pub enum GeneralField {
     TrashRetentionDays,
     ReadingWpm,
     PageStep,
+    PreviewImages,
+    ChafaPath,
+    PreviewImageScale,
 }
 
 impl GeneralField {
-    pub const ALL: [GeneralField; 22] = [
+    pub const ALL: [GeneralField; 25] = [
         GeneralField::DefaultNotebook,
         GeneralField::Editor,
         GeneralField::DailyTemplate,
@@ -112,6 +115,9 @@ impl GeneralField {
         GeneralField::TrashRetentionDays,
         GeneralField::ReadingWpm,
         GeneralField::PageStep,
+        GeneralField::PreviewImages,
+        GeneralField::ChafaPath,
+        GeneralField::PreviewImageScale,
     ];
 }
 
@@ -180,10 +186,14 @@ pub enum EditorField {
     MoveLine,
     DuplicateLine,
     BlockIndentSelect,
+    InsertTimestamp,
+    TimestampWithTime,
+    Spellcheck,
+    SpellcheckLang,
 }
 
 impl EditorField {
-    pub const ALL: [EditorField; 15] = [
+    pub const ALL: [EditorField; 19] = [
         EditorField::MouseSelection,
         EditorField::FindReplace,
         EditorField::OsClipboard,
@@ -199,6 +209,10 @@ impl EditorField {
         EditorField::MoveLine,
         EditorField::DuplicateLine,
         EditorField::BlockIndentSelect,
+        EditorField::InsertTimestamp,
+        EditorField::TimestampWithTime,
+        EditorField::Spellcheck,
+        EditorField::SpellcheckLang,
     ];
 }
 
@@ -422,6 +436,25 @@ fn general_rows(app: &App) -> Vec<Line<'static>> {
         ),
         row_line(app, "reading_wpm", cfg.general.reading_wpm.to_string()),
         row_line(app, "page_step", cfg.general.page_step.to_string()),
+        row_line(
+            app,
+            "preview_images",
+            cfg.general.preview_images.to_string(),
+        ),
+        row_line(
+            app,
+            "chafa_path",
+            if cfg.general.chafa_path.trim().is_empty() {
+                "(auto — $PATH)".to_string()
+            } else {
+                cfg.general.chafa_path.clone()
+            },
+        ),
+        row_line(
+            app,
+            "preview_image_scale",
+            cfg.general.preview_image_scale.to_string(),
+        ),
     ]
 }
 
@@ -519,6 +552,26 @@ fn editor_rows(app: &App) -> Vec<Line<'static>> {
             app,
             "block_indent_select",
             cfg.editor.block_indent_select.to_string(),
+        ),
+        row_line(
+            app,
+            "insert_timestamp",
+            cfg.editor.insert_timestamp.to_string(),
+        ),
+        row_line(
+            app,
+            "timestamp_with_time",
+            cfg.editor.timestamp_with_time.to_string(),
+        ),
+        row_line(app, "spellcheck", cfg.editor.spellcheck.to_string()),
+        row_line(
+            app,
+            "spellcheck_lang",
+            if cfg.editor.spellcheck_lang.trim().is_empty() {
+                "(system default)".to_string()
+            } else {
+                cfg.editor.spellcheck_lang.clone()
+            },
         ),
     ]
 }

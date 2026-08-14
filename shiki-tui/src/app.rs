@@ -570,6 +570,29 @@ pub struct App {
     /// when opened via `Ctrl+O` mid-edit, so unsaved headings show up too.
     pub outline_headings: Vec<shiki_core::headings::Heading>,
     pub outline_selected: usize,
+    /// Live filter text for the outline modal (see
+    /// `panel_outline::filtered_headings`) — typing narrows the list;
+    /// reset to empty whenever the modal opens.
+    pub outline_query: String,
+    /// Result of the last `Ctrl+E` spell-check pass (`config.editor.
+    /// spellcheck`): the misspelled words, converted to per-line char
+    /// columns, plus a snapshot of the checked buffer so the editor
+    /// renderer can skip underlining rows that were edited since. `None`
+    /// means no pass has run (or it was cleared), so nothing is underlined.
+    pub spell_report: Option<crate::spell_report::SpellReport>,
+    /// Whether the spell-check popup (listing the misses with their
+    /// suggestions) is open. The underline state in `spell_report` survives
+    /// closing the popup.
+    pub show_spell: bool,
+    pub spell_selected: usize,
+    /// Whether the suggestions submenu for the selected misspelling is open
+    /// (opened by `Enter` on a word; `Esc`/`q` goes back to the word list).
+    pub show_spell_suggestions: bool,
+    pub spell_suggestion_selected: usize,
+    /// The word the spell-check popup most recently replaced, highlighted in
+    /// the editor for a moment (`expire_spell_flash` clears it in `run()`) —
+    /// the visible "this is what changed" cue after applying a suggestion.
+    pub spell_flash: Option<crate::spell_report::SpellFlash>,
     pub status_message: Option<String>,
     /// When `status_message` was last set — the footer only shows it for
     /// `config.general.status_message_timeout_secs`, after which
@@ -1264,6 +1287,13 @@ impl App {
             show_outline: false,
             outline_headings: Vec::new(),
             outline_selected: 0,
+            outline_query: String::new(),
+            spell_report: None,
+            show_spell: false,
+            spell_selected: 0,
+            show_spell_suggestions: false,
+            spell_suggestion_selected: 0,
+            spell_flash: None,
             status_message: None,
             status_message_set_at: None,
             git_status,
@@ -1612,6 +1642,16 @@ impl App {
             if set_at.elapsed() >= timeout {
                 self.status_message = None;
                 self.status_message_set_at = None;
+            }
+        }
+    }
+
+    /// Clears the spell-check flash highlight ~1.5s after it was set — the
+    /// same expiry pattern as `expire_status_message`, just a fixed duration.
+    fn expire_spell_flash(&mut self) {
+        if let Some(flash) = self.spell_flash {
+            if flash.set_at.elapsed() >= std::time::Duration::from_millis(1500) {
+                self.spell_flash = None;
             }
         }
     }
@@ -2238,8 +2278,31 @@ impl App {
             warning: colors[7],
             dark,
         };
+        let image_ctx = {
+            let g = &self.config.general;
+            if g.preview_images {
+                let scale = g.preview_image_scale.clamp(0.05, 1.0);
+                let cols = ((width as f64) * scale).round().max(1.0) as usize;
+                let mut base_dirs = Vec::new();
+                if let Some(parent) = note.path.parent() {
+                    base_dirs.push(parent.to_path_buf());
+                }
+                if let Some(nb) = self.selected_notebook() {
+                    base_dirs.push(nb.path.clone());
+                }
+                base_dirs.push(self.store.root.clone());
+                Some(crate::term_image::ImageCtx {
+                    enabled: true,
+                    chafa: crate::term_image::ImageCtx::chafa_binary(&g.chafa_path),
+                    cols,
+                    base_dirs,
+                })
+            } else {
+                None
+            }
+        };
         let (indexed, summary_blocks) =
-            crate::render::markdown_to_lines_indexed(&body, &palette, &folded);
+            crate::render::markdown_to_lines_indexed(&body, &palette, &folded, image_ctx.as_ref());
         let (source_indices, plain_lines): (Vec<usize>, Vec<Line<'static>>) =
             indexed.into_iter().unzip();
         let grouped = crate::wrap::wrap_lines_grouped(&plain_lines, width);
@@ -2618,6 +2681,7 @@ pub fn run<B: Backend<Error = io::Error>>(
         app.refresh_note_preview_cache();
         app.refresh_tag_index_cache();
         app.expire_status_message();
+        app.expire_spell_flash();
         app.poll_update_channel();
         app.poll_sync_channel();
         app.poll_capture_channel();

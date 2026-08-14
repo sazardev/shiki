@@ -76,6 +76,15 @@ pub(crate) struct RenderOptions<'a> {
     pub secondary_cursor_style: Style,
     pub secondary_cursors: &'a [crate::multicursor::CursorState],
     pub typewriter_scroll: bool,
+    /// Spell-check state from the last `Ctrl+E` pass, for underlining
+    /// misspelled words — `None` renders no underlines.
+    pub spell: Option<&'a crate::spell_report::SpellReport>,
+    /// The word the spell-check popup just replaced, as `(row, col_start,
+    /// col_len)` — the editor highlights that range with `spell_flash_style`
+    /// for a moment so the change is visibly confirmed.
+    pub spell_flash: Option<(usize, usize, usize)>,
+    /// The style used for the flash highlight (`None` disables it).
+    pub spell_flash_style: Option<Style>,
 }
 
 impl<'a> InlineEditor<'a> {
@@ -291,6 +300,43 @@ impl<'a> InlineEditor<'a> {
                         secondary: opts.secondary_cursors,
                     };
                     let mut line = build_segment_line(chars, seg, &ctx, &styles);
+                    // Spell underlines: only on rows that still match the
+                    // snapshot taken when the check ran — a row edited since
+                    // keeps stale ranges off, and typing into a checked note
+                    // just stops underlining that row until the next pass.
+                    if let Some(report) = opts.spell {
+                        let unchanged = report.checked_lines.get(row).map(String::as_str)
+                            == Some(&chars.iter().collect::<String>());
+                        if unchanged {
+                            let ranges: Vec<(usize, usize)> = report
+                                .misses
+                                .iter()
+                                .filter(|m| m.row == row)
+                                .map(|m| (m.col_start, m.col_end))
+                                .collect();
+                            if !ranges.is_empty() {
+                                line = crate::spell_report::underline_missed_ranges(
+                                    line, seg.0, &ranges,
+                                );
+                            }
+                        }
+                    }
+                    // Flash highlight: the word the spell-check popup just
+                    // replaced. Unlike the underlines this has no staleness
+                    // guard — it's precisely about the *new* text.
+                    if let (Some((flash_row, col_start, col_len)), Some(flash_style)) =
+                        (opts.spell_flash, opts.spell_flash_style)
+                    {
+                        if flash_row == row && col_len > 0 {
+                            line = crate::spell_report::flash_range(
+                                line,
+                                seg.0,
+                                col_start,
+                                col_len,
+                                flash_style,
+                            );
+                        }
+                    }
                     if gutter > 0 {
                         let prefix = if local_idx == 0 {
                             format!("{:>w$} ", row + 1, w = (gutter as usize).saturating_sub(1))
@@ -784,6 +830,9 @@ mod tests {
                         secondary_cursor_style: Style::default(),
                         secondary_cursors: &[],
                         typewriter_scroll: false,
+                        spell: None,
+                        spell_flash: None,
+                        spell_flash_style: None,
                     },
                 )
             })
@@ -819,6 +868,9 @@ mod tests {
                         secondary_cursor_style: Style::default(),
                         secondary_cursors: &[],
                         typewriter_scroll: false,
+                        spell: None,
+                        spell_flash: None,
+                        spell_flash_style: None,
                     },
                 )
             })

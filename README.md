@@ -97,6 +97,15 @@ the [website](https://sazardev.github.io/shiki/#themes).
   drops in 19 ready-made blocks — headers, code, math, tables, checklists, links, images,
   callouts, a collapsible section, a YAML frontmatter skeleton, and more — fully
   customizable/overridable via `[snippets.<trigger>]` in `config.toml`.
+- **Editor conveniences, all independently toggleable**: `Ctrl+D` stamps the date (and time),
+  `Ctrl+F` find/replace, `Ctrl+B`/`Ctrl+Alt+I` bold/italic wrapping, bracket auto-pairing,
+  list auto-continuation, move/duplicate line, multi-cursor, and a `Ctrl+E` spell-check pass that
+  underlines misspellings and offers hunspell suggestions in a popup.
+- **PREVIEW renders images, diagrams, and math, not just markdown**: a `![alt](path)` image on its
+  own line becomes real terminal art via `chafa`, ` ```mermaid ` fences become diagrams,
+  `$$...$$` math is prettified to readable Unicode, code fences get per-token highlighting with a
+  line-number gutter, and `<details>` blocks fold on click. The outline modal (`o`/`Ctrl+O`) jumps
+  to any heading with a live filter.
 - **12 built-in note templates** (`default`/`daily`/`meeting` plus `bug`/`spec`/`review`/
   `postmortem`/`standup`/`retro`/`1on1`/`weekly`/`brainstorm`) — pick one from the template picker
   when creating a note, or type `@` in the title prompt for a fast dropdown (`today`/`yesterday`/

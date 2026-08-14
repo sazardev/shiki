@@ -1045,6 +1045,9 @@ Content in **markdown**.
           <tr><td><code>trash_retention_days</code></td><td><code>0</code></td><td>Days a deleted note/folder stays in the trash before being permanently purged at startup — <code>0</code> means never auto-purge</td></tr>
           <tr><td><code>reading_wpm</code></td><td><code>200</code></td><td>Words-per-minute used for the footer's "N min read" estimate</td></tr>
           <tr><td><code>page_step</code></td><td><code>10</code></td><td>How many rows <code>PageUp</code>/<code>PageDown</code> (and the mouse wheel) move at once, across every scrollable list/modal</td></tr>
+          <tr><td><code>preview_images</code></td><td><code>true</code></td><td>Renders a <code>![alt](path)</code> image on its own line as terminal art in PREVIEW by shelling out to <code>chafa</code> — falls back to the icon+alt form when chafa is missing or the file can't be decoded</td></tr>
+          <tr><td><code>chafa_path</code></td><td><code>""</code></td><td>Absolute path to a <code>chafa</code> binary that isn't on <code>$PATH</code>; empty means look it up on <code>$PATH</code></td></tr>
+          <tr><td><code>preview_image_scale</code></td><td><code>0.5</code></td><td>Fraction of the preview panel's width the rendered image art is drawn at (<code>(0.0, 1.0]</code>)</td></tr>
         </tbody>
       </table>
       <div class="doc-callout">
@@ -1149,24 +1152,32 @@ bg = "#1e1e2e"</pre>
           <tr><td><code>move_line</code></td><td><code>true</code></td><td><code>Alt+↑</code>/<code>Alt+↓</code> move the current line past its neighbor</td></tr>
           <tr><td><code>duplicate_line</code></td><td><code>true</code></td><td><code>Alt+D</code> duplicates the current line directly below itself</td></tr>
           <tr><td><code>block_indent_select</code></td><td><code>true</code></td><td><code>Tab</code>/<code>Shift+Tab</code> with an active selection indent/outdent every line the selection spans</td></tr>
+          <tr><td><code>insert_timestamp</code></td><td><code>true</code></td><td><code>Ctrl+D</code> inserts today's date (<code>YYYY-MM-DD</code>) at the cursor, anywhere in the buffer, as a single undo step — with <code>timestamp_with_time</code> also on, the current time is appended</td></tr>
+          <tr><td><code>timestamp_with_time</code></td><td><code>false</code></td><td>Makes <code>Ctrl+D</code> insert <code>YYYY-MM-DD HH:MM</code> instead of just the date</td></tr>
+          <tr><td><code>spellcheck</code></td><td><code>false</code></td><td><code>Ctrl+E</code> spells-checks the buffer by shelling out to <code>hunspell</code>: misspelled words are underlined in the editor and listed in a popup with a <code>▸</code> cursor on the selected word; <code>Enter</code> opens a submenu to pick which suggestion to apply, and the replaced word flashes in the theme's success color. Requires a <code>hunspell</code> binary and dictionary (see <code>shiki doctor</code>)</td></tr>
+          <tr><td><code>spellcheck_lang</code></td><td><code>""</code></td><td>Hunspell dictionary to check against (<code>hunspell -d</code>, e.g. <code>es_ES</code>); empty uses the system default</td></tr>
         </tbody>
       </table>
       <pre class="code">[editor]
-mouse_selection = true
-find_replace = true
-os_clipboard = false
-select_all_ctrl_a = false
-line_numbers = false
-multi_cursor = false
-auto_list_continue = true
-format_shortcuts = true
-auto_pair_brackets = true
-paste_url_as_link = true
-snippet_expand_tab = true
-typewriter_scroll = false
-move_line = true
-duplicate_line = true
-block_indent_select = true</pre>
+ mouse_selection = true
+ find_replace = true
+ os_clipboard = false
+ select_all_ctrl_a = false
+ line_numbers = false
+ multi_cursor = false
+ auto_list_continue = true
+ format_shortcuts = true
+ auto_pair_brackets = true
+ paste_url_as_link = true
+ snippet_expand_tab = true
+ typewriter_scroll = false
+ move_line = true
+ duplicate_line = true
+ block_indent_select = true
+ insert_timestamp = true
+ timestamp_with_time = false
+ spellcheck = false
+ spellcheck_lang = ""</pre>
       <p style="max-width:70ch;">
         <code>[[wikilink]]</code> autocomplete is always on too, not gated by <code>[editor]</code>:
         typing <code>[[</code> opens an Obsidian-style fuzzy note picker (the same fuzzy matching
@@ -1375,6 +1386,14 @@ reading_wpm = 200
 # How many rows PageUp/PageDown (and the mouse wheel) move at once, across
 # every scrollable list/modal in the TUI.
 page_step = 10
+# When true (default), a `![alt](path)` image on its own line renders as
+# terminal art in PREVIEW via `chafa` (external binary). Off falls back to
+# the icon+alt form.
+preview_images = true
+# Absolute path to a `chafa` binary that isn't on $PATH (empty = look it up).
+chafa_path = ""
+# Fraction of the preview panel's width the art is drawn at (0.0, 1.0].
+preview_image_scale = 0.5
 
 [keybindings]
 leader = "space"

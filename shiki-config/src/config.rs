@@ -163,6 +163,26 @@ pub struct General {
     /// list/modal in the TUI. Defaults to `10`.
     #[serde(default = "default_page_step")]
     pub page_step: usize,
+    /// When true, a `![alt](path)` image that stands alone on its own
+    /// source line renders as real terminal art in PREVIEW by shelling out
+    /// to `chafa` (when it's on `$PATH`, or `chafa_path` points at it);
+    /// the image is drawn at `preview_image_scale` × the preview panel's
+    /// width. Falls back to the inline icon+alt text when chafa is missing
+    /// or the file can't be decoded — an image mid-line always stays as the
+    /// icon+alt fallback, since multi-row art needs a whole line to itself.
+    /// Defaults to `true`: purely additive, no existing behavior changes.
+    #[serde(default = "default_true")]
+    pub preview_images: bool,
+    /// Optional absolute path to the `chafa` binary, when it isn't on
+    /// `$PATH` (e.g. a Homebrew/nix install that a login shell hides).
+    /// Empty means "look it up on `$PATH`".
+    #[serde(default)]
+    pub chafa_path: String,
+    /// What fraction of the preview panel's width a rendered image is
+    /// drawn at. Defaults to `0.5`. Clamped to `(0.0, 1.0]` at render time,
+    /// so a value outside that range can't blow up the chafa command.
+    #[serde(default = "default_preview_image_scale")]
+    pub preview_image_scale: f64,
 }
 
 impl Default for General {
@@ -191,6 +211,9 @@ impl Default for General {
             trash_retention_days: 0,
             reading_wpm: default_reading_wpm(),
             page_step: default_page_step(),
+            preview_images: true,
+            chafa_path: String::new(),
+            preview_image_scale: default_preview_image_scale(),
         }
     }
 }
@@ -217,6 +240,10 @@ fn default_reading_wpm() -> usize {
 
 fn default_page_step() -> usize {
     10
+}
+
+fn default_preview_image_scale() -> f64 {
+    0.5
 }
 
 fn default_notebook_name() -> String {
@@ -1103,6 +1130,29 @@ pub struct EditorConfig {
     /// when there's a selection to act on.
     #[serde(default = "default_true")]
     pub block_indent_select: bool,
+    /// Ctrl+D inserts today's date (`YYYY-MM-DD`) at the cursor, anywhere in
+    /// the buffer. Defaults to `true`: purely additive, doesn't touch any
+    /// existing binding.
+    #[serde(default = "default_true")]
+    pub insert_timestamp: bool,
+    /// When `insert_timestamp` is on, Ctrl+D also appends the current time
+    /// (`YYYY-MM-DD HH:MM`) instead of just the date. Off by default — the
+    /// plain date is the common case, the time is opt-in noise.
+    #[serde(default)]
+    pub timestamp_with_time: bool,
+    /// When true, Ctrl+E runs a spell-check pass over the buffer by
+    /// shelling out to `hunspell` (`shiki_core::spell`) — misspelled words
+    /// get underlined in the editor and listed in a popup with
+    /// suggestions. Off by default: it's environment-dependent (needs a
+    /// `hunspell` binary and a dictionary), and each pass is a subprocess
+    /// invocation, so it's an explicit opt-in, not a default behavior.
+    #[serde(default)]
+    pub spellcheck: bool,
+    /// Hunspell dictionary to check against (`hunspell -d`), e.g.
+    /// `es_ES`/`en_US`. Empty (the default) uses the system default
+    /// dictionary.
+    #[serde(default)]
+    pub spellcheck_lang: String,
 }
 
 impl Default for EditorConfig {
@@ -1123,6 +1173,10 @@ impl Default for EditorConfig {
             move_line: true,
             duplicate_line: true,
             block_indent_select: true,
+            insert_timestamp: true,
+            timestamp_with_time: false,
+            spellcheck: false,
+            spellcheck_lang: String::new(),
         }
     }
 }
@@ -1557,7 +1611,15 @@ fn section_comment(line: &str) -> Option<&'static str> {
 #   before being auto-purged at startup. 0 (the default) means never.
 # - reading_wpm: words-per-minute for the footer's \"N min read\" estimate.
 #   Defaults to 200.
-# - page_step: how many rows PageUp/PageDown move at once. Defaults to 10."
+# - page_step: how many rows PageUp/PageDown move at once. Defaults to 10.
+# - preview_images: when true (default), a `![alt](path)` image on its own
+#   line renders as terminal art in PREVIEW via `chafa` (an external binary).
+#   Falls back to the icon+alt form when chafa is missing or the file can't
+#   be decoded.
+# - chafa_path: absolute path to a `chafa` binary that isn't on $PATH.
+#   Empty (the default) means look it up on $PATH.
+# - preview_image_scale: fraction of the preview panel's width the rendered
+#   image art is drawn at. Defaults to 0.5 (clamped to (0.0, 1.0])."
         }
         "[keybindings]" => {
             "\
@@ -1628,7 +1690,15 @@ fn section_comment(line: &str) -> Option<&'static str> {
 #   Defaults to true.
 # - duplicate_line: Alt+D duplicates the current line. Defaults to true.
 # - block_indent_select: Tab/Shift+Tab with a selection indent/outdent every
-#   line it spans. Defaults to true."
+#   line it spans. Defaults to true.
+# - insert_timestamp: Ctrl+D inserts today's date (YYYY-MM-DD) at the
+#   cursor, anywhere in the buffer. Defaults to true.
+# - timestamp_with_time: also append the current time (YYYY-MM-DD HH:MM).
+#   Defaults to false.
+# - spellcheck: Ctrl+E spells-checks the buffer via `hunspell` (an external
+#   binary — see `shiki doctor`). Off by default; each pass is a subprocess.
+# - spellcheck_lang: hunspell -d dictionary (e.g. \"es_ES\"). Empty (the
+#   default) uses the system default dictionary."
         }
         "[export]" => {
             "\

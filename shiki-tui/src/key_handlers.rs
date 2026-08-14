@@ -401,6 +401,15 @@ impl App {
             ));
             return;
         }
+        if field == GeneralField::PreviewImages {
+            self.config.general.preview_images = !self.config.general.preview_images;
+            self.save_config();
+            self.set_status(format!(
+                "preview_images -> {}",
+                self.config.general.preview_images
+            ));
+            return;
+        }
         let (label, prefill) = match field {
             GeneralField::DefaultNotebook => (
                 "default_notebook",
@@ -433,6 +442,11 @@ impl App {
                 ("reading_wpm", self.config.general.reading_wpm.to_string())
             }
             GeneralField::PageStep => ("page_step", self.config.general.page_step.to_string()),
+            GeneralField::ChafaPath => ("chafa_path", self.config.general.chafa_path.clone()),
+            GeneralField::PreviewImageScale => (
+                "preview_image_scale",
+                self.config.general.preview_image_scale.to_string(),
+            ),
             GeneralField::UseFavoriteEditor
             | GeneralField::EnableCaptureDaemon
             | GeneralField::MouseDragSelection
@@ -444,7 +458,8 @@ impl App {
             | GeneralField::WikilinkAutocomplete
             | GeneralField::DailyAgenda
             | GeneralField::CompactFooter
-            | GeneralField::TasksShowDoneDefault => unreachable!(),
+            | GeneralField::TasksShowDoneDefault
+            | GeneralField::PreviewImages => unreachable!(),
         };
         self.show_settings = false;
         self.pending_input_title = Some(format!(" {label} "));
@@ -543,9 +558,21 @@ impl App {
     }
     /// EDITOR — every field is a plain bool toggle, no text/drill-down
     /// fields at all, so `Enter` always just flips the selected row.
+    /// (`spellcheck_lang` is the one text field — opened as a prompt, same
+    /// `SettingsGeneralText` path as GENERAL's text rows.)
     fn handle_editor_field_enter(&mut self) {
         use crate::panel_settings::EditorField;
-        self.toggle_editor_bool(EditorField::ALL[self.settings_selected]);
+        let field = EditorField::ALL[self.settings_selected];
+        if field == EditorField::SpellcheckLang {
+            self.show_settings = false;
+            self.pending_input_title = Some(" spellcheck_lang ".into());
+            self.start_input(
+                PendingInput::SettingsGeneralText,
+                self.config.editor.spellcheck_lang.clone(),
+            );
+            return;
+        }
+        self.toggle_editor_bool(field);
     }
     fn toggle_editor_bool(&mut self, field: crate::panel_settings::EditorField) {
         use crate::panel_settings::EditorField;
@@ -613,6 +640,28 @@ impl App {
                     self.config.editor.block_indent_select,
                 )
             }
+            EditorField::InsertTimestamp => {
+                self.config.editor.insert_timestamp = !self.config.editor.insert_timestamp;
+                ("insert_timestamp", self.config.editor.insert_timestamp)
+            }
+            EditorField::TimestampWithTime => {
+                self.config.editor.timestamp_with_time = !self.config.editor.timestamp_with_time;
+                (
+                    "timestamp_with_time",
+                    self.config.editor.timestamp_with_time,
+                )
+            }
+            EditorField::Spellcheck => {
+                self.config.editor.spellcheck = !self.config.editor.spellcheck;
+                if !self.config.editor.spellcheck {
+                    self.spell_report = None;
+                    self.spell_flash = None;
+                    self.show_spell = false;
+                    self.show_spell_suggestions = false;
+                }
+                ("spellcheck", self.config.editor.spellcheck)
+            }
+            EditorField::SpellcheckLang => unreachable!(),
         };
         self.save_config();
         self.set_status(format!("{label} -> {new_val}"));
@@ -1502,6 +1551,7 @@ impl App {
         };
         self.outline_headings = shiki_core::headings::extract(&body);
         self.outline_selected = 0;
+        self.outline_query.clear();
         self.show_outline = true;
         if self.outline_headings.is_empty() {
             self.set_status("no headings in this note".into());
@@ -1510,12 +1560,30 @@ impl App {
     /// `Enter` jumps to the selected heading: inside `Mode::Edit`, moves
     /// the editor's cursor there directly; otherwise (opened from
     /// PREVIEW), scrolls the preview panel to that source line. Either way
-    /// the modal closes.
+    /// the modal closes. Every printable char feeds the filter query
+    /// instead of navigating, so typing narrows the list live; the
+    /// navigation keys (and `Enter`) act on the filtered list.
     fn handle_outline_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Esc | KeyCode::Char('q') => self.show_outline = false,
+            KeyCode::Esc => {
+                self.outline_query.clear();
+                self.show_outline = false;
+            }
+            KeyCode::Char(c) if c.is_control() => {}
+            KeyCode::Char(c) => {
+                self.outline_query.push(c);
+                self.outline_selected = 0;
+            }
+            KeyCode::Backspace => {
+                self.outline_query.pop();
+                self.outline_selected = 0;
+            }
             KeyCode::Enter => {
-                if let Some(heading) = self.outline_headings.get(self.outline_selected).cloned() {
+                let filtered = crate::panel_outline::filtered_headings(
+                    &self.outline_query,
+                    &self.outline_headings,
+                );
+                if let Some(heading) = filtered.get(self.outline_selected) {
                     if self.mode == Mode::Edit {
                         if let Some(editor) = &mut self.editor {
                             editor.textarea.cancel_selection();
@@ -1530,19 +1598,30 @@ impl App {
                         self.preview_scroll = heading.line as u16;
                     }
                 }
+                self.outline_query.clear();
                 self.show_outline = false;
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                if self.outline_selected + 1 < self.outline_headings.len() {
+            KeyCode::Down => {
+                let len = crate::panel_outline::filtered_headings(
+                    &self.outline_query,
+                    &self.outline_headings,
+                )
+                .len();
+                if self.outline_selected + 1 < len {
                     self.outline_selected += 1;
                 }
             }
-            KeyCode::Char('k') | KeyCode::Up => {
+            KeyCode::Up => {
                 self.outline_selected = self.outline_selected.saturating_sub(1);
             }
             KeyCode::PageDown => {
-                self.outline_selected = (self.outline_selected + self.page_step() as usize)
-                    .min(self.outline_headings.len().saturating_sub(1));
+                let len = crate::panel_outline::filtered_headings(
+                    &self.outline_query,
+                    &self.outline_headings,
+                )
+                .len();
+                self.outline_selected =
+                    (self.outline_selected + self.page_step() as usize).min(len.saturating_sub(1));
             }
             KeyCode::PageUp => {
                 self.outline_selected = self
@@ -1551,9 +1630,201 @@ impl App {
             }
             KeyCode::Home => self.outline_selected = 0,
             KeyCode::End => {
-                self.outline_selected = self.outline_headings.len().saturating_sub(1);
+                let len = crate::panel_outline::filtered_headings(
+                    &self.outline_query,
+                    &self.outline_headings,
+                )
+                .len();
+                self.outline_selected = len.saturating_sub(1);
             }
             _ => {}
+        }
+    }
+    /// `Ctrl+E` (with `config.editor.spellcheck` on): runs a spell-check
+    /// pass over the current buffer, or re-runs it if one's already shown.
+    /// Misspelled words are converted to per-line ranges and stored in
+    /// `spell_report` (which underlines them in the editor) and listed in
+    /// the spell-check popup with their suggestions.
+    fn run_spell_check(&mut self) {
+        if !shiki_core::spell::hunspell_available() {
+            self.set_status(
+                "hunspell not found \u{2014} install it to use spell check (see `shiki doctor`)"
+                    .into(),
+            );
+            self.spell_report = None;
+            self.show_spell = false;
+            return;
+        }
+        let Some(editor) = &self.editor else {
+            return;
+        };
+        let text = editor.contents();
+        let lang = self.config.editor.spellcheck_lang.clone();
+        let misses = match shiki_core::spell::check_text(&text, Some(&lang)) {
+            Ok(misses) => misses,
+            Err(e) => {
+                self.set_status(format!("spell check failed: {e}"));
+                return;
+            }
+        };
+        let lines = editor.textarea.lines();
+        self.spell_report = Some(crate::spell_report::build_report(
+            &text, lines, &misses, &lang,
+        ));
+        self.spell_selected = 0;
+        self.spell_suggestion_selected = 0;
+        self.show_spell_suggestions = false;
+        self.show_spell = true;
+        self.set_status(format!(
+            "spell check: {} misspelled",
+            self.spell_report.as_ref().map_or(0, |r| r.misses.len())
+        ));
+    }
+    /// Keys for the open spell-check popup: navigate the misspelled-word
+    /// list, `Enter` opens that word's suggestions submenu (choose the
+    /// replacement there), `r` re-runs the check, `Esc`/`q` closes the
+    /// popup (the underline state in `spell_report` survives).
+    fn handle_spell_key(&mut self, key: KeyEvent) {
+        if self.show_spell_suggestions {
+            self.handle_spell_suggestions_key(key);
+            return;
+        }
+        let count = self.spell_report.as_ref().map_or(0, |r| r.misses.len());
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => self.show_spell = false,
+            KeyCode::Char('r') => self.run_spell_check(),
+            KeyCode::Enter => {
+                let Some(miss) = self
+                    .spell_report
+                    .as_ref()
+                    .and_then(|r| r.misses.get(self.spell_selected))
+                    .cloned()
+                else {
+                    return;
+                };
+                if miss.suggestions.is_empty() {
+                    self.set_status(format!("no suggestions for '{}'", miss.word));
+                    return;
+                }
+                // A word can be corrected a dozen ways; let the user pick
+                // which replacement instead of silently taking the first.
+                self.spell_suggestion_selected = 0;
+                self.show_spell_suggestions = true;
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.spell_selected + 1 < count {
+                    self.spell_selected += 1;
+                }
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.spell_selected = self.spell_selected.saturating_sub(1);
+            }
+            KeyCode::PageDown => {
+                self.spell_selected =
+                    (self.spell_selected + self.page_step() as usize).min(count.saturating_sub(1));
+            }
+            KeyCode::PageUp => {
+                self.spell_selected = self
+                    .spell_selected
+                    .saturating_sub(self.page_step() as usize);
+            }
+            KeyCode::Home => self.spell_selected = 0,
+            KeyCode::End => self.spell_selected = count.saturating_sub(1),
+            _ => {}
+        }
+    }
+    /// Keys for the suggestions submenu (opened by `Enter` on a word):
+    /// `j`/`k`/arrows pick which correction to apply, `Enter` applies it and
+    /// closes both popups, `Esc`/`q` goes back to the word list.
+    fn handle_spell_suggestions_key(&mut self, key: KeyEvent) {
+        let suggestions: Vec<String> = self
+            .spell_report
+            .as_ref()
+            .and_then(|r| r.misses.get(self.spell_selected))
+            .map(|m| m.suggestions.clone())
+            .unwrap_or_default();
+        let count = suggestions.len();
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => self.show_spell_suggestions = false,
+            KeyCode::Enter => {
+                let (Some(suggestion), Some(miss)) = (
+                    suggestions.get(self.spell_suggestion_selected),
+                    self.spell_report
+                        .as_ref()
+                        .and_then(|r| r.misses.get(self.spell_selected))
+                        .cloned(),
+                ) else {
+                    return;
+                };
+                self.apply_spell_suggestion(&miss, suggestion);
+                self.show_spell_suggestions = false;
+                self.show_spell = false;
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.spell_suggestion_selected + 1 < count {
+                    self.spell_suggestion_selected += 1;
+                }
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.spell_suggestion_selected = self.spell_suggestion_selected.saturating_sub(1);
+            }
+            KeyCode::Home => self.spell_suggestion_selected = 0,
+            KeyCode::End => self.spell_suggestion_selected = count.saturating_sub(1),
+            _ => {}
+        }
+    }
+    /// Shared by the word-list and suggestions-submenu paths: replaces the
+    /// misspelled range with `suggestion`, highlights the just-replaced word
+    /// in the editor for a moment (the visible "this is what changed" cue),
+    /// and reports `'old' → 'new'` in the footer.
+    fn apply_spell_suggestion(&mut self, miss: &crate::spell_report::SpellMiss, suggestion: &str) {
+        self.replace_in_editor(miss.row, miss.col_start, miss.row, miss.col_end, suggestion);
+        self.spell_flash = Some(crate::spell_report::SpellFlash {
+            row: miss.row,
+            col_start: miss.col_start,
+            col_len: suggestion.chars().count(),
+            set_at: std::time::Instant::now(),
+        });
+        self.set_status(format!("'{}' \u{2192} '{}'", miss.word, suggestion));
+    }
+    /// Replaces the text between `(start_row, start_col)` and
+    /// `(end_row, end_col)` in the editor with `replacement`, via the same
+    /// select-then-`cut`+`insert_str` primitives the paste/format paths
+    /// use — one undo step.
+    fn replace_in_editor(
+        &mut self,
+        start_row: usize,
+        start_col: usize,
+        end_row: usize,
+        end_col: usize,
+        replacement: &str,
+    ) {
+        let Some(editor) = &mut self.editor else {
+            return;
+        };
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(
+                start_row as u16,
+                start_col as u16,
+            ));
+        editor.textarea.start_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(
+                end_row as u16,
+                end_col as u16,
+            ));
+        let mut edits = 0usize;
+        if editor.textarea.cut() {
+            edits += 1;
+        }
+        if editor.textarea.insert_str(replacement) {
+            edits += 1;
+        }
+        if edits > 0 {
+            self.editor_undo_groups.push(edits);
+            self.editor_redo_groups.clear();
         }
     }
     /// Loads the selected note's real version history (every commit that
@@ -4916,95 +5187,128 @@ impl App {
                 }
             }
             Some(PendingInput::SettingsGeneralText) => {
-                use crate::panel_settings::GeneralField;
                 self.show_settings = true;
-                let field = GeneralField::ALL[self.settings_selected];
-                // default_note_sort is free text ("filename"/"title"/"date",
-                // tolerantly parsed — see NoteSort::from_config_str), so an
-                // empty value here isn't "cancelled" the way it is for
-                // every other field; it just resolves to the fallback.
-                //
-                // A labeled block (not an early `return`) so a parse error
-                // still reaches this arm's shared tail below, which is
-                // itself just the very end of this match arm — but more
-                // importantly so it can't ever skip the *function's* own
-                // tail after the outer `match kind` closes
-                // (`pending_input_title = None; mode = Mode::Normal;`),
-                // which an early `return` from inside a nested macro would.
-                let label: Option<&'static str> = 'field: {
-                    if value.is_empty() && field != GeneralField::DefaultNoteSort {
+                // EDITOR's one text field (`spellcheck_lang`) rides the same
+                // prompt as GENERAL's text rows — but the selection index
+                // points at the EDITOR tab, so it's resolved here by
+                // section, not through GeneralField. No early `return`: the
+                // arm must reach the function tail that resets the prompt.
+                if self.settings_section == crate::panel_settings::SettingsSection::Editor {
+                    if value.is_empty() {
                         self.set_status("unchanged (empty)".into());
-                        break 'field None;
+                    } else {
+                        self.config.editor.spellcheck_lang = value.clone();
+                        self.save_config();
+                        self.set_status(format!("spellcheck_lang -> '{value}'"));
                     }
-                    macro_rules! parse_or_report {
-                        ($ty:ty) => {
-                            match value.parse::<$ty>() {
-                                Ok(n) => n,
-                                Err(_) => {
-                                    self.set_status(format!("'{value}' isn't a whole number"));
-                                    break 'field None;
+                } else {
+                    use crate::panel_settings::GeneralField;
+                    let field = GeneralField::ALL[self.settings_selected];
+                    // default_note_sort is free text ("filename"/"title"/"date",
+                    // tolerantly parsed — see NoteSort::from_config_str), so an
+                    // empty value here isn't "cancelled" the way it is for
+                    // every other field; it just resolves to the fallback.
+                    //
+                    // A labeled block (not an early `return`) so a parse error
+                    // still reaches this arm's shared tail below, which is
+                    // itself just the very end of this match arm — but more
+                    // importantly so it can't ever skip the *function's* own
+                    // tail after the outer `match kind` closes
+                    // (`pending_input_title = None; mode = Mode::Normal;`),
+                    // which an early `return` from inside a nested macro would.
+                    let label: Option<&'static str> = 'field: {
+                        if value.is_empty() && field != GeneralField::DefaultNoteSort {
+                            self.set_status("unchanged (empty)".into());
+                            break 'field None;
+                        }
+                        macro_rules! parse_or_report {
+                            ($ty:ty) => {
+                                match value.parse::<$ty>() {
+                                    Ok(n) => n,
+                                    Err(_) => {
+                                        self.set_status(format!("'{value}' isn't a whole number"));
+                                        break 'field None;
+                                    }
                                 }
+                            };
+                        }
+                        Some(match field {
+                            GeneralField::DefaultNotebook => {
+                                self.config.general.default_notebook = value.clone();
+                                "default_notebook"
                             }
-                        };
+                            GeneralField::Editor => {
+                                self.config.general.editor = value.clone();
+                                "editor"
+                            }
+                            GeneralField::DailyTemplate => {
+                                self.config.general.daily_template = value.clone();
+                                "daily_template"
+                            }
+                            GeneralField::StatusMessageTimeoutSecs => {
+                                self.config.general.status_message_timeout_secs =
+                                    parse_or_report!(u64);
+                                "status_message_timeout_secs"
+                            }
+                            GeneralField::DrawerWidth => {
+                                self.config.general.drawer_width = parse_or_report!(u16);
+                                "drawer_width"
+                            }
+                            GeneralField::DefaultNoteSort => {
+                                self.config.general.default_note_sort = value.clone();
+                                "default_note_sort"
+                            }
+                            GeneralField::LogHistoryLimit => {
+                                self.config.general.log_history_limit = parse_or_report!(usize);
+                                "log_history_limit"
+                            }
+                            GeneralField::TrashRetentionDays => {
+                                self.config.general.trash_retention_days = parse_or_report!(u32);
+                                "trash_retention_days"
+                            }
+                            GeneralField::ReadingWpm => {
+                                self.config.general.reading_wpm = parse_or_report!(usize);
+                                "reading_wpm"
+                            }
+                            GeneralField::PageStep => {
+                                self.config.general.page_step = parse_or_report!(usize);
+                                "page_step"
+                            }
+                            GeneralField::ChafaPath => {
+                                self.config.general.chafa_path = value.clone();
+                                "chafa_path"
+                            }
+                            GeneralField::PreviewImageScale => {
+                                match value.parse::<f64>() {
+                                    Ok(n) if n > 0.0 => {
+                                        self.config.general.preview_image_scale = n;
+                                    }
+                                    _ => {
+                                        self.set_status("'scale' must be a positive number".into());
+                                        break 'field None;
+                                    }
+                                }
+                                "preview_image_scale"
+                            }
+                            GeneralField::UseFavoriteEditor => "use_favorite_editor",
+                            GeneralField::EnableCaptureDaemon => "enable_capture_daemon",
+                            GeneralField::MouseDragSelection => "mouse_drag_selection",
+                            GeneralField::ShowHints => "show_hints",
+                            GeneralField::RememberLastSession => "remember_last_session",
+                            GeneralField::ShowCoffeeLink => "show_coffee_link",
+                            GeneralField::SkipDeleteConfirm => "skip_delete_confirm",
+                            GeneralField::ShowDates => "show_dates",
+                            GeneralField::WikilinkAutocomplete => "wikilink_autocomplete",
+                            GeneralField::DailyAgenda => "daily_agenda",
+                            GeneralField::CompactFooter => "compact_footer",
+                            GeneralField::TasksShowDoneDefault => "tasks_show_done_default",
+                            GeneralField::PreviewImages => "preview_images",
+                        })
+                    };
+                    if let Some(label) = label {
+                        self.save_config();
+                        self.set_status(format!("{label} -> '{value}'"));
                     }
-                    Some(match field {
-                        GeneralField::DefaultNotebook => {
-                            self.config.general.default_notebook = value.clone();
-                            "default_notebook"
-                        }
-                        GeneralField::Editor => {
-                            self.config.general.editor = value.clone();
-                            "editor"
-                        }
-                        GeneralField::DailyTemplate => {
-                            self.config.general.daily_template = value.clone();
-                            "daily_template"
-                        }
-                        GeneralField::StatusMessageTimeoutSecs => {
-                            self.config.general.status_message_timeout_secs = parse_or_report!(u64);
-                            "status_message_timeout_secs"
-                        }
-                        GeneralField::DrawerWidth => {
-                            self.config.general.drawer_width = parse_or_report!(u16);
-                            "drawer_width"
-                        }
-                        GeneralField::DefaultNoteSort => {
-                            self.config.general.default_note_sort = value.clone();
-                            "default_note_sort"
-                        }
-                        GeneralField::LogHistoryLimit => {
-                            self.config.general.log_history_limit = parse_or_report!(usize);
-                            "log_history_limit"
-                        }
-                        GeneralField::TrashRetentionDays => {
-                            self.config.general.trash_retention_days = parse_or_report!(u32);
-                            "trash_retention_days"
-                        }
-                        GeneralField::ReadingWpm => {
-                            self.config.general.reading_wpm = parse_or_report!(usize);
-                            "reading_wpm"
-                        }
-                        GeneralField::PageStep => {
-                            self.config.general.page_step = parse_or_report!(usize);
-                            "page_step"
-                        }
-                        GeneralField::UseFavoriteEditor => "use_favorite_editor",
-                        GeneralField::EnableCaptureDaemon => "enable_capture_daemon",
-                        GeneralField::MouseDragSelection => "mouse_drag_selection",
-                        GeneralField::ShowHints => "show_hints",
-                        GeneralField::RememberLastSession => "remember_last_session",
-                        GeneralField::ShowCoffeeLink => "show_coffee_link",
-                        GeneralField::SkipDeleteConfirm => "skip_delete_confirm",
-                        GeneralField::ShowDates => "show_dates",
-                        GeneralField::WikilinkAutocomplete => "wikilink_autocomplete",
-                        GeneralField::DailyAgenda => "daily_agenda",
-                        GeneralField::CompactFooter => "compact_footer",
-                        GeneralField::TasksShowDoneDefault => "tasks_show_done_default",
-                    })
-                };
-                if let Some(label) = label {
-                    self.save_config();
-                    self.set_status(format!("{label} -> '{value}'"));
                 }
             }
             Some(PendingInput::SettingsGitText) => {
@@ -5531,6 +5835,10 @@ impl App {
             self.handle_wikilink_menu_key(key);
             return;
         }
+        if self.show_spell {
+            self.handle_spell_key(key);
+            return;
+        }
         match key.code {
             KeyCode::Char('s')
                 if self.editing_scratchpad && key.modifiers.contains(KeyModifiers::CONTROL) =>
@@ -5602,6 +5910,18 @@ impl App {
             {
                 self.editor_add_next_occurrence();
             }
+            // Ctrl+D inserts today's date at the cursor (date+time when
+            // `timestamp_with_time` is on), anywhere in the buffer — the
+            // `/date` slash-menu snippet only works at line start. Only
+            // reachable while `multi_cursor` is off: that feature owns the
+            // same Ctrl+D (add next occurrence) and takes precedence when
+            // enabled, same as its accepted Emacs delete-next-char collision.
+            KeyCode::Char('d')
+                if key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.config.editor.insert_timestamp =>
+            {
+                self.insert_timestamp();
+            }
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.editor_undo();
             }
@@ -5610,6 +5930,20 @@ impl App {
             // moves the editor's own cursor instead of scrolling PREVIEW.
             KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.open_outline();
+            }
+            // Ctrl+E runs a spell-check pass over the buffer (`config.editor.
+            // spellcheck`), or closes the spell-check popup when it's open —
+            // the pass is a shell-out to `hunspell` via `shiki_core::spell`,
+            // so it's a discrete manual action rather than per-keystroke.
+            KeyCode::Char('e')
+                if key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.config.editor.spellcheck =>
+            {
+                if self.show_spell {
+                    self.show_spell = false;
+                } else {
+                    self.run_spell_check();
+                }
             }
             KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.editor_redo();
@@ -6390,6 +6724,21 @@ impl App {
             self.editor_undo_groups.push(edits);
             self.editor_redo_groups.clear();
         }
+    }
+    /// Ctrl+D: inserts today's `YYYY-MM-DD` at the cursor — or `YYYY-MM-DD
+    /// HH:MM` when `editor.timestamp_with_time` is on — anywhere in the
+    /// buffer, as a single `insert_str` (one undo step).
+    fn insert_timestamp(&mut self) {
+        let Some(editor) = &mut self.editor else {
+            return;
+        };
+        let now = chrono::Local::now();
+        let stamp = if self.config.editor.timestamp_with_time {
+            now.format("%Y-%m-%d %H:%M").to_string()
+        } else {
+            now.format("%Y-%m-%d").to_string()
+        };
+        editor.textarea.insert_str(stamp);
     }
     /// Plain Home (no modifiers): the first press moves to the line's
     /// first non-whitespace character; pressing it again from there (or

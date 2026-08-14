@@ -6,6 +6,39 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- `Ctrl+D` in the inline editor inserts today's date (`YYYY-MM-DD`) at the cursor, anywhere in
+  the buffer, as a single undo step — the `/date` slash-menu snippet only works at line start.
+  `[editor] timestamp_with_time` (off by default) appends the current time
+  (`YYYY-MM-DD HH:MM`); `[editor] insert_timestamp` (on by default) gates the whole feature.
+- The outline modal (`o` in PREVIEW, `Ctrl+O` while editing) now has a live filter box: typing
+  narrows the heading list case-insensitively (the same filter behavior as the which-key modal),
+  `Enter` jumps to the filtered heading, `Esc` closes and resets. Navigation is arrow keys/
+  `PageUp`/`PageDown`/`Home`/`End` — every letter is typeable into the filter.
+- Spell-check for the inline editor (`[editor] spellcheck`, off by default): `Ctrl+E` runs a pass
+  by shelling out to `hunspell` (the same external-binary pattern as `pretty-pdf`), underlines
+  misspelled words in the editor and lists them in a popup with a `▸` cursor on the selected word
+  (`j`/`k` move it) — `Enter` opens a suggestions submenu to pick which correction to apply, the
+  replaced word flashes in the theme's success color for a moment (a visible confirmation
+  alongside the footer's `'old' → 'new'` message), `r` re-runs the pass. `[editor]
+  spellcheck_lang` selects the dictionary (`-d`, e.g. `es_ES`); rows edited after a pass stop
+  being underlined instead of repainting stale ranges. `shiki doctor` reports whether `hunspell`
+  is installed.
+- `![alt](path)` images that stand alone on their own line render as real terminal art in PREVIEW
+  via `chafa` (external binary, ANSI-colored half-block output parsed into styled rows that
+  scroll with the panel). `[general] preview_images` (on by default), `chafa_path` (absolute path
+  when it isn't on `$PATH`), and `preview_image_scale` (fraction of the panel width) control it;
+  paths resolve against the note's folder, the notebook root, then `data_dir`. When `chafa` is
+  missing or the file doesn't exist, the previous icon+alt rendering is kept, and an image
+  embedded mid-line always stays that way. `shiki doctor` reports whether `chafa` is available.
+- Three new built-in themes from League of Legends champion palettes (`shiki theme list` shows
+  them, the theme picker live-previews them): **LoL (Jinx)** (neon-pink/electric-blue with a
+  Zaun-night background), **LoL (Teemo)** (scout green with yellow scarf accents, Bandle-forest
+  background), and **LoL (Ahri)** (magenta fox tails with purple essence-orb accents, Ionia-
+  twilight background). The marketing site's theme swatches cover all three (CSS-only mockups
+  until screenshots are captured).
+
 ## [0.9.1] - 2026-08-13
 
 ### Added

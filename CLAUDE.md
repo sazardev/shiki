@@ -385,7 +385,8 @@ string→`Color` conversion lives in `shiki-tui/src/render.rs::hex_to_color`, ke
 crate reusable outside a TUI context. The `"default"` built-in theme (`Theme::terminal_default`)
 uses `"reset"`/ANSI names throughout specifically so it doesn't impose a fixed palette.
 Included theme palettes live one-per-file under `shiki-config/src/themes/` (catppuccin, tokyo_night,
-gruvbox, nord, solarized), registered in `themes/mod.rs::all()`/`by_name()`. Every palette's hex
+gruvbox, nord, solarized, and the League of Legends champion palettes in `lol.rs` — `LoL (Jinx)`,
+`LoL (Teemo)`, `LoL (Ahri)`), registered in `themes/mod.rs::all()`/`by_name()`. Every palette's hex
 values are taken directly from each project's own official spec (verified against
 morhetz/gruvbox, tokyonight.nvim, nordtheme.com, solarized, and catppuccin — not approximated).
 
@@ -1003,6 +1004,64 @@ italic `dim` uses, so it reads as a separate axis from the code. It's part of th
 the existing wrap/`note_preview_source_line` machinery treats it as ordinary text — no new
 offset arithmetic anywhere. Line numbers reference the *source* lines of the fence, matching how
 click-to-edit maps a PREVIEW row back to the raw Markdown line.
+
+**Block-level `![alt](path)` images render as terminal art through `shiki-tui/src/term_image.rs`,
+a shell-out to `chafa`** — the same external-binary pattern as `pretty-pdf`/`hunspell`, so no
+bundled image decoding or terminal-graphics-protocol dependency (kitty/sixel images anchor to
+screen coordinates and break PREVIEW scrolling; chafa's ANSI-colored half-block text drops into
+the existing `Vec<Line>` model and scrolls naturally). Only a *whole* line given over to an image
+is eligible (`whole_line_image_path` — an inline `![alt](path)` mid-line keeps the single-span
+icon+alt form); the path resolves against the note's folder → notebook root → `data_dir`, local
+files only. chafa's 24-bit SGR output is parsed by a hand-rolled `ansi_to_line` (fg + bg applied,
+so half-block art paints both halves; any non-SGR escape is dropped), and the rows land through
+the same `row_indices` mechanism mermaid/table blocks use, so click-to-edit still maps them to the
+image's source line. The `ImageCtx` is threaded through `markdown_to_lines_indexed` as plain data
+(`enabled`/`chafa`/`cols`/`base_dirs`), keeping the renderer a pure-ish function; `cols` is
+precomputed by `App::refresh_note_preview_cache` as `preview_image_scale × panel width` and the
+preview cache is width-keyed, so a resize re-runs chafa at the new width automatically. When
+`chafa` is missing or the file doesn't exist, the renderer falls through to the icon+alt form —
+never a broken frame. `shiki doctor` checks `chafa`/`hunspell` availability.
+
+**`Ctrl+D` in the inline editor inserts a timestamp (`insert_timestamp`, on by default) — and it
+deliberately yields precedence to `multi_cursor`'s own Ctrl+D ("add next occurrence").** The two
+arms are ordered so the `multi_cursor` guard runs first: with `multi_cursor` on, Ctrl+D keeps its
+documented multi-cursor meaning (an accepted opt-in collision, same category as its Emacs
+delete-next-char clash), and the timestamp feature simply isn't reachable by key until `multi_cursor`
+is off — the `/date` snippet remains available regardless. The stamp is a single `insert_str` (one
+undo step); `timestamp_with_time` appends `HH:MM`.
+
+**The outline modal gained a live filter (`App.outline_query`, `panel_outline::filtered_headings`),
+and its key handling now matches the which-key modal's "all letters filter, arrows navigate"**
+convention rather than the old "j/k navigate" — with a filter box, `j`/`k` had to either stop
+being typeable (a real limitation for headings containing them) or keep navigating (making the
+filter unpredictable), so they were dropped in favor of `↑`/`↓`. The popup's height budget grew by
+the 3-row filter box (`rows + 5`), which a stale `rows + 2` left the list at height 1 and rendered
+blank items — caught and fixed in the same pass. `Enter` acts on the *filtered* list, and `Esc`
+resets the query.
+
+**Spell-check (`shiki-core/src/spell.rs` + `shiki-tui/src/spell_report.rs`) is a discrete
+`Ctrl+E` pass shelling out to `hunspell`, gated by `[editor] spellcheck` (off by default).** `-l`
+lists misspelled words (mapped back to byte ranges by first-unclaimed-occurrence, so a repeated
+word that's spelled right somewhere still flags each real misspelling); `-a` pipe mode yields
+suggestions. The byte ranges are converted once, at check time, to `(row, char-column)` space
+(`spell_report::build_report`) — the same space the editor cursor works in — and the editor
+renderer underlines only rows that still match the checked snapshot (`checked_lines`), so rows
+edited after a pass stop being underlined instead of repainting stale ranges. The popup's selected
+row is marked with a plain `▸` cursor (`panel_spell.rs` uses a literal `▸`, not `icons::ARROW`'s
+Nerd Font glyph, so the cursor is visible in every terminal font — the earlier arrow glyph silently
+disappeared in terminals without a patched font). `Enter` on a word opens a *suggestions submenu*
+(`show_spell_suggestions`/`spell_suggestion_selected` + `panel_spell::render_suggestions`, a nested
+centered popup), so the user picks which correction to apply instead of always silently taking the
+first — the shared `apply_spell_suggestion` path then replaces via the same select-`cut`+
+`insert_str` primitives as paste/format and sets `App.spell_flash`
+(`spell_report::SpellFlash`) so the editor highlights the just-replaced word in the theme's
+`success` color for ~1.5s (`App::expire_spell_flash`, the same elapsed-time pattern as
+`expire_status_message`) — the visible confirmation of what changed, since a silent footer message
+alone was too easy to miss. `flash_range` recolors the `[start, start+len)` char range of a
+rendered segment line, the mirror-image helper to `underline_missed_ranges`. Notably the
+spell-check popup reuses `PendingInput::SettingsGeneralText` for its `spellcheck_lang` field but
+resolves it by *section* (Editor), not through `GeneralField::ALL` — the settings selection index
+points at the EDITOR tab's list, so reading `GeneralField::ALL[idx]` would panic.
 
 **List items, blockquotes, and indented code all render at any nesting depth, via five small
 prefix helpers (`done_task_item_prefix`/`open_task_item_prefix`/`bullet_item_prefix`/

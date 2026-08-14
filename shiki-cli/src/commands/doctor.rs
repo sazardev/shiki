@@ -190,6 +190,50 @@ pub fn run() -> Result<()> {
         );
     }
 
+    // `chafa` (used to render block-level `![alt](path)` images in PREVIEW)
+    // is optional — previews fall back to the icon+alt form when it's
+    // missing — so this is a `warn` only when `preview_images` is on,
+    // and a `pass` otherwise (the feature is effectively disabled anyway).
+    let chafa_configured = !config.general.chafa_path.trim().is_empty();
+    if on_path("chafa")
+        || (chafa_configured && std::path::Path::new(&config.general.chafa_path).is_file())
+    {
+        r.pass(
+            "chafa (preview images)",
+            "found \u{2014} `![alt](path)` renders as terminal art",
+        );
+    } else if config.general.preview_images {
+        r.warn(
+            "chafa (preview images)",
+            "not found \u{2014} `![alt](path)` images render as icon+alt text until chafa is installed",
+        );
+    } else {
+        r.pass(
+            "chafa (preview images)",
+            "not needed \u{2014} `preview_images` is off",
+        );
+    }
+
+    // `hunspell` (used by the editor's `Ctrl+E` spell-check pass,
+    // `config.editor.spellcheck`) is optional and off by default, so a
+    // missing binary is only worth a `warn` when the feature is on.
+    if shiki_core::spell::hunspell_available() {
+        r.pass(
+            "hunspell (spell check)",
+            "found \u{2014} editor Ctrl+E can check spelling",
+        );
+    } else if config.editor.spellcheck {
+        r.warn(
+            "hunspell (spell check)",
+            "not found \u{2014} editor spell check (`spellcheck`) is on but Ctrl+E will report a missing binary",
+        );
+    } else {
+        r.pass(
+            "hunspell (spell check)",
+            "not needed \u{2014} `spellcheck` is off",
+        );
+    }
+
     let colorterm = std::env::var("COLORTERM").unwrap_or_default();
     if colorterm.contains("truecolor") || colorterm.contains("24bit") {
         r.pass("terminal truecolor", format!("COLORTERM={colorterm}"));

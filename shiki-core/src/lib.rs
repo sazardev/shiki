@@ -11,6 +11,7 @@ pub mod process;
 pub mod publish;
 pub mod query;
 pub mod search;
+pub mod spell;
 pub mod tags;
 pub mod tasks;
 pub mod templates;
@@ -71,6 +72,10 @@ pub enum Error {
     /// removing a tag entirely isn't exposed as a distinct operation yet.
     #[error("new tag name can't be empty")]
     EmptyTagName,
+    /// A `spell::` failure — hunspell missing, or it errored out while
+    /// checking/suggesting.
+    #[error("spell check error: {0}")]
+    Spell(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

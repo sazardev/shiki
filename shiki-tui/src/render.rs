@@ -490,7 +490,7 @@ pub fn borrow_lines<'a>(lines: &'a [Line<'static>]) -> Vec<Line<'a>> {
 // something outside the crate might use them).
 #[cfg(test)]
 fn markdown_to_lines(body: &str, colors: &crate::syntax::SyntaxPalette) -> Vec<Line<'static>> {
-    markdown_to_lines_indexed(body, colors, &Default::default())
+    markdown_to_lines_indexed(body, colors, &Default::default(), None)
         .0
         .into_iter()
         .map(|(_, line)| line)
@@ -518,6 +518,7 @@ pub(crate) fn markdown_to_lines_indexed(
     body: &str,
     colors: &crate::syntax::SyntaxPalette,
     folded: &std::collections::HashSet<usize>,
+    images: Option<&crate::term_image::ImageCtx>,
 ) -> (
     Vec<(usize, Line<'static>)>,
     std::collections::HashMap<usize, usize>,
@@ -753,6 +754,28 @@ pub(crate) fn markdown_to_lines_indexed(
         if is_horizontal_rule(line) {
             lines.push((idx, Line::from(Span::styled("─".repeat(40), dim))));
             continue;
+        }
+
+        // A block-level `![alt](path)` image on its own line renders as
+        // terminal art (via `term_image`, which shells out to chafa) when
+        // that's enabled and possible — multi-row, so it reuses the same
+        // one-source-line-to-many-rows mechanism as tables and mermaid.
+        // Anything else (inline image mid-line, missing chafa, remote URL,
+        // undecodable file) falls through to the single-span icon+alt below.
+        if let Some(ctx) = images {
+            if ctx.enabled && ctx.chafa.is_some() {
+                if let Some(spec) = crate::term_image::whole_line_image_path(line) {
+                    let resolved = crate::term_image::resolve_image_path(&ctx.base_dirs, &spec);
+                    if let (Some(path), Some(chafa)) = (resolved, &ctx.chafa) {
+                        if let Some(rows) = crate::term_image::render_rows(chafa, &path, ctx.cols) {
+                            for row in rows {
+                                lines.push((idx, row));
+                            }
+                            continue;
+                        }
+                    }
+                }
+            }
         }
 
         if line.trim_start().starts_with('|')
@@ -1125,7 +1148,7 @@ mod tests {
         let body =
             "<details>\n<summary>Click to expand</summary>\nline one\nline two\n</details>\nafter";
         let folded: std::collections::HashSet<usize> = std::collections::HashSet::from([0]);
-        let (indexed, summary_blocks) = markdown_to_lines_indexed(body, &PALETTE, &folded);
+        let (indexed, summary_blocks) = markdown_to_lines_indexed(body, &PALETTE, &folded, None);
         // Only the summary handle (with the hidden count) and the trailing
         // content line survive — the two hidden lines are omitted entirely.
         assert_eq!(indexed.len(), 2);
@@ -1139,7 +1162,7 @@ mod tests {
     fn unfolded_details_hide_nothing_and_map_summaries() {
         let body = "<details>\n<summary>S</summary>\ncontent\n</details>";
         let (indexed, summary_blocks) =
-            markdown_to_lines_indexed(body, &PALETTE, &std::collections::HashSet::new());
+            markdown_to_lines_indexed(body, &PALETTE, &std::collections::HashSet::new(), None);
         assert_eq!(indexed.len(), 2);
         assert_eq!(line_text(&indexed[0].1), "▾ S");
         assert_eq!(line_text(&indexed[1].1), "content");
@@ -1150,7 +1173,7 @@ mod tests {
     fn folded_details_with_no_hidden_lines_omits_count() {
         let body = "<details>\n<summary>Empty</summary>\n</details>";
         let folded: std::collections::HashSet<usize> = std::collections::HashSet::from([0]);
-        let (indexed, _) = markdown_to_lines_indexed(body, &PALETTE, &folded);
+        let (indexed, _) = markdown_to_lines_indexed(body, &PALETTE, &folded, None);
         assert_eq!(indexed.len(), 1);
         assert_eq!(line_text(&indexed[0].1), "▸ Empty");
     }
@@ -1159,7 +1182,7 @@ mod tests {
     fn nested_folded_details_outer_wins() {
         let body = "<details>\n<summary>Outer</summary>\n<details>\n<summary>Inner</summary>\nx\n</details>\ny\n</details>";
         let folded: std::collections::HashSet<usize> = std::collections::HashSet::from([0]);
-        let (indexed, summary_blocks) = markdown_to_lines_indexed(body, &PALETTE, &folded);
+        let (indexed, summary_blocks) = markdown_to_lines_indexed(body, &PALETTE, &folded, None);
         // Outer folded: only its summary survives; the inner summary and
         // both content lines (x, y) are hidden — the count reflects the
         // two real content lines, not the nested `<details>`/`<summary>`

@@ -81,7 +81,11 @@ shiki/
 │           ├── tokyo_night.rs     # storm, night, moon
 │           ├── gruvbox.rs         # dark, light
 │           ├── nord.rs
-│           └── solarized.rs       # dark, light
+│           ├── solarized.rs       # dark, light
+│           ├── dracula.rs
+│           ├── one_dark.rs
+│           ├── monokai.rs
+│           └── lol.rs             # LoL (Jinx), LoL (Teemo), LoL (Ahri)
 │
 ├── shiki-tui/                     # the interface
 │   ├── Cargo.toml
@@ -210,7 +214,8 @@ search, tree view) using the same list/selection they already navigate with `j`/
 | `x` | Export the selected notebook to HTML/Markdown — prompts for the output path (prefilled with `{data_dir}/exports/{notebook}.html`); same bundling `shiki export` does (see CLI commands) |
 | `U` | Check for updates — modal; checks GitHub Releases in the background (never blocks the UI), shows "update available" if there's a newer version, and `Enter` downloads, verifies (against GitHub's own per-asset checksum), installs, and automatically relaunches into it |
 | `u` | Undo the last delete — restores the most recently deleted note/folder (or whole batch, from a Visual-mode delete) from the trash (`~/.config/shiki/trash/`) back to exactly where it came from. A single level of undo, not a full history: only the *most recent* delete is restorable this way; an older one is still on disk in the trash, just no longer reachable from here. With nothing to undo, reports that instead of doing anything |
-| `s` | Settings — near-full-screen, paged by tab (`←`/`→` switches GENERAL/THEME/GIT/EDITOR/EXPORT/NOTEBOOKS/SNIPPETS, `j`/`k` moves within one). Doesn't repeat the keybindings tables — `?` (which-key) already covers those live. Every tab is editable with `Enter`: GENERAL/GIT booleans (`use_favorite_editor`, `auto_commit`/`auto_push`/`sign_commits`/`auto_sync`) toggle in place and save immediately; every other GENERAL/GIT field opens a prompt prefilled with its current value; THEME's `name` opens the theme picker (live preview, same as leader+`c`) and `overrides` stays informational; EDITOR is fifteen plain boolean toggles for the native note editor's UX (see `[editor]` below); EXPORT is `pdf_theme` (cycling through `pretty-pdf`'s 17 built-in themes — the default `shiki publish`/leader+`P` fall back to), `export_dir` (a text prompt showing where PDFs land, resolved against the app's data dir when empty), and `ask_export_path` (a plain in-place toggle); NOTEBOOKS lists every notebook's actual git remote (redacted) and drills into one to edit its remote plus its `auto_push`/`auto_sync`/`auto_sync_every` overrides (booleans cycle inherit → true → false → inherit); SNIPPETS supports `a` (new snippet) and `d` (delete, with confirmation), and drilling into one edits its `label` and its full multi-line `body` through the same inline editor a note's own body uses. `i`/`E` still jump straight to editing `config.toml` itself for anything not covered above (inline or externally, same convention as editing a note); on save, the config is re-read, re-applied, and takes effect immediately (no restart) — an invalid edit is reported and neither written nor applied, keeping the previous config running. `h`/`Esc`/`Backspace` backs out of a drilled-into notebook/snippet a level; `Esc`/`q` at the top level closes |
+| `s` | Settings — near-full-screen, paged by tab (`←`/`→` switches GENERAL/THEME/GIT/EDITOR/EXPORT/NOTEBOOKS/SNIPPETS, `j`/`k` moves within one). Doesn't repeat the keybindings tables — `?` (which-key) already covers those live. Every tab is editable with `Enter`: GENERAL/GIT booleans (`use_favorite_editor`, `auto_commit`/`auto_push`/`sign_commits`/`auto_sync`) toggle in place and save immediately; every other GENERAL/GIT field opens a prompt prefilled with its current value; THEME's `name` opens the theme picker (live preview, same as leader+`c`) and `overrides` stays informational; EDITOR is a mix of plain boolean toggles for the native note editor's UX plus one text field
+(`spellcheck_lang`, which opens a prefilled prompt like GENERAL's text rows — see `[editor]` below); EXPORT is `pdf_theme` (cycling through `pretty-pdf`'s 17 built-in themes — the default `shiki publish`/leader+`P` fall back to), `export_dir` (a text prompt showing where PDFs land, resolved against the app's data dir when empty), and `ask_export_path` (a plain in-place toggle); NOTEBOOKS lists every notebook's actual git remote (redacted) and drills into one to edit its remote plus its `auto_push`/`auto_sync`/`auto_sync_every` overrides (booleans cycle inherit → true → false → inherit); SNIPPETS supports `a` (new snippet) and `d` (delete, with confirmation), and drilling into one edits its `label` and its full multi-line `body` through the same inline editor a note's own body uses. `i`/`E` still jump straight to editing `config.toml` itself for anything not covered above (inline or externally, same convention as editing a note); on save, the config is re-read, re-applied, and takes effect immediately (no restart) — an invalid edit is reported and neither written nor applied, keeping the previous config running. `h`/`Esc`/`Backspace` backs out of a drilled-into notebook/snippet a level; `Esc`/`q` at the top level closes |
 | `z` | Zen mode — forces the full-screen single-panel layout (the same one a very small terminal already falls into) regardless of actual terminal size, hiding NOTEBOOKS/NOTES so only the focused panel shows. A true toggle, same `leader z` both enters and exits it; purely a view state, not persisted to `config.toml` |
 
 #### `[keybindings.notebooks]` — active while NOTEBOOKS is focused
@@ -263,7 +268,7 @@ sync attempt (manual or automatic) just tries the push again.
 | `E` | Edit externally ($EDITOR) |
 | `H` | Note history — every commit that changed this specific note, newest first, real git history (not a separate versioning system). `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` views a revision's full content (frontmatter included, since that's what's actually in the commit), `d` views a real unified diff of that revision against its parent instead (colored `-`/`+` lines, computed by libgit2 itself, not a hand-rolled line algorithm — the first commit in a note's history has no parent, so every line comes back as an addition) — `d` also works from inside the full-content view to switch straight to the diff of the same revision, `r` reverts to the highlighted (or currently-viewed, either view) revision — behind a confirmation, since it overwrites the current content. The revert itself doesn't commit; it shows up as a normal pending change, picked up by `s`/`u`/`auto_sync` like any other edit. The footer shows the count while reading a note (`{n} changes`) |
 | `L` | Links — the selected note's outgoing `[[wikilinks]]` (resolved against every note in the notebook, any folder depth), every other note that links back to it, and notes that *mention* this note's title in plain text without linking to it ("Outgoing"/"Backlinks"/"Mentions (unlinked)" sections; a section with nothing in it is omitted). `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` jumps to the selected note (an unresolved outgoing link reports that instead of jumping), `c` on a mention row *repairs* the missed link — it wraps that note's plain-text mention into a real `[[wikilink]]` (preserving its casing) and the row visibly migrates to Backlinks — and `Esc`/`q` closes. Also reachable globally via leader+`B` |
-| `o` | Outline — every `#`..`######` heading in the selected note, indented by level. `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` scrolls PREVIEW to that heading, `Esc`/`q` closes. Also reachable as `Ctrl+O` from inside `Mode::Edit` itself — there, `Enter` moves the editor's own cursor to the heading instead of scrolling PREVIEW, and the headings come from the live, possibly-unsaved buffer rather than the note's last-saved body |
+| `o` | Outline — every `#`..`######` heading in the selected note, indented by level. Type to filter the list live (case-insensitive substring, matching the which-key modal's own filter), `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` scrolls PREVIEW to that heading, `Esc` closes (the filter resets). Also reachable as `Ctrl+O` from inside `Mode::Edit` itself — there, `Enter` moves the editor's own cursor to the heading instead of scrolling PREVIEW, and the headings come from the live, possibly-unsaved buffer rather than the note's last-saved body |
 | `M` | Metadata editor — same action as NOTES scope's `M`, bound here too so it works with PREVIEW focused as well |
 
 Mouse: a plain click over a note's rendered body jumps straight into the inline editor with the
@@ -295,6 +300,18 @@ A ` ```mermaid ` fence renders as an actual diagram instead of flat text: flowch
 (`sequenceDiagram` with `participant` + `->>`/`-->>`/`->`/`--x` messages) render as participant
 columns with arrows between them. Same hand-rolled-parser approach as the math converter — a
 diagram it can't parse falls back to the previous flat styling rather than breaking.
+
+A `![alt](path)` image that stands alone on its own source line renders as real terminal art in
+PREVIEW by shelling out to `chafa` (a terminal image renderer) — the same external-binary pattern
+as `pretty-pdf` and `hunspell`, so nothing is bundled. The art is drawn at `preview_image_scale` ×
+the preview panel's width, is ANSI-SGR-colored half-block art, and scrolls like any other row (a
+real terminal-graphics protocol — kitty/sixel — would anchor images to screen coordinates and
+break scrolling). The path resolves against the note's own folder, then the notebook root, then
+`data_dir`; only local files render. When `chafa` isn't installed (`general.preview_images` toggles
+this on/off, `general.chafa_path` points at a binary that isn't on `$PATH`), or the file doesn't
+exist, the image keeps the previous single-span `icon + alt text` rendering — and an image embedded
+mid-line always stays that way, since multi-row art needs a whole line to itself. `shiki doctor`
+reports whether `chafa` is available.
 
 Every code fence renders as a block: a header row (`▌ rust  main.rs`, with an optional `file:`
 token), per-token syntax highlighting, and a right-aligned line-number gutter (`N │ `) that resets
@@ -383,6 +400,23 @@ The rest of the editor's mouse/keyboard UX is opt-in via `[editor]` (Settings' E
   every line the selection spans — a plain block-indent, not list-specific. With this off, `Tab`
   on a selection falls through to whatever else applies (snippet expansion, list nesting, or a
   literal tab).
+- `insert_timestamp` (on by default): `Ctrl+D` inserts today's date (`YYYY-MM-DD`) at the cursor,
+  anywhere in the buffer, as a single undo step — the `/date` slash-menu snippet only works at
+  the start of a line. With `timestamp_with_time` also on, the current time is appended
+  (`YYYY-MM-DD HH:MM`).
+- `spellcheck` (off by default): `Ctrl+E` runs a spell-check pass over the buffer by shelling out
+  to `hunspell` (the same external-binary pattern as `pretty-pdf`; `shiki doctor` reports whether
+  it's installed). Misspelled words are underlined in the editor and listed in a popup — the
+  selected word is marked with a `▸` cursor (plus the theme's selection background) and `j`/`k`
+  moves it. `Enter` on a word opens a suggestions submenu listing every correction candidate; pick
+  one with `j`/`k` and `Enter` applies it (or `Esc` to go back to the word list). The just-replaced
+  word is highlighted in the theme's `success` color for a moment (the visible "this is what
+  changed" cue, alongside the footer's `'old' → 'new'` message). `r` re-runs the pass, `Esc`/`q`
+  closes the popup (the underlines stay until the next edit or pass). `spellcheck_lang`
+  (`-d` dictionary, e.g. `es_ES`; empty uses the system default) selects which dictionary to
+  check against. The check is a discrete manual action (each pass is a subprocess invocation), not
+  per-keystroke, so rows edited after a pass stop being underlined rather than repainting stale
+  ranges.
 
 `[[wikilink]]` autocomplete (gated by `[general].wikilink_autocomplete`, on by default, not by
 `[editor]`): typing `[[` opens an Obsidian-style fuzzy note picker (same fuzzy matching as `/` and
@@ -809,6 +843,14 @@ reading_wpm = 200
 # How many rows PageUp/PageDown (and the mouse wheel) move at once, across
 # every scrollable list/modal in the TUI.
 page_step = 10
+# When true (default), a `![alt](path)` image on its own line renders as
+# terminal art in PREVIEW via `chafa` (external binary) — see the PREVIEW
+# rendering section above. Off falls back to the icon+alt form.
+preview_images = true
+# Absolute path to a `chafa` binary that isn't on $PATH (empty = look it up).
+chafa_path = ""
+# Fraction of the preview panel's width the art is drawn at (0.0, 1.0].
+preview_image_scale = 0.5
 
 [keybindings]
 leader = "space"
@@ -930,6 +972,10 @@ typewriter_scroll = false  # keeps the cursor's line vertically centered while t
 move_line = true          # Alt+Up/Alt+Down move the current line past its neighbor
 duplicate_line = true     # Alt+D duplicates the current line
 block_indent_select = true  # Tab/Shift+Tab with a selection indent/outdent every line it spans
+insert_timestamp = true   # Ctrl+D inserts today's date (YYYY-MM-DD) at the cursor
+timestamp_with_time = false  # Ctrl+D also appends the current time (HH:MM)
+spellcheck = false        # Ctrl+E spells-checks the buffer via `hunspell` (external binary)
+spellcheck_lang = ""      # hunspell -d dictionary (e.g. "es_ES"); empty = system default
 
 # PDF export (`shiki publish`, leader+`P`) — pdf_theme picks one of
 # go-pretty-pdf's 17 built-in themes: default, minimal, modern, classic,

@@ -40,6 +40,14 @@ pub fn draw(frame: &mut Frame, app: &App) {
                     secondary_cursor_style,
                     secondary_cursors: &app.editor_secondary_cursors,
                     typewriter_scroll: app.config.editor.typewriter_scroll,
+                    spell: app.spell_report.as_ref(),
+                    spell_flash: app.spell_flash.map(|f| (f.row, f.col_start, f.col_len)),
+                    spell_flash_style: app.spell_flash.map(|_| {
+                        Style::default()
+                            .bg(hex_to_color(&app.theme.success))
+                            .fg(hex_to_color(&app.theme.bg))
+                            .add_modifier(Modifier::BOLD)
+                    }),
                 },
             );
             if app.show_slash_menu {
@@ -209,10 +217,46 @@ pub fn draw(frame: &mut Frame, app: &App) {
     }
 
     if app.show_outline {
-        let rows = app.outline_headings.len().max(1);
-        let popup_area = centered_rect(frame.area(), 50, (rows as u16 + 2).max(3));
+        let rows =
+            crate::panel_outline::filtered_headings(&app.outline_query, &app.outline_headings)
+                .len()
+                .max(1);
+        // The popup holds the 3-row filter box plus the list's own two
+        // borders, so the height budget is rows + 5, not rows + 2.
+        let popup_area = centered_rect(frame.area(), 50, (rows as u16 + 5).max(6));
         frame.render_widget(Clear, popup_area);
         panel_outline::render(frame, popup_area, app);
+    }
+
+    if app.show_spell {
+        let rows = app
+            .spell_report
+            .as_ref()
+            .map_or(1, |r| r.misses.len())
+            .max(1);
+        let popup_area = centered_rect(
+            frame.area(),
+            70,
+            (rows as u16 + 2).min(frame.area().height.saturating_sub(2)),
+        );
+        frame.render_widget(Clear, popup_area);
+        crate::panel_spell::render(frame, popup_area, app);
+
+        if app.show_spell_suggestions {
+            let sug = app
+                .spell_report
+                .as_ref()
+                .and_then(|r| r.misses.get(app.spell_selected))
+                .map_or(1, |m| m.suggestions.len())
+                .max(1);
+            let sub_area = centered_rect(
+                frame.area(),
+                45,
+                (sug as u16 + 2).min(frame.area().height.saturating_sub(2)),
+            );
+            frame.render_widget(Clear, sub_area);
+            crate::panel_spell::render_suggestions(frame, sub_area, app);
+        }
     }
 
     if app.show_drawer {
