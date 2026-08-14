@@ -79,7 +79,7 @@ shiki/
 │           ├── mod.rs
 │           ├── catppuccin.rs      # mocha, latte, frappe, macchiato
 │           ├── tokyo_night.rs     # storm, night, moon
-│           ├── gruvbox.rs         # dark, light
+│           ├── gruvbox.rs         # dark, light + hard/soft variants
 │           ├── nord.rs
 │           ├── solarized.rs       # dark, light
 │           ├── dracula.rs

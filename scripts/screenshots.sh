@@ -83,7 +83,8 @@ THEMES=(
   dracula
   "Fallout Terminal"
   "Ghost in the Shell"
-  gruvbox-dark gruvbox-light
+  gruvbox-dark gruvbox-dark-hard gruvbox-dark-soft
+  gruvbox-light gruvbox-light-hard gruvbox-light-soft
   Halo
   "LoL (Ahri)" "LoL (Jinx)" "LoL (Teemo)"
   Matrix

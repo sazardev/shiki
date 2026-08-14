@@ -3,9 +3,9 @@
 // theme's own `accent` value
 // (docs/css/styles.css has the full palette per theme; this file only
 // needs enough to build/label the swatches and know which ones have a real
-// screenshot). 12 of the 39 have a captured PNG in docs/assets/screenshots/
+// screenshot). 12 of the 43 have a captured PNG in docs/assets/screenshots/
 // (scripts/screenshots.sh's THEMES array covers every one) — of the
-// remaining twenty-seven, dracula/one-dark/monokai/default DO have real
+// remaining thirty-one, dracula/one-dark/monokai/default DO have real
 // screenshots in docs/assets/screenshots/gallery/, but the homepage's hero
 // loop isn't wired up to serve them top-level yet, while the LoL,
 // video-game, and hacker/cyber palettes are brand new and have no
@@ -28,7 +28,11 @@ const THEMES = [
   { id: "Fallout Terminal", label: "Fallout Terminal", dot: "#00ff00", screenshot: false },
   { id: "Ghost in the Shell", label: "Ghost in the Shell", dot: "#2dd4bf", screenshot: false },
   { id: "gruvbox-dark", label: "Gruvbox Dark", dot: "#fabd2f", screenshot: true },
+  { id: "gruvbox-dark-hard", label: "Gruvbox Dark Hard", dot: "#fabd2f", screenshot: false },
+  { id: "gruvbox-dark-soft", label: "Gruvbox Dark Soft", dot: "#fabd2f", screenshot: false },
   { id: "gruvbox-light", label: "Gruvbox Light", dot: "#b57614", screenshot: true },
+  { id: "gruvbox-light-hard", label: "Gruvbox Light Hard", dot: "#b57614", screenshot: false },
+  { id: "gruvbox-light-soft", label: "Gruvbox Light Soft", dot: "#b57614", screenshot: false },
   { id: "Halo", label: "Halo", dot: "#6fa55c", screenshot: false },
   { id: "LoL (Ahri)", label: "LoL (Ahri)", dot: "#e8448f", screenshot: false },
   { id: "LoL (Jinx)", label: "LoL (Jinx)", dot: "#ff3da5", screenshot: false },
