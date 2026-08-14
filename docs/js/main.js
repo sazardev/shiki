@@ -2,13 +2,14 @@
 // order, same names) — "dot" colors are each theme's own `accent` value
 // (docs/css/styles.css has the full palette per theme; this file only
 // needs enough to build/label the swatches and know which ones have a real
-// screenshot). 12 of the 19 have a captured PNG in docs/assets/screenshots/
+// screenshot). 12 of the 29 have a captured PNG in docs/assets/screenshots/
 // (scripts/screenshots.sh's THEMES array covers every one) — of the
-// remaining seven, dracula/one-dark/monokai/default DO have real screenshots
-// in docs/assets/screenshots/gallery/, but the homepage's hero loop isn't wired
-// up to serve them top-level yet, while the three LoL palettes are brand new
-// and have no screenshot captured at all — both fall back to #term-fallback's
-// CSS-only mockup here. `screenshot` stays a per-theme flag rather than
+// remaining seventeen, dracula/one-dark/monokai/default DO have real
+// screenshots in docs/assets/screenshots/gallery/, but the homepage's hero
+// loop isn't wired up to serve them top-level yet, while the LoL and
+// video-game palettes are brand new and have no screenshot captured at all —
+// both fall back to #term-fallback's CSS-only mockup here. `screenshot`
+// stays a per-theme flag rather than
 // being assumed true for everyone so a future theme added to shiki-config
 // without a matching screenshot yet degrades to the CSS-only #term-fallback
 // mockup instead of silently
@@ -37,6 +38,17 @@ const THEMES = [
   { id: "LoL (Jinx)", label: "LoL (Jinx)", dot: "#ff3da5", screenshot: false },
   { id: "LoL (Teemo)", label: "LoL (Teemo)", dot: "#8bc34a", screenshot: false },
   { id: "LoL (Ahri)", label: "LoL (Ahri)", dot: "#e8448f", screenshot: false },
+  // Video-game franchise palettes — brand new, CSS-only mockup for now.
+  { id: "Pokémon (Pikachu)", label: "Pokémon (Pikachu)", dot: "#f6c344", screenshot: false },
+  { id: "Pokémon (Charizard)", label: "Pokémon (Charizard)", dot: "#ff6b35", screenshot: false },
+  { id: "Pokémon (Gengar)", label: "Pokémon (Gengar)", dot: "#9d6bff", screenshot: false },
+  { id: "Zelda", label: "Zelda", dot: "#c6a45c", screenshot: false },
+  { id: "Portal", label: "Portal", dot: "#ff8a3d", screenshot: false },
+  { id: "Super Mario", label: "Super Mario", dot: "#e52521", screenshot: false },
+  { id: "Super Mario (Luigi)", label: "Super Mario (Luigi)", dot: "#4a9e5c", screenshot: false },
+  { id: "Overwatch", label: "Overwatch", dot: "#f99e1a", screenshot: false },
+  { id: "Halo", label: "Halo", dot: "#6fa55c", screenshot: false },
+  { id: "Stardew Valley", label: "Stardew Valley", dot: "#6aa84f", screenshot: false },
   { id: "default", label: "Default", dot: "#8b949e", screenshot: false },
 ];
 

@@ -385,9 +385,10 @@ string→`Color` conversion lives in `shiki-tui/src/render.rs::hex_to_color`, ke
 crate reusable outside a TUI context. The `"default"` built-in theme (`Theme::terminal_default`)
 uses `"reset"`/ANSI names throughout specifically so it doesn't impose a fixed palette.
 Included theme palettes live one-per-file under `shiki-config/src/themes/` (catppuccin, tokyo_night,
-gruvbox, nord, solarized, and the League of Legends champion palettes in `lol.rs` — `LoL (Jinx)`,
-`LoL (Teemo)`, `LoL (Ahri)`), registered in `themes/mod.rs::all()`/`by_name()`. Every palette's hex
-values are taken directly from each project's own official spec (verified against
+gruvbox, nord, solarized, the League of Legends champion palettes in `lol.rs` — `LoL (Jinx)`,
+`LoL (Teemo)`, `LoL (Ahri)` — and the video-game palettes in `games.rs` — Pokémon, Zelda, Portal,
+Mario, Overwatch, Halo, Stardew Valley), registered in `themes/mod.rs::all()`/`by_name()`. Every
+palette's hex values are taken directly from each project's own official spec (verified against
 morhetz/gruvbox, tokyonight.nvim, nordtheme.com, solarized, and catppuccin — not approximated).
 
 **`theme.selection` used to be defined by every palette but rendered nowhere.** Every `List` widget

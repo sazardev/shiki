@@ -264,6 +264,146 @@
   --panel-title: #ff7ab8;
 }
 
+[data-theme="Pokémon (Pikachu)"] {
+  --bg: #1a1c2e;
+  --fg: #fff5d6;
+  --accent: #f6c344;
+  --selection: #2a2d45;
+  --border: #383c5e;
+  --statusbar: #13141f;
+  --success: #7bed9f;
+  --warning: #ff9f43;
+  --error: #ff5252;
+  --muted: #858aa8;
+  --panel-title: #f6c344;
+}
+
+[data-theme="Pokémon (Charizard)"] {
+  --bg: #1a0f0d;
+  --fg: #ffe9d6;
+  --accent: #ff6b35;
+  --selection: #2d1913;
+  --border: #40241a;
+  --statusbar: #120a09;
+  --success: #ff8c42;
+  --warning: #ffa502;
+  --error: #ff4444;
+  --muted: #9a7563;
+  --panel-title: #ff6b35;
+}
+
+[data-theme="Pokémon (Gengar)"] {
+  --bg: #12101f;
+  --fg: #e8d9ff;
+  --accent: #9d6bff;
+  --selection: #1f1b33;
+  --border: #2d2747;
+  --statusbar: #0d0b17;
+  --success: #6bffd0;
+  --warning: #b08cff;
+  --error: #c76bff;
+  --muted: #6e6490;
+  --panel-title: #9d6bff;
+}
+
+[data-theme="Zelda"] {
+  --bg: #0c1710;
+  --fg: #e8f0dc;
+  --accent: #c6a45c;
+  --selection: #15261a;
+  --border: #1e3526;
+  --statusbar: #080f0a;
+  --success: #6bbf59;
+  --warning: #ffa63d;
+  --error: #e5533d;
+  --muted: #7a8d7e;
+  --panel-title: #c6a45c;
+}
+
+[data-theme="Portal"] {
+  --bg: #e8e8e0;
+  --fg: #2b2b2b;
+  --accent: #ff8a3d;
+  --selection: #d0d0c8;
+  --border: #b8b8b0;
+  --statusbar: #dcdcd4;
+  --success: #2f9de0;
+  --warning: #ff8a3d;
+  --error: #e0362c;
+  --muted: #8a8a85;
+  --panel-title: #ff8a3d;
+}
+
+[data-theme="Super Mario"] {
+  --bg: #16121a;
+  --fg: #f5eee2;
+  --accent: #e52521;
+  --selection: #261f28;
+  --border: #352c38;
+  --statusbar: #0f0c13;
+  --success: #5dbb63;
+  --warning: #ff9f43;
+  --error: #ff3b30;
+  --muted: #8a8194;
+  --panel-title: #e52521;
+}
+
+[data-theme="Super Mario (Luigi)"] {
+  --bg: #0e1a12;
+  --fg: #e4f2e6;
+  --accent: #4a9e5c;
+  --selection: #1a2b1f;
+  --border: #243a2c;
+  --statusbar: #0a130d;
+  --success: #6fcf78;
+  --warning: #ff9f43;
+  --error: #e5533d;
+  --muted: #758a7e;
+  --panel-title: #4a9e5c;
+}
+
+[data-theme="Overwatch"] {
+  --bg: #14161c;
+  --fg: #e8eaf0;
+  --accent: #f99e1a;
+  --selection: #23262f;
+  --border: #30343f;
+  --statusbar: #0e0f14;
+  --success: #218ffe;
+  --warning: #ff9f43;
+  --error: #ff5a5a;
+  --muted: #7d828c;
+  --panel-title: #f99e1a;
+}
+
+[data-theme="Halo"] {
+  --bg: #0d1420;
+  --fg: #dbe6f2;
+  --accent: #6fa55c;
+  --selection: #18233a;
+  --border: #212f4d;
+  --statusbar: #090d16;
+  --success: #7bbfe0;
+  --warning: #ff9f43;
+  --error: #ff5a5a;
+  --muted: #64708c;
+  --panel-title: #6fa55c;
+}
+
+[data-theme="Stardew Valley"] {
+  --bg: #1a1812;
+  --fg: #f0e8d8;
+  --accent: #6aa84f;
+  --selection: #2a251a;
+  --border: #3a3426;
+  --statusbar: #12100c;
+  --success: #8bc34a;
+  --warning: #d4881f;
+  --error: #c23b22;
+  --muted: #8a8270;
+  --panel-title: #e0a020;
+}
+
 /* ==========================================================================
    Base
    ========================================================================== */

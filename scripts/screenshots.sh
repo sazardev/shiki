@@ -82,6 +82,8 @@ THEMES=(
   solarized-dark solarized-light
   dracula one-dark monokai
   "LoL (Jinx)" "LoL (Teemo)" "LoL (Ahri)"
+  "Pokémon (Pikachu)" "Pokémon (Charizard)" "Pokémon (Gengar)"
+  Zelda Portal "Super Mario" "Super Mario (Luigi)" Overwatch Halo "Stardew Valley"
   default
 )
 

@@ -1,5 +1,6 @@
 mod catppuccin;
 mod dracula;
+mod games;
 mod gruvbox;
 mod lol;
 mod monokai;
@@ -31,6 +32,16 @@ pub fn all() -> Vec<Theme> {
         lol::jinx(),
         lol::teemo(),
         lol::ahri(),
+        games::pokemon_pikachu(),
+        games::pokemon_charizard(),
+        games::pokemon_gengar(),
+        games::zelda(),
+        games::portal(),
+        games::super_mario(),
+        games::super_mario_luigi(),
+        games::overwatch(),
+        games::halo(),
+        games::stardew(),
         Theme::terminal_default(),
     ]
 }

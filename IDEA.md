@@ -85,7 +85,8 @@ shiki/
 │           ├── dracula.rs
 │           ├── one_dark.rs
 │           ├── monokai.rs
-│           └── lol.rs             # LoL (Jinx), LoL (Teemo), LoL (Ahri)
+│           ├── lol.rs             # LoL (Jinx), LoL (Teemo), LoL (Ahri)
+│           └── games.rs           # Pokémon, Zelda, Portal, Mario, Overwatch, Halo, Stardew
 │
 ├── shiki-tui/                     # the interface
 │   ├── Cargo.toml
