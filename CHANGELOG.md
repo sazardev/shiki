@@ -25,11 +25,25 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   Night (Night), one Solarized (Dark), and the list is alphabetical in the picker (`default`
   stays last).
 - The homepage's hero demo is now an mp4 `<video>` (autoplays reliably, ~3x smaller than the
-  GIF it replaced), and it's **theme-aware**: a curated set of themes (Catppuccin Mocha, Tokyo
-  Night, Cyberpunk 2077, LoL (Jinx), Matrix) each have their own demo recording shot in that
-  theme — picking one on the site swaps the hero video to match, falling back to the default
-  gruvbox-dark recording otherwise. `scripts/demo-gif.sh` gained a `THEME` env var so the same
-  recording can be shot per theme, and reduced-motion users still get a static screenshot.
+  GIF it replaced), and it's **theme-aware**: each theme with a committed recording
+  (`docs/assets/demo/{id}.mp4`) swaps the hero video to match, falling back to the default
+  gruvbox-dark recording otherwise — the site probes for the file at runtime, so the whole
+  37-theme catalog is covered as recordings get committed. `scripts/demo-gif.sh` gained a
+  `THEME` env var so the same recording can be shot per theme, and reduced-motion users still
+  get a static screenshot.
+- The theme picker now **groups by family** (`── Classic ──`/`── LoL ──`/`── Games ──`/
+  `── Hacker ──` headers) and its filter matches family too (type `hack`/`pok`/`lol`);
+  `shiki theme list` shows the same grouped order, and the site's "Make it yours" section got
+  family filter tabs. Themes carry a `family` field backed by validation tests.
+- **Per-notebook themes**: `[theme.notebooks]` maps a notebook name to a theme that takes
+  effect while that notebook is focused — the picker writes there when a notebook is selected,
+  the CLI sets it with `shiki theme set <theme> --notebook <name>`, and Settings shows the
+  effective theme.
+- Theme validation tests now guard the whole catalog (every color slot parses, names unique,
+  alphabetical order with `default` last, `by_name` resolves all 37), and the 12 palette files
+  were rewritten over a `theme!` macro to cut the per-palette boilerplate.
+- The release workflow's screenshot/demo job was split into parallel matrix jobs so it fits
+  under the timeout with the 37-theme catalog.
 
 - `Ctrl+D` in the inline editor inserts today's date (`YYYY-MM-DD`) at the cursor, anywhere in
   the buffer, as a single undo step — the `/date` slash-menu snippet only works at line start.

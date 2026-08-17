@@ -769,7 +769,9 @@ fn default_links_key() -> String {
 }
 
 /// Theme config: `name` references a built-in theme; the optional fields
-/// allow overriding individual color slots.
+/// allow overriding individual color slots. `notebooks` maps a notebook name
+/// to a theme that takes precedence over `name` while that notebook is
+/// focused (`ThemeConfig::resolve_for`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeConfig {
     #[serde(default = "default_theme_name")]
@@ -781,6 +783,10 @@ pub struct ThemeConfig {
     /// changes anything for someone who explicitly opts out.
     #[serde(default = "default_true")]
     pub icons: bool,
+    /// Per-notebook theme overrides: notebook name → built-in theme name.
+    /// `resolve_for(Some(nb))` uses the entry when present, else `name`.
+    #[serde(default)]
+    pub notebooks: std::collections::BTreeMap<String, String>,
     #[serde(flatten)]
     pub overrides: ThemeOverrides,
 }
@@ -886,15 +892,28 @@ impl Default for ThemeConfig {
         Self {
             name: default_theme_name(),
             icons: default_true(),
+            notebooks: std::collections::BTreeMap::new(),
             overrides: ThemeOverrides::default(),
         }
     }
 }
 
 impl ThemeConfig {
-    /// Resolves the built-in theme by name and applies the configured overrides.
+    /// Resolves the built-in theme by name (or the focused notebook's
+    /// override, see `resolve_for`) and applies the configured overrides.
     pub fn resolve(&self) -> Theme {
-        let mut theme = crate::themes::by_name(&self.name).unwrap_or_else(Theme::terminal_default);
+        self.resolve_for(None)
+    }
+
+    /// `resolve()` for a specific notebook: its `notebooks` entry takes
+    /// precedence over the global `name` when present; slot overrides are
+    /// always global and apply on top of whichever base won.
+    pub fn resolve_for(&self, notebook: Option<&str>) -> Theme {
+        let base_name = notebook
+            .and_then(|nb| self.notebooks.get(nb))
+            .map(String::as_str)
+            .unwrap_or(&self.name);
+        let mut theme = crate::themes::by_name(base_name).unwrap_or_else(Theme::terminal_default);
         if let Some(v) = &self.overrides.bg {
             theme.bg = v.clone();
         }
@@ -1911,6 +1930,7 @@ mod tests {
         let config = ThemeConfig {
             name: "nord".into(),
             icons: true,
+            notebooks: std::collections::BTreeMap::new(),
             overrides,
         };
         // Every one of `Theme`'s 19 color fields — including the 14 that
@@ -1929,12 +1949,28 @@ mod tests {
         let config = ThemeConfig {
             name: "nord".into(),
             icons: true,
+            notebooks: std::collections::BTreeMap::new(),
             overrides,
         };
         let base = crate::themes::by_name("nord").unwrap();
         let resolved = config.resolve();
         assert_eq!(resolved.error, "#ff0000");
         assert_eq!(resolved.fg, base.fg); // untouched field falls back to the base theme
+    }
+
+    #[test]
+    fn resolve_for_prefers_the_notebook_override() {
+        let mut notebooks = std::collections::BTreeMap::new();
+        notebooks.insert("work".to_string(), "Matrix".to_string());
+        let config = ThemeConfig {
+            name: "nord".into(),
+            icons: true,
+            notebooks,
+            overrides: ThemeOverrides::default(),
+        };
+        assert_eq!(config.resolve().name, "nord");
+        assert_eq!(config.resolve_for(Some("work")).name, "Matrix");
+        assert_eq!(config.resolve_for(Some("personal")).name, "nord");
     }
 
     #[test]

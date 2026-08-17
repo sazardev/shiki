@@ -9,26 +9,14 @@ use crate::theme::Theme;
 /// (e.g. `tag` as pink, `link` as cyan) rather than inventing new hex
 /// values.
 pub fn dracula() -> Theme {
-    Theme {
-        name: "dracula".into(),
-        bg: "#282a36".into(),
-        fg: "#f8f8f2".into(),
-        accent: "#bd93f9".into(),
-        selection: "#44475a".into(),
-        border: "#44475a".into(),
-        statusbar: "#21222c".into(),
-        highlight: "#f1fa8c".into(),
-        error: "#ff5555".into(),
-        warning: "#ffb86c".into(),
-        success: "#50fa7b".into(),
-        inactive: "#6272a4".into(),
-        scrollbar: "#44475a".into(),
-        tab_active: "#bd93f9".into(),
-        tab_inactive: "#6272a4".into(),
-        panel_title: "#8be9fd".into(),
-        cursor: "#f8f8f2".into(),
-        link: "#8be9fd".into(),
-        tag: "#ff79c6".into(),
-        muted: "#6272a4".into(),
+    theme! {
+        "dracula", "Classic",
+        bg: "#282a36", fg: "#f8f8f2", accent: "#bd93f9",
+        selection: "#44475a", border: "#44475a", statusbar: "#21222c",
+        highlight: "#f1fa8c", error: "#ff5555", warning: "#ffb86c",
+        success: "#50fa7b", inactive: "#6272a4", scrollbar: "#44475a",
+        tab_active: "#bd93f9", tab_inactive: "#6272a4",
+        panel_title: "#8be9fd", cursor: "#f8f8f2", link: "#8be9fd",
+        tag: "#ff79c6", muted: "#6272a4"
     }
 }

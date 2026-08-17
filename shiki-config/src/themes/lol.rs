@@ -11,76 +11,40 @@ use crate::theme::Theme;
 /// panel_title/link/tag) reuses those same champion colors in the way the
 /// rest of the themes in this file do — nothing invented.
 pub fn jinx() -> Theme {
-    Theme {
-        name: "LoL (Jinx)".into(),
-        bg: "#0e1b2c".into(),
-        fg: "#eaf2fb".into(),
-        accent: "#ff3da5".into(),
-        selection: "#1a2c44".into(),
-        border: "#243a56".into(),
-        statusbar: "#091321".into(),
-        highlight: "#ffe14d".into(),
-        error: "#ff3860".into(),
-        warning: "#ffa63d".into(),
-        success: "#2ee6ff".into(),
-        inactive: "#4c6078".into(),
-        scrollbar: "#1a2c44".into(),
-        tab_active: "#2ee6ff".into(),
-        tab_inactive: "#4c6078".into(),
-        panel_title: "#ff3da5".into(),
-        cursor: "#2ee6ff".into(),
-        link: "#2ee6ff".into(),
-        tag: "#ff3da5".into(),
-        muted: "#7e92a8".into(),
+    theme! {
+        "LoL (Jinx)", "LoL",
+        bg: "#0e1b2c", fg: "#eaf2fb", accent: "#ff3da5",
+        selection: "#1a2c44", border: "#243a56", statusbar: "#091321",
+        highlight: "#ffe14d", error: "#ff3860", warning: "#ffa63d",
+        success: "#2ee6ff", inactive: "#4c6078", scrollbar: "#1a2c44",
+        tab_active: "#2ee6ff", tab_inactive: "#4c6078",
+        panel_title: "#ff3da5", cursor: "#2ee6ff", link: "#2ee6ff",
+        tag: "#ff3da5", muted: "#7e92a8"
     }
 }
 
 pub fn teemo() -> Theme {
-    Theme {
-        name: "LoL (Teemo)".into(),
-        bg: "#16220f".into(),
-        fg: "#e9f2dc".into(),
-        accent: "#8bc34a".into(),
-        selection: "#22331a".into(),
-        border: "#2d4423".into(),
-        statusbar: "#101a0b".into(),
-        highlight: "#fbc02d".into(),
-        error: "#e5533d".into(),
-        warning: "#f79b2e".into(),
-        success: "#9ccc65".into(),
-        inactive: "#5c6f49".into(),
-        scrollbar: "#22331a".into(),
-        tab_active: "#fbc02d".into(),
-        tab_inactive: "#5c6f49".into(),
-        panel_title: "#fbc02d".into(),
-        cursor: "#dcedc8".into(),
-        link: "#9ccc65".into(),
-        tag: "#8bc34a".into(),
-        muted: "#7e9170".into(),
+    theme! {
+        "LoL (Teemo)", "LoL",
+        bg: "#16220f", fg: "#e9f2dc", accent: "#8bc34a",
+        selection: "#22331a", border: "#2d4423", statusbar: "#101a0b",
+        highlight: "#fbc02d", error: "#e5533d", warning: "#f79b2e",
+        success: "#9ccc65", inactive: "#5c6f49", scrollbar: "#22331a",
+        tab_active: "#fbc02d", tab_inactive: "#5c6f49",
+        panel_title: "#fbc02d", cursor: "#dcedc8", link: "#9ccc65",
+        tag: "#8bc34a", muted: "#7e9170"
     }
 }
 
 pub fn ahri() -> Theme {
-    Theme {
-        name: "LoL (Ahri)".into(),
-        bg: "#241529".into(),
-        fg: "#f7e9f2".into(),
-        accent: "#e8448f".into(),
-        selection: "#351d40".into(),
-        border: "#482957".into(),
-        statusbar: "#1b0f1f".into(),
-        highlight: "#c9a1ff".into(),
-        error: "#ff3d6e".into(),
-        warning: "#ffa25c".into(),
-        success: "#6ee7b7".into(),
-        inactive: "#7d5d93".into(),
-        scrollbar: "#351d40".into(),
-        tab_active: "#b388ff".into(),
-        tab_inactive: "#7d5d93".into(),
-        panel_title: "#ff7ab8".into(),
-        cursor: "#ffffff".into(),
-        link: "#b388ff".into(),
-        tag: "#e8448f".into(),
-        muted: "#9c7fb0".into(),
+    theme! {
+        "LoL (Ahri)", "LoL",
+        bg: "#241529", fg: "#f7e9f2", accent: "#e8448f",
+        selection: "#351d40", border: "#482957", statusbar: "#1b0f1f",
+        highlight: "#c9a1ff", error: "#ff3d6e", warning: "#ffa25c",
+        success: "#6ee7b7", inactive: "#7d5d93", scrollbar: "#351d40",
+        tab_active: "#b388ff", tab_inactive: "#7d5d93",
+        panel_title: "#ff7ab8", cursor: "#ffffff", link: "#b388ff",
+        tag: "#e8448f", muted: "#9c7fb0"
     }
 }

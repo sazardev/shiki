@@ -1,26 +1,14 @@
 use crate::theme::Theme;
 
 pub fn nord() -> Theme {
-    Theme {
-        name: "nord".into(),
-        bg: "#2e3440".into(),
-        fg: "#d8dee9".into(),
-        accent: "#88c0d0".into(),
-        selection: "#434c5e".into(),
-        border: "#3b4252".into(),
-        statusbar: "#242933".into(),
-        highlight: "#ebcb8b".into(),
-        error: "#bf616a".into(),
-        warning: "#d08770".into(),
-        success: "#a3be8c".into(),
-        inactive: "#4c566a".into(),
-        scrollbar: "#3b4252".into(),
-        tab_active: "#b48ead".into(),
-        tab_inactive: "#4c566a".into(),
-        panel_title: "#81a1c1".into(),
-        cursor: "#d8dee9".into(),
-        link: "#5e81ac".into(),
-        tag: "#b48ead".into(),
-        muted: "#8fbcbb".into(),
+    theme! {
+        "nord", "Classic",
+        bg: "#2e3440", fg: "#d8dee9", accent: "#88c0d0",
+        selection: "#434c5e", border: "#3b4252", statusbar: "#242933",
+        highlight: "#ebcb8b", error: "#bf616a", warning: "#d08770",
+        success: "#a3be8c", inactive: "#4c566a", scrollbar: "#3b4252",
+        tab_active: "#b48ead", tab_inactive: "#4c566a",
+        panel_title: "#81a1c1", cursor: "#d8dee9", link: "#5e81ac",
+        tag: "#b48ead", muted: "#8fbcbb"
     }
 }

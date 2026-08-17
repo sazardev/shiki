@@ -947,6 +947,35 @@ code, .code {
    Theme switcher section
    ========================================================================== */
 
+.theme-family-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.family-tab {
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-family: inherit;
+  color: var(--muted);
+}
+
+.family-tab:hover {
+  color: var(--fg);
+}
+
+.family-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
+}
+
 .theme-swatches {
   display: flex;
   flex-wrap: wrap;

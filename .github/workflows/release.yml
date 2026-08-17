@@ -396,17 +396,20 @@ jobs:
             fi
           )
 
-  update-screenshots:
-    name: Regenerate marketing screenshots and demo GIF for the docs site
-    # Also needs update-packaging-manifests (not just release/resolve-tag)
-    # so it never checks out `main` and pushes in parallel with that job's
-    # own push to the same branch — hit for real on v0.8.4's release:
-    # update-packaging-manifests pushed its manifest-update commit first,
-    # and this job's checkout (taken before that push landed) was then
-    # rejected as a non-fast-forward when it tried to push its own
-    # screenshot-update commit. Running after it entirely removes the race
-    # instead of adding retry/rebase logic to paper over it.
+  screenshots:
+    name: Generate theme screenshots (${{ matrix.group }})
+    # Split out of the old monolithic update-screenshots job: with 37 themes
+    # the full screenshot run plus the demo recordings blew past the 30-minute
+    # timeout, so the work is now parallel matrix jobs (one per theme family)
+    # that only *generate* — a separate update-screenshots job assembles and
+    # commits. Still ordered after update-packaging-manifests so nothing ever
+    # checks out `main` and pushes in parallel with that job's own push (the
+    # v0.8.4 non-fast-forward race, see the comment below).
     needs: [release, resolve-tag, update-packaging-manifests]
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [classics, lol, games, hacker, default]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -419,13 +422,76 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: screenshots
+          key: screenshots-${{ matrix.group }}
 
-      - name: Install screenshot tooling (xterm, ImageMagick, xdotool, Xvfb, pngquant)
+      - name: Install screenshot tooling (xterm, ImageMagick, xdotool, Xvfb)
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y xterm imagemagick xdotool xvfb pngquant
+          sudo apt-get install -y xterm imagemagick xdotool xvfb
+
+      - name: Install a Nerd Font (for the TUI's icon glyphs)
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.local/share/fonts
+          curl -sSfL -o /tmp/JetBrainsMono.zip \
+            https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip
+          unzip -q /tmp/JetBrainsMono.zip -d ~/.local/share/fonts
+          fc-cache -f
+
+      - name: Generate screenshots (${{ matrix.group }})
+        run: |
+          set -euo pipefail
+          case "${{ matrix.group }}" in
+            classics)
+              ONLY=$(printf '%s\n' 'catppuccin-mocha' 'dracula' 'gruvbox-dark' 'gruvbox-dark-hard' \
+                'gruvbox-dark-soft' 'gruvbox-light' 'gruvbox-light-hard' 'gruvbox-light-soft' \
+                'monokai' 'nord' 'one-dark' 'solarized-dark' 'tokyo-night')
+              ;;
+            lol)
+              ONLY=$(printf '%s\n' 'LoL (Ahri)' 'LoL (Jinx)' 'LoL (Teemo)')
+              ;;
+            games)
+              ONLY=$(printf '%s\n' 'Halo' 'Overwatch' 'Pokémon (Charizard)' 'Pokémon (Gengar)' \
+                'Pokémon (Pikachu)' 'Portal' 'Stardew Valley' 'Super Mario' 'Super Mario (Luigi)' 'Zelda')
+              ;;
+            hacker)
+              ONLY=$(printf '%s\n' 'Arasaka' 'Blade Runner' 'Cyberpunk 2077' 'Doom' 'Fallout Terminal' \
+                'Ghost in the Shell' 'Matrix' 'Mr. Robot' 'Synthwave' 'Tron')
+              ;;
+            default)
+              ONLY=$(printf 'default')
+              ;;
+          esac
+          # `ONLY` (newline-separated) limits the run to the group; the script
+          # appends instead of wiping so each matrix member owns its own dir.
+          ONLY="$ONLY" bash scripts/screenshots.sh "screenshots-${{ matrix.group }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ matrix.group }}
+          path: screenshots-${{ matrix.group }}
+          if-no-files-found: error
+          retention-days: 1
+
+  demo-videos:
+    name: Generate hero demo videos
+    # Same ordering deps as the screenshots job; parallel with it (the demo
+    # recordings don't depend on the per-theme screenshots, just the binary).
+    needs: [release, resolve-tag, update-packaging-manifests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          token: ${{ secrets.RELEASE_TAG_PAT || github.token }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: demo-videos
 
       - name: Install demo-gif tooling (VHS, ttyd, ffmpeg)
         run: |
@@ -435,8 +501,6 @@ jobs:
           echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
           sudo apt-get update
           sudo apt-get install -y vhs ffmpeg
-          # ttyd has no apt package — vhs's own README points at its GitHub
-          # release binaries instead.
           curl -fsSL -o /tmp/ttyd https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.x86_64
           chmod +x /tmp/ttyd
           sudo mv /tmp/ttyd /usr/local/bin/ttyd
@@ -450,23 +514,63 @@ jobs:
           unzip -q /tmp/JetBrainsMono.zip -d ~/.local/share/fonts
           fc-cache -f
 
-      - name: Generate screenshots
-        run: bash scripts/screenshots.sh
-
-      - name: Generate demo GIF
+      - name: Generate demo GIF (and mp4)
         run: bash scripts/demo-gif.sh
 
       - name: Generate per-theme hero demo videos
         # The homepage's theme switcher swaps the hero `<video>` to a
-        # recording shot in that theme when one exists (see main.js's
-        # HERO_DEMO_THEMES). Keep that curated set fresh alongside the
-        # default gruvbox-dark demo above. Each recording takes ~2-3 min.
+        # recording shot in that theme when one exists (main.js probes
+        # assets/demo/{id}.mp4 at runtime, so any committed recording is
+        # picked up automatically). Keep the flagship set fresh alongside
+        # the default gruvbox-dark demo above. Each recording ~2-3 min.
         run: |
           set -euo pipefail
+          mkdir -p docs/assets/demo
           for t in catppuccin-mocha tokyo-night "Cyberpunk 2077" "LoL (Jinx)" Matrix; do
             THEME="$t" bash scripts/demo-gif.sh "/tmp/demo-$t.gif"
             cp "/tmp/demo-$t.mp4" "docs/assets/demo/$t.mp4"
           done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-assets
+          path: |
+            docs/assets/demo.gif
+            docs/assets/demo.mp4
+            docs/assets/demo
+          if-no-files-found: error
+          retention-days: 1
+
+  update-screenshots:
+    name: Assemble and publish refreshed docs assets
+    # Also needs update-packaging-manifests (not just release/resolve-tag)
+    # so it never checks out `main` and pushes in parallel with that job's
+    # own push to the same branch — hit for real on v0.8.4's release:
+    # update-packaging-manifests pushed its manifest-update commit first,
+    # and this job's checkout (taken before that push landed) was then
+    # rejected as a non-fast-forward when it tried to push its own
+    # screenshot-update commit. Running after it entirely removes the race
+    # instead of adding retry/rebase logic to paper over it.
+    needs: [release, resolve-tag, update-packaging-manifests, screenshots, demo-videos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          token: ${{ secrets.RELEASE_TAG_PAT || github.token }}
+
+      - name: Download generated assets
+        uses: actions/download-artifact@v4
+        with:
+          path: generated
+          merge-multiple: false
+
+      - name: Install pngquant
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y pngquant
 
       - name: Update docs site screenshots and demo GIF
         id: update
@@ -474,6 +578,12 @@ jobs:
           HAS_PAT: ${{ secrets.RELEASE_TAG_PAT }}
         run: |
           set -euo pipefail
+          # Assemble the per-group screenshot dirs back into one `screenshots/`
+          # tree (each matrix member uploaded its own `screenshots-<group>/`).
+          mkdir -p screenshots
+          for g in classics lol games hacker default; do
+            cp -r "generated/screenshots-$g/." screenshots/ 2>/dev/null || true
+          done
           # Homepage hero loop's top-level PNGs — every theme's wide-01
           # capture, globbed over what screenshots.sh actually produced (so
           # a theme added/removed from the catalog tracks automatically,
@@ -487,12 +597,9 @@ jobs:
             cp "screenshots/$theme/wide-01-notebooks.png" "docs/assets/screenshots/$theme.png"
           done
           # documentation.html's per-feature screenshot gallery — every
-          # capture, for every theme scripts/screenshots.sh generates
-          # (including Dracula/One Dark/Monokai/default, which the homepage
-          # hero loop above doesn't cover yet). A plain glob over whatever
-          # screenshots.sh actually produced, not a hardcoded file list, so a
-          # future new capture (or theme) shows up here automatically with no
-          # matching edit needed in this workflow.
+          # capture, for every theme scripts/screenshots.sh generates. A
+          # plain glob over what it actually produced, not a hardcoded file
+          # list, so a future new capture (or theme) shows up automatically.
           for theme_dir in screenshots/*/; do
             theme="$(basename "$theme_dir")"
             mkdir -p "docs/assets/screenshots/gallery/$theme"
@@ -510,6 +617,8 @@ jobs:
           # would, hence bothering to compress it at all.
           pngquant --quality=80-95 --skip-if-larger --ext .png --force \
             docs/assets/screenshots/gallery/*/*.png
+          # Overlay the demo recordings generated by the parallel job.
+          cp -r "generated/demo-assets/." docs/assets/
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/assets/screenshots docs/assets/demo.gif docs/assets/demo.mp4 docs/assets/demo

@@ -37,21 +37,42 @@ enum ConflictSideChoice {
 impl App {
     fn open_theme_picker(&mut self) {
         self.theme_search.clear();
-        self.theme_picker_index = self.theme_index;
+        // The list is displayed grouped by family, so position the cursor on
+        // the current theme's row within that grouped order rather than its
+        // `theme_index` in the flat `all()` list.
+        self.theme_picker_index = self
+            .theme_picker_filtered()
+            .iter()
+            .position(|t| t.name == self.theme.name)
+            .unwrap_or(0);
         self.show_theme_picker = true;
     }
-    /// Themes whose name contains the search query (case-insensitive), in
-    /// built-in order — all of them while the query is empty. Backs both the
-    /// picker's rendering and its key handling, so navigation and selection
-    /// always operate on exactly what's on screen, same pattern as
+    /// Themes matching the search query (case-insensitive on the name *or*
+    /// the family, so "hack"/"pok"/"lol" narrow by group too), ordered for
+    /// grouped display: family first, then name — all of them while the
+    /// query is empty, `default` (System) naturally landing last. Backs both
+    /// the picker's rendering and its key handling, so navigation and
+    /// selection always operate on exactly what's on screen, same pattern as
     /// `which_key_filtered_entries`.
     pub fn theme_picker_filtered(&self) -> Vec<shiki_config::theme::Theme> {
         let query = self.theme_search.value.to_lowercase();
-        self.available_themes
+        let mut list: Vec<shiki_config::theme::Theme> = self
+            .available_themes
             .iter()
-            .filter(|t| query.is_empty() || t.name.to_lowercase().contains(&query))
+            .filter(|t| {
+                query.is_empty()
+                    || t.name.to_lowercase().contains(&query)
+                    || t.family.to_lowercase().contains(&query)
+            })
             .cloned()
-            .collect()
+            .collect();
+        list.sort_by(|a, b| {
+            a.family
+                .to_lowercase()
+                .cmp(&b.family.to_lowercase())
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
+        list
     }
     fn handle_theme_picker_key(&mut self, key: KeyEvent) {
         match key.code {
@@ -86,15 +107,32 @@ impl App {
                     .position(|a| a.name == t.name)
                     .unwrap_or(self.theme_index);
                 // Only reset overrides when actually switching to a
-                // different base theme — compared against `config.theme.name`
-                // (the last *committed* value), not `self.theme.name` (the
-                // live-preview value while browsing). Re-confirming the
-                // theme that was already active with no real change used to
-                // silently wipe any hand-written custom colors.
-                if self.config.theme.name != self.theme.name {
+                // different base theme — compared against the *committed*
+                // value (the last theme actually saved for the current
+                // notebook, or the global `name`), not `self.theme.name`
+                // (the live-preview value while browsing). Re-confirming
+                // the theme that was already active with no real change
+                // used to silently wipe any hand-written custom colors.
+                let committed_base = self
+                    .config
+                    .theme
+                    .resolve_for(self.selected_notebook().map(|nb| nb.name.as_str()))
+                    .name;
+                if committed_base != t.name {
                     self.config.theme.overrides = Default::default();
                 }
-                self.config.theme.name = self.theme.name.clone();
+                // A focused notebook gets its own override entry; with no
+                // notebook selected (or a notebook that's not set up yet),
+                // the global `name` is what changes.
+                match self.selected_notebook() {
+                    Some(nb) => {
+                        self.config
+                            .theme
+                            .notebooks
+                            .insert(nb.name.clone(), t.name.clone());
+                    }
+                    None => self.config.theme.name = t.name.clone(),
+                }
                 if let Ok(path) = Config::default_path() {
                     let _ = self.config.save(&path);
                 }
@@ -223,7 +261,7 @@ impl App {
     fn jump_to_drawer_notebook(&mut self) {
         if let Some((name, _)) = self.drawer_statuses.get(self.drawer_selected) {
             if let Some(idx) = self.notebooks.iter().position(|nb| &nb.name == name) {
-                self.selected_notebook = idx;
+                self.set_selected_notebook(idx);
                 self.notes_path.clear();
                 self.reload_notes();
             }
@@ -2533,10 +2571,11 @@ impl App {
             .enumerate()
             .find(|(_, nb)| path.starts_with(&nb.path))
         {
+            let nb_path = nb.path.clone();
             if self.selected_notebook != nb_idx {
-                self.selected_notebook = nb_idx;
+                self.set_selected_notebook(nb_idx);
             }
-            self.notes_path = relative_folder(&path, &nb.path);
+            self.notes_path = relative_folder(&path, &nb_path);
         }
         self.reload_notes();
         if let Some(idx) = self.notes.iter().position(|n| n.path == path) {
@@ -2651,7 +2690,7 @@ impl App {
         let notebook = row.notebook.clone();
         let note_path = row.note_path.clone();
         if let Some(nb_idx) = self.notebooks.iter().position(|n| n.name == notebook) {
-            self.selected_notebook = nb_idx;
+            self.set_selected_notebook(nb_idx);
             let nb_path = self.notebooks[nb_idx].path.clone();
             self.notes_path = relative_folder(&note_path, &nb_path);
             self.reload_notes();
@@ -2895,7 +2934,7 @@ impl App {
         let notebook = row.notebook.clone();
         let note_path = row.path.clone();
         if let Some(nb_idx) = self.notebooks.iter().position(|n| n.name == notebook) {
-            self.selected_notebook = nb_idx;
+            self.set_selected_notebook(nb_idx);
             let nb_path = self.notebooks[nb_idx].path.clone();
             self.notes_path = relative_folder(&note_path, &nb_path);
             self.reload_notes();
@@ -3497,7 +3536,7 @@ impl App {
     fn jump_to_global_hit(&mut self, pool_index: usize) {
         if let Some((nb, note)) = self.global_search_pool.get(pool_index).cloned() {
             if let Some(nb_idx) = self.notebooks.iter().position(|n| n.name == nb.name) {
-                self.selected_notebook = nb_idx;
+                self.set_selected_notebook(nb_idx);
             }
             // The hit might be nested inside a subfolder of its notebook —
             // point the breadcrumb at it before reloading so it's visible.
@@ -3524,7 +3563,7 @@ impl App {
         let notebook = row.notebook.clone();
         let note_path = row.path.clone();
         if let Some(nb_idx) = self.notebooks.iter().position(|n| n.name == notebook) {
-            self.selected_notebook = nb_idx;
+            self.set_selected_notebook(nb_idx);
             let nb_path = self.notebooks[nb_idx].path.clone();
             self.notes_path = relative_folder(&note_path, &nb_path);
             self.reload_notes();
@@ -3773,7 +3812,7 @@ impl App {
                 row,
             ) {
                 self.focus = Focus::Notebooks;
-                self.selected_notebook = index;
+                self.set_selected_notebook(index);
                 self.notes_path.clear();
                 self.reload_notes();
                 self.navigate_forward();
@@ -5061,7 +5100,7 @@ impl App {
                         Ok(nb) => {
                             self.reload_notebooks();
                             if let Some(idx) = self.notebooks.iter().position(|n| n.name == name) {
-                                self.selected_notebook = idx;
+                                self.set_selected_notebook(idx);
                                 self.reload_notes();
                             }
                             let mut status = format!("notebook '{name}' created");

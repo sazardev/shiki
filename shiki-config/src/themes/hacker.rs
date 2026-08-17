@@ -10,251 +10,131 @@ use crate::theme::Theme;
 /// and Mr. Robot's fsociety red with cyan. Every secondary slot reuses
 /// those same colors the way the rest of the themes in this file do.
 pub fn matrix() -> Theme {
-    Theme {
-        name: "Matrix".into(),
-        bg: "#0d0208".into(),
-        fg: "#00ff41".into(),
-        accent: "#00ff41".into(),
-        selection: "#003b00".into(),
-        border: "#008f11".into(),
-        statusbar: "#080100".into(),
-        highlight: "#a8ff60".into(),
-        error: "#ff4444".into(),
-        warning: "#ffb000".into(),
-        success: "#00ff41".into(),
-        inactive: "#006600".into(),
-        scrollbar: "#003b00".into(),
-        tab_active: "#00ff41".into(),
-        tab_inactive: "#006600".into(),
-        panel_title: "#00ff41".into(),
-        cursor: "#00ff41".into(),
-        link: "#a8ff60".into(),
-        tag: "#00ff41".into(),
-        muted: "#008f11".into(),
+    theme! {
+        "Matrix", "Hacker",
+        bg: "#0d0208", fg: "#00ff41", accent: "#00ff41",
+        selection: "#003b00", border: "#008f11", statusbar: "#080100",
+        highlight: "#a8ff60", error: "#ff4444", warning: "#ffb000",
+        success: "#00ff41", inactive: "#006600", scrollbar: "#003b00",
+        tab_active: "#00ff41", tab_inactive: "#006600",
+        panel_title: "#00ff41", cursor: "#00ff41", link: "#a8ff60",
+        tag: "#00ff41", muted: "#008f11"
     }
 }
 
 pub fn cyberpunk() -> Theme {
-    Theme {
-        name: "Cyberpunk 2077".into(),
-        bg: "#100a18".into(),
-        fg: "#e8e6f0".into(),
-        accent: "#fcee0a".into(),
-        selection: "#22143a".into(),
-        border: "#33204f".into(),
-        statusbar: "#0a0610".into(),
-        highlight: "#ff003c".into(),
-        error: "#ff003c".into(),
-        warning: "#fcee0a".into(),
-        success: "#00f0ff".into(),
-        inactive: "#554570".into(),
-        scrollbar: "#22143a".into(),
-        tab_active: "#00f0ff".into(),
-        tab_inactive: "#554570".into(),
-        panel_title: "#fcee0a".into(),
-        cursor: "#00f0ff".into(),
-        link: "#00f0ff".into(),
-        tag: "#ff003c".into(),
-        muted: "#7d6f96".into(),
+    theme! {
+        "Cyberpunk 2077", "Hacker",
+        bg: "#100a18", fg: "#e8e6f0", accent: "#fcee0a",
+        selection: "#22143a", border: "#33204f", statusbar: "#0a0610",
+        highlight: "#ff003c", error: "#ff003c", warning: "#fcee0a",
+        success: "#00f0ff", inactive: "#554570", scrollbar: "#22143a",
+        tab_active: "#00f0ff", tab_inactive: "#554570",
+        panel_title: "#fcee0a", cursor: "#00f0ff", link: "#00f0ff",
+        tag: "#ff003c", muted: "#7d6f96"
     }
 }
 
 pub fn arasaka() -> Theme {
-    Theme {
-        name: "Arasaka".into(),
-        bg: "#120808".into(),
-        fg: "#f5e6e6".into(),
-        accent: "#ff003c".into(),
-        selection: "#241010".into(),
-        border: "#331717".into(),
-        statusbar: "#0c0505".into(),
-        highlight: "#ffd700".into(),
-        error: "#ff003c".into(),
-        warning: "#ffb700".into(),
-        success: "#ff6b6b".into(),
-        inactive: "#5a2e2e".into(),
-        scrollbar: "#241010".into(),
-        tab_active: "#ffd700".into(),
-        tab_inactive: "#5a2e2e".into(),
-        panel_title: "#ff003c".into(),
-        cursor: "#ffd700".into(),
-        link: "#ff6b6b".into(),
-        tag: "#ff003c".into(),
-        muted: "#8a5a5a".into(),
+    theme! {
+        "Arasaka", "Hacker",
+        bg: "#120808", fg: "#f5e6e6", accent: "#ff003c",
+        selection: "#241010", border: "#331717", statusbar: "#0c0505",
+        highlight: "#ffd700", error: "#ff003c", warning: "#ffb700",
+        success: "#ff6b6b", inactive: "#5a2e2e", scrollbar: "#241010",
+        tab_active: "#ffd700", tab_inactive: "#5a2e2e",
+        panel_title: "#ff003c", cursor: "#ffd700", link: "#ff6b6b",
+        tag: "#ff003c", muted: "#8a5a5a"
     }
 }
 
 pub fn synthwave() -> Theme {
-    Theme {
-        name: "Synthwave".into(),
-        bg: "#16082e".into(),
-        fg: "#f0e6ff".into(),
-        accent: "#ff2ec4".into(),
-        selection: "#241246".into(),
-        border: "#33206a".into(),
-        statusbar: "#0f0520".into(),
-        highlight: "#ffd400".into(),
-        error: "#ff2e6e".into(),
-        warning: "#ff9e2e".into(),
-        success: "#00ffff".into(),
-        inactive: "#584388".into(),
-        scrollbar: "#241246".into(),
-        tab_active: "#00ffff".into(),
-        tab_inactive: "#584388".into(),
-        panel_title: "#ff2ec4".into(),
-        cursor: "#00ffff".into(),
-        link: "#00ffff".into(),
-        tag: "#ff2ec4".into(),
-        muted: "#8a74b8".into(),
+    theme! {
+        "Synthwave", "Hacker",
+        bg: "#16082e", fg: "#f0e6ff", accent: "#ff2ec4",
+        selection: "#241246", border: "#33206a", statusbar: "#0f0520",
+        highlight: "#ffd400", error: "#ff2e6e", warning: "#ff9e2e",
+        success: "#00ffff", inactive: "#584388", scrollbar: "#241246",
+        tab_active: "#00ffff", tab_inactive: "#584388",
+        panel_title: "#ff2ec4", cursor: "#00ffff", link: "#00ffff",
+        tag: "#ff2ec4", muted: "#8a74b8"
     }
 }
 
 pub fn tron() -> Theme {
-    Theme {
-        name: "Tron".into(),
-        bg: "#0a1014".into(),
-        fg: "#d6f4ff".into(),
-        accent: "#00f6ff".into(),
-        selection: "#0e2026".into(),
-        border: "#122d36".into(),
-        statusbar: "#060a0d".into(),
-        highlight: "#00d8ff".into(),
-        error: "#ff4d4d".into(),
-        warning: "#ffb84d".into(),
-        success: "#00f6ff".into(),
-        inactive: "#2e5a66".into(),
-        scrollbar: "#0e2026".into(),
-        tab_active: "#00f6ff".into(),
-        tab_inactive: "#2e5a66".into(),
-        panel_title: "#00f6ff".into(),
-        cursor: "#00f6ff".into(),
-        link: "#00d8ff".into(),
-        tag: "#00f6ff".into(),
-        muted: "#4d7a86".into(),
+    theme! {
+        "Tron", "Hacker",
+        bg: "#0a1014", fg: "#d6f4ff", accent: "#00f6ff",
+        selection: "#0e2026", border: "#122d36", statusbar: "#060a0d",
+        highlight: "#00d8ff", error: "#ff4d4d", warning: "#ffb84d",
+        success: "#00f6ff", inactive: "#2e5a66", scrollbar: "#0e2026",
+        tab_active: "#00f6ff", tab_inactive: "#2e5a66",
+        panel_title: "#00f6ff", cursor: "#00f6ff", link: "#00d8ff",
+        tag: "#00f6ff", muted: "#4d7a86"
     }
 }
 
 pub fn fallout_terminal() -> Theme {
-    Theme {
-        name: "Fallout Terminal".into(),
-        bg: "#0a0f0a".into(),
-        fg: "#00ff00".into(),
-        accent: "#00ff00".into(),
-        selection: "#0f2410".into(),
-        border: "#1a3a1a".into(),
-        statusbar: "#060a06".into(),
-        highlight: "#aaffaa".into(),
-        error: "#ff5555".into(),
-        warning: "#ffb000".into(),
-        success: "#00ff00".into(),
-        inactive: "#1d3a1d".into(),
-        scrollbar: "#0f2410".into(),
-        tab_active: "#00ff00".into(),
-        tab_inactive: "#1d3a1d".into(),
-        panel_title: "#00ff00".into(),
-        cursor: "#00ff00".into(),
-        link: "#aaffaa".into(),
-        tag: "#00ff00".into(),
-        muted: "#3a6b3a".into(),
+    theme! {
+        "Fallout Terminal", "Hacker",
+        bg: "#0a0f0a", fg: "#00ff00", accent: "#00ff00",
+        selection: "#0f2410", border: "#1a3a1a", statusbar: "#060a06",
+        highlight: "#aaffaa", error: "#ff5555", warning: "#ffb000",
+        success: "#00ff00", inactive: "#1d3a1d", scrollbar: "#0f2410",
+        tab_active: "#00ff00", tab_inactive: "#1d3a1d",
+        panel_title: "#00ff00", cursor: "#00ff00", link: "#aaffaa",
+        tag: "#00ff00", muted: "#3a6b3a"
     }
 }
 
 pub fn blade_runner() -> Theme {
-    Theme {
-        name: "Blade Runner".into(),
-        bg: "#0e0a08".into(),
-        fg: "#f2e9de".into(),
-        accent: "#ff9e3d".into(),
-        selection: "#1d150f".into(),
-        border: "#2b1f15".into(),
-        statusbar: "#090705".into(),
-        highlight: "#ffce6b".into(),
-        error: "#ff5a5a".into(),
-        warning: "#ff9e3d".into(),
-        success: "#37c8ab".into(),
-        inactive: "#5a4a38".into(),
-        scrollbar: "#1d150f".into(),
-        tab_active: "#37c8ab".into(),
-        tab_inactive: "#5a4a38".into(),
-        panel_title: "#ff9e3d".into(),
-        cursor: "#ffce6b".into(),
-        link: "#37c8ab".into(),
-        tag: "#ff9e3d".into(),
-        muted: "#8a7660".into(),
+    theme! {
+        "Blade Runner", "Hacker",
+        bg: "#0e0a08", fg: "#f2e9de", accent: "#ff9e3d",
+        selection: "#1d150f", border: "#2b1f15", statusbar: "#090705",
+        highlight: "#ffce6b", error: "#ff5a5a", warning: "#ff9e3d",
+        success: "#37c8ab", inactive: "#5a4a38", scrollbar: "#1d150f",
+        tab_active: "#37c8ab", tab_inactive: "#5a4a38",
+        panel_title: "#ff9e3d", cursor: "#ffce6b", link: "#37c8ab",
+        tag: "#ff9e3d", muted: "#8a7660"
     }
 }
 
 pub fn doom() -> Theme {
-    Theme {
-        name: "Doom".into(),
-        bg: "#0d0505".into(),
-        fg: "#f2e0e0".into(),
-        accent: "#e62525".into(),
-        selection: "#1f0a0a".into(),
-        border: "#2d0f0f".into(),
-        statusbar: "#080303".into(),
-        highlight: "#ff7b3d".into(),
-        error: "#ff2e2e".into(),
-        warning: "#ff9e3d".into(),
-        success: "#7bc25e".into(),
-        inactive: "#5a2424".into(),
-        scrollbar: "#1f0a0a".into(),
-        tab_active: "#e62525".into(),
-        tab_inactive: "#5a2424".into(),
-        panel_title: "#ff7b3d".into(),
-        cursor: "#ff7b3d".into(),
-        link: "#7bc25e".into(),
-        tag: "#e62525".into(),
-        muted: "#8a5050".into(),
+    theme! {
+        "Doom", "Hacker",
+        bg: "#0d0505", fg: "#f2e0e0", accent: "#e62525",
+        selection: "#1f0a0a", border: "#2d0f0f", statusbar: "#080303",
+        highlight: "#ff7b3d", error: "#ff2e2e", warning: "#ff9e3d",
+        success: "#7bc25e", inactive: "#5a2424", scrollbar: "#1f0a0a",
+        tab_active: "#e62525", tab_inactive: "#5a2424",
+        panel_title: "#ff7b3d", cursor: "#ff7b3d", link: "#7bc25e",
+        tag: "#e62525", muted: "#8a5050"
     }
 }
 
 pub fn ghost_in_the_shell() -> Theme {
-    Theme {
-        name: "Ghost in the Shell".into(),
-        bg: "#0a1214".into(),
-        fg: "#d8f2ee".into(),
-        accent: "#2dd4bf".into(),
-        selection: "#122024".into(),
-        border: "#1a2f34".into(),
-        statusbar: "#060a0c".into(),
-        highlight: "#8fe3d0".into(),
-        error: "#ff5a7a".into(),
-        warning: "#ffc05a".into(),
-        success: "#2dd4bf".into(),
-        inactive: "#33535a".into(),
-        scrollbar: "#122024".into(),
-        tab_active: "#37b6ff".into(),
-        tab_inactive: "#33535a".into(),
-        panel_title: "#2dd4bf".into(),
-        cursor: "#37b6ff".into(),
-        link: "#37b6ff".into(),
-        tag: "#2dd4bf".into(),
-        muted: "#5d7a80".into(),
+    theme! {
+        "Ghost in the Shell", "Hacker",
+        bg: "#0a1214", fg: "#d8f2ee", accent: "#2dd4bf",
+        selection: "#122024", border: "#1a2f34", statusbar: "#060a0c",
+        highlight: "#8fe3d0", error: "#ff5a7a", warning: "#ffc05a",
+        success: "#2dd4bf", inactive: "#33535a", scrollbar: "#122024",
+        tab_active: "#37b6ff", tab_inactive: "#33535a",
+        panel_title: "#2dd4bf", cursor: "#37b6ff", link: "#37b6ff",
+        tag: "#2dd4bf", muted: "#5d7a80"
     }
 }
 
 pub fn mr_robot() -> Theme {
-    Theme {
-        name: "Mr. Robot".into(),
-        bg: "#0c0c10".into(),
-        fg: "#e8e8f0".into(),
-        accent: "#ff3b3b".into(),
-        selection: "#1c1c24".into(),
-        border: "#292933".into(),
-        statusbar: "#08080b".into(),
-        highlight: "#ffd75e".into(),
-        error: "#ff3b3b".into(),
-        warning: "#ff9e3d".into(),
-        success: "#37c8ab".into(),
-        inactive: "#555566".into(),
-        scrollbar: "#1c1c24".into(),
-        tab_active: "#37c8ab".into(),
-        tab_inactive: "#555566".into(),
-        panel_title: "#ff3b3b".into(),
-        cursor: "#ffd75e".into(),
-        link: "#37c8ab".into(),
-        tag: "#ff3b3b".into(),
-        muted: "#7d7d8f".into(),
+    theme! {
+        "Mr. Robot", "Hacker",
+        bg: "#0c0c10", fg: "#e8e8f0", accent: "#ff3b3b",
+        selection: "#1c1c24", border: "#292933", statusbar: "#08080b",
+        highlight: "#ffd75e", error: "#ff3b3b", warning: "#ff9e3d",
+        success: "#37c8ab", inactive: "#555566", scrollbar: "#1c1c24",
+        tab_active: "#37c8ab", tab_inactive: "#555566",
+        panel_title: "#ff3b3b", cursor: "#ffd75e", link: "#37c8ab",
+        tag: "#ff3b3b", muted: "#7d7d8f"
     }
 }

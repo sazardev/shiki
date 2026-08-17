@@ -1220,7 +1220,12 @@ fn load_log_history(path: &std::path::Path, limit: usize) -> Vec<LogEntry> {
 
 impl App {
     pub fn new(config: Config, store: NotebookStore) -> shiki_core::Result<Self> {
-        let theme = config.theme.resolve();
+        let notebooks = store.list()?;
+        // Resolve for the initially selected notebook so a per-notebook
+        // override on it applies from the very first frame.
+        let theme = config
+            .theme
+            .resolve_for(notebooks.first().map(|nb| nb.name.as_str()));
         let show_dates = config.general.show_dates;
         let note_sort = NoteSort::from_config_str(&config.general.default_note_sort);
         let keymaps = KeyMaps::from_config(&config.keybindings);
@@ -1540,7 +1545,7 @@ impl App {
         else {
             return;
         };
-        self.selected_notebook = idx;
+        self.set_selected_notebook(idx);
         self.notes_path = session.notes_path;
         self.reload_notes();
 
@@ -1665,6 +1670,29 @@ impl App {
 
     pub fn selected_notebook(&self) -> Option<&Notebook> {
         self.notebooks.get(self.selected_notebook)
+    }
+
+    /// Selects a notebook by index and, when the selection actually moves,
+    /// re-resolves the active theme for it — per-notebook theme overrides
+    /// (`config.theme.notebooks`) take effect the moment you switch
+    /// notebooks, no restart. Every notebook switch funnels through here so
+    /// no call site can forget the theme re-resolve.
+    pub fn set_selected_notebook(&mut self, idx: usize) {
+        let moved = self.selected_notebook != idx;
+        self.selected_notebook = idx;
+        if moved {
+            self.refresh_theme_for_selected_notebook();
+        }
+    }
+
+    fn refresh_theme_for_selected_notebook(&mut self) {
+        let notebook = self.selected_notebook().map(|nb| nb.name.clone());
+        self.theme = self.config.theme.resolve_for(notebook.as_deref());
+        self.theme_index = self
+            .available_themes
+            .iter()
+            .position(|t| t.name == self.theme.name)
+            .unwrap_or(0);
     }
 
     /// `None` both when nothing's selected and when the current selection is
@@ -1933,8 +1961,11 @@ impl App {
         match self.focus {
             Focus::Notebooks => {
                 if !self.notebooks.is_empty() {
-                    self.selected_notebook =
-                        shift(self.selected_notebook, delta, self.notebooks.len());
+                    self.set_selected_notebook(shift(
+                        self.selected_notebook,
+                        delta,
+                        self.notebooks.len(),
+                    ));
                     self.notes_path.clear();
                     self.reload_notes();
                 }
@@ -2111,7 +2142,8 @@ impl App {
     }
 
     pub(crate) fn apply_config(&mut self, new_config: Config) {
-        self.theme = new_config.theme.resolve();
+        let notebook = self.selected_notebook().map(|nb| nb.name.clone());
+        self.theme = new_config.theme.resolve_for(notebook.as_deref());
         self.theme_index = self
             .available_themes
             .iter()

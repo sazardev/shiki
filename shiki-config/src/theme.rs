@@ -9,6 +9,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Theme {
     pub name: String,
+    /// Which group the palette belongs to — used by the theme picker to
+    /// group rows under headers (LoL / Games / Hacker / Classic) and by
+    /// the picker's filter, so typing "hack"/"pok"/"lol" narrows by family
+    /// as well as by name. `"System"` for the terminal-inherit `default`.
+    #[serde(default = "family_default")]
+    pub family: &'static str,
     pub bg: String,
     pub fg: String,
     pub accent: String,
@@ -30,6 +36,10 @@ pub struct Theme {
     pub muted: String,
 }
 
+fn family_default() -> &'static str {
+    "Classic"
+}
+
 impl Theme {
     /// Fallback used if the configured theme isn't found, and the theme
     /// picker's "default" entry: rather than forcing a fixed palette, this
@@ -39,6 +49,7 @@ impl Theme {
     pub fn terminal_default() -> Self {
         Self {
             name: "default".into(),
+            family: "System",
             bg: "reset".into(),
             fg: "reset".into(),
             accent: "blue".into(),

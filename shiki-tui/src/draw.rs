@@ -378,6 +378,7 @@ fn render_theme_picker(frame: &mut Frame, frame_area: Rect, app: &App) {
     .areas(popup_area);
 
     let count = filtered.len();
+    let muted = hex_to_color(&app.theme.muted);
     app.theme_search.render(
         frame,
         input_area,
@@ -389,17 +390,33 @@ fn render_theme_picker(frame: &mut Frame, frame_area: Rect, app: &App) {
         hex_to_color(&app.theme.bg),
     );
 
-    let items: Vec<ListItem> = if filtered.is_empty() {
-        vec![ListItem::new(format!(
+    // The filtered list is family-sorted, so a muted `── family ──` header
+    // is emitted whenever the family changes — interspersed rows shift the
+    // highlight from the flat `theme_picker_index` to the actual rendered
+    // row, same trick `which.rs` uses for its scope headers.
+    let mut items: Vec<ListItem> = Vec::with_capacity(filtered.len() + 4);
+    let mut selected_row = 0usize;
+    if filtered.is_empty() {
+        items.push(ListItem::new(format!(
             "no theme matches \"{}\"",
             app.theme_search.value
-        ))]
+        )));
     } else {
-        filtered
-            .iter()
-            .map(|t| ListItem::new(t.name.clone()))
-            .collect()
-    };
+        let mut last_family: Option<&str> = None;
+        for (i, t) in filtered.iter().enumerate() {
+            if last_family != Some(t.family) {
+                items.push(ListItem::new(Line::from(Span::styled(
+                    format!("── {} ──", t.family),
+                    Style::default().fg(muted).add_modifier(Modifier::ITALIC),
+                ))));
+                last_family = Some(t.family);
+            }
+            if i == app.theme_picker_index {
+                selected_row = items.len();
+            }
+            items.push(ListItem::new(t.name.clone()));
+        }
+    }
     let highlight_symbol = format!("{}", icons::ARROW);
     let title = format!(
         " {} {count} of {} themes ",
@@ -418,7 +435,7 @@ fn render_theme_picker(frame: &mut Frame, frame_area: Rect, app: &App) {
 
     let mut state = ListState::default();
     if !filtered.is_empty() {
-        state.select(Some(app.theme_picker_index));
+        state.select(Some(selected_row));
     }
     frame.render_stateful_widget(list, list_area, &mut state);
 }

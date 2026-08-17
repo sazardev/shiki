@@ -929,6 +929,11 @@ metadata = "M"
 [theme]
 name = "gruvbox-dark"
 icons = true  # false falls back to plain text — no Nerd Font glyphs anywhere
+# Per-notebook theme overrides: a notebook name here wins over `name` while
+# that notebook is focused (the TUI re-resolves on notebook switch; the
+# theme picker writes here when a notebook is selected, and the CLI sets it
+# with `shiki theme set <theme> --notebook <name>`):
+# notebooks = { personal = "LoL (Jinx)", work = "Cyberpunk 2077" }
 # Every one of a theme's 19 color slots can be overridden individually —
 # accent, bg, fg, selection, border, statusbar, highlight, error, warning,
 # success, inactive, scrollbar, tab_active, tab_inactive, panel_title,
@@ -1007,6 +1012,9 @@ pdf_theme = "default"
 # data directory. Useful for linking Obsidian vault subfolders or other
 # existing markdown collections as notebooks without moving files.
 [notebooks.alcateia]
+path = "/Users/me/obsidian-vaults/alcateia"
+# Standard git overrides work alongside path:
+auto_sync = trubooks.alcateia]
 path = "/Users/me/obsidian-vaults/alcateia"
 # Standard git overrides work alongside path:
 auto_sync = true

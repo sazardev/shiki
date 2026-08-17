@@ -1708,6 +1708,13 @@ clean one.
 
 **`shiki capture --undo` tries the daemon first, for the same live-refresh reason `CAPTURE` does,
 but falls back to reversing it directly through the identical `LastCapture` file if nothing
+answers** (`shiki-cli/src/commands/capture.rs`) immediately after a successful undo, so a second `--undo` reports "nothing
+to undo" instead of either silently no-op'ing (`Note`, file already gone) or re-attempting a body
+suffix strip that would now legitimately fail (`DailyAppend`) with a confusing error instead of a
+clean one.
+
+**`shiki capture --undo` tries the daemon first, for the same live-refresh reason `CAPTURE` does,
+but falls back to reversing it directly through the identical `LastCapture` file if nothing
 answers** (`shiki-cli/src/commands/capture.rs::run_undo` → `run_undo_standalone`) — since the
 record is shared, the standalone path reports the exact same outcome a live daemon would have, just
 without refreshing a TUI that isn't running anyway. Only a `locked: ...` daemon response skips the

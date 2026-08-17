@@ -2,30 +2,63 @@ use anyhow::Result;
 use shiki_config::Config;
 
 pub fn list(config: &Config) -> Result<()> {
-    for theme in shiki_config::themes::all() {
-        let marker = if theme.name == config.theme.name {
-            "*"
-        } else {
-            " "
-        };
+    let mut themes: Vec<_> = shiki_config::themes::all()
+        .into_iter()
+        .map(|t| {
+            let marker = if t.name == config.theme.name {
+                "*"
+            } else {
+                " "
+            };
+            (marker, t)
+        })
+        .collect();
+    // Grouped by family, alphabetical within — same order the TUI picker
+    // shows. `default` (System) naturally lands last.
+    themes.sort_by(|(_, a), (_, b)| {
+        a.family
+            .to_lowercase()
+            .cmp(&b.family.to_lowercase())
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    let mut last_family: Option<&str> = None;
+    for (marker, theme) in themes {
+        if last_family != Some(theme.family) {
+            println!("  ── {} ──", theme.family);
+            last_family = Some(theme.family);
+        }
         println!("{marker} {}", theme.name);
     }
     Ok(())
 }
 
-pub fn set(config: &mut Config, name: &str) -> Result<()> {
+pub fn set(config: &mut Config, name: &str, notebook: Option<&str>) -> Result<()> {
     if shiki_config::themes::by_name(name).is_none() {
         anyhow::bail!("unknown theme '{name}' — run `shiki theme list` to see available themes");
     }
-    // Only reset overrides when actually switching to a different base
-    // theme — re-running `set` on the theme that's already active used to
-    // silently wipe any hand-written custom colors for no reason.
-    if config.theme.name != name {
+    // The "currently committed base" differs for per-notebook overrides, so
+    // only reset overrides when the *effective* base actually changes —
+    // re-running `set` on the theme that's already active used to silently
+    // wipe any hand-written custom colors for no reason.
+    let committed_base = config.theme.resolve_for(notebook).name;
+    if committed_base != name {
         config.theme.overrides = Default::default();
     }
-    config.theme.name = name.to_string();
-    config.save(&Config::default_path()?)?;
-    println!("theme set to '{name}'");
+    match notebook {
+        Some(nb) => {
+            config
+                .theme
+                .notebooks
+                .insert(nb.to_string(), name.to_string());
+            config.save(&Config::default_path()?)?;
+            println!("theme set to '{name}' for notebook '{nb}'");
+        }
+        None => {
+            config.theme.name = name.to_string();
+            config.save(&Config::default_path()?)?;
+            println!("theme set to '{name}'");
+        }
+    }
     Ok(())
 }
 

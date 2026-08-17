@@ -283,8 +283,14 @@ enum NotebookAction {
 enum ThemeAction {
     /// Lists all built-in themes, marking the active one
     List,
-    /// Sets the active theme by name (see `shiki theme list`)
-    Set { name: String },
+    /// Sets the active theme by name (see `shiki theme list`). With
+    /// `--notebook <name>`, sets that notebook's override instead of the
+    /// global theme.
+    Set {
+        name: String,
+        #[arg(long)]
+        notebook: Option<String>,
+    },
     /// Scaffolds every one of the 19 color slots as an explicit override in
     /// config.toml, copied from a real theme's values — a starting point to
     /// edit, not blank fields. Defaults to the currently active theme if
@@ -547,7 +553,9 @@ fn main() -> Result<()> {
         },
         Some(Commands::Theme { action }) => match action {
             ThemeAction::List => commands::theme::list(&ctx.config),
-            ThemeAction::Set { name } => commands::theme::set(&mut ctx.config, &name),
+            ThemeAction::Set { name, notebook } => {
+                commands::theme::set(&mut ctx.config, &name, notebook.as_deref())
+            }
             ThemeAction::Create { from } => {
                 commands::theme::create(&mut ctx.config, from.as_deref())
             }

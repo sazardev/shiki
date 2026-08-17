@@ -14,60 +14,73 @@
 // mockup instead of silently
 // showing another theme's image under the wrong name.
 const THEMES = [
-  { id: "Arasaka", label: "Arasaka", dot: "#ff003c", screenshot: true },
-  { id: "Blade Runner", label: "Blade Runner", dot: "#ff9e3d", screenshot: true },
-  { id: "catppuccin-mocha", label: "Catppuccin Mocha", dot: "#89b4fa", screenshot: true },
-  { id: "Cyberpunk 2077", label: "Cyberpunk 2077", dot: "#fcee0a", screenshot: true },
-  { id: "Doom", label: "Doom", dot: "#e62525", screenshot: true },
-  { id: "dracula", label: "Dracula", dot: "#bd93f9", screenshot: true },
-  { id: "Fallout Terminal", label: "Fallout Terminal", dot: "#00ff00", screenshot: true },
-  { id: "Ghost in the Shell", label: "Ghost in the Shell", dot: "#2dd4bf", screenshot: true },
-  { id: "gruvbox-dark", label: "Gruvbox Dark", dot: "#fabd2f", screenshot: true },
-  { id: "gruvbox-dark-hard", label: "Gruvbox Dark Hard", dot: "#fabd2f", screenshot: true },
-  { id: "gruvbox-dark-soft", label: "Gruvbox Dark Soft", dot: "#fabd2f", screenshot: true },
-  { id: "gruvbox-light", label: "Gruvbox Light", dot: "#b57614", screenshot: true },
-  { id: "gruvbox-light-hard", label: "Gruvbox Light Hard", dot: "#b57614", screenshot: true },
-  { id: "gruvbox-light-soft", label: "Gruvbox Light Soft", dot: "#b57614", screenshot: true },
-  { id: "Halo", label: "Halo", dot: "#6fa55c", screenshot: true },
-  { id: "LoL (Ahri)", label: "LoL (Ahri)", dot: "#e8448f", screenshot: true },
-  { id: "LoL (Jinx)", label: "LoL (Jinx)", dot: "#ff3da5", screenshot: true },
-  { id: "LoL (Teemo)", label: "LoL (Teemo)", dot: "#8bc34a", screenshot: true },
-  { id: "Matrix", label: "Matrix", dot: "#00ff41", screenshot: true },
-  { id: "monokai", label: "Monokai", dot: "#f92672", screenshot: true },
-  { id: "Mr. Robot", label: "Mr. Robot", dot: "#ff3b3b", screenshot: true },
-  { id: "nord", label: "Nord", dot: "#88c0d0", screenshot: true },
-  { id: "one-dark", label: "One Dark", dot: "#61afef", screenshot: true },
-  { id: "Overwatch", label: "Overwatch", dot: "#f99e1a", screenshot: true },
-  { id: "Pokémon (Charizard)", label: "Pokémon (Charizard)", dot: "#ff6b35", screenshot: true },
-  { id: "Pokémon (Gengar)", label: "Pokémon (Gengar)", dot: "#9d6bff", screenshot: true },
-  { id: "Pokémon (Pikachu)", label: "Pokémon (Pikachu)", dot: "#f6c344", screenshot: true },
-  { id: "Portal", label: "Portal", dot: "#ff8a3d", screenshot: true },
-  { id: "solarized-dark", label: "Solarized Dark", dot: "#268bd2", screenshot: true },
-  { id: "Stardew Valley", label: "Stardew Valley", dot: "#6aa84f", screenshot: true },
-  { id: "Super Mario", label: "Super Mario", dot: "#e52521", screenshot: true },
-  { id: "Super Mario (Luigi)", label: "Super Mario (Luigi)", dot: "#4a9e5c", screenshot: true },
-  { id: "Synthwave", label: "Synthwave", dot: "#ff2ec4", screenshot: true },
-  { id: "tokyo-night", label: "Tokyo Night", dot: "#7aa2f7", screenshot: true },
-  { id: "Tron", label: "Tron", dot: "#00f6ff", screenshot: true },
-  { id: "Zelda", label: "Zelda", dot: "#c6a45c", screenshot: true },
-  { id: "default", label: "Default", dot: "#8b949e", screenshot: false },
+  { id: "Arasaka", label: "Arasaka", family: "Hacker", dot: "#ff003c", screenshot: true },
+  { id: "Blade Runner", label: "Blade Runner", family: "Hacker", dot: "#ff9e3d", screenshot: true },
+  { id: "catppuccin-mocha", label: "Catppuccin Mocha", family: "Classic", dot: "#89b4fa", screenshot: true },
+  { id: "Cyberpunk 2077", label: "Cyberpunk 2077", family: "Hacker", dot: "#fcee0a", screenshot: true },
+  { id: "Doom", label: "Doom", family: "Hacker", dot: "#e62525", screenshot: true },
+  { id: "dracula", label: "Dracula", family: "Classic", dot: "#bd93f9", screenshot: true },
+  { id: "Fallout Terminal", label: "Fallout Terminal", family: "Hacker", dot: "#00ff00", screenshot: true },
+  { id: "Ghost in the Shell", label: "Ghost in the Shell", family: "Hacker", dot: "#2dd4bf", screenshot: true },
+  { id: "gruvbox-dark", label: "Gruvbox Dark", family: "Classic", dot: "#fabd2f", screenshot: true },
+  { id: "gruvbox-dark-hard", label: "Gruvbox Dark Hard", family: "Classic", dot: "#fabd2f", screenshot: true },
+  { id: "gruvbox-dark-soft", label: "Gruvbox Dark Soft", family: "Classic", dot: "#fabd2f", screenshot: true },
+  { id: "gruvbox-light", label: "Gruvbox Light", family: "Classic", dot: "#b57614", screenshot: true },
+  { id: "gruvbox-light-hard", label: "Gruvbox Light Hard", family: "Classic", dot: "#b57614", screenshot: true },
+  { id: "gruvbox-light-soft", label: "Gruvbox Light Soft", family: "Classic", dot: "#b57614", screenshot: true },
+  { id: "Halo", label: "Halo", family: "Games", dot: "#6fa55c", screenshot: true },
+  { id: "LoL (Ahri)", label: "LoL (Ahri)", family: "LoL", dot: "#e8448f", screenshot: true },
+  { id: "LoL (Jinx)", label: "LoL (Jinx)", family: "LoL", dot: "#ff3da5", screenshot: true },
+  { id: "LoL (Teemo)", label: "LoL (Teemo)", family: "LoL", dot: "#8bc34a", screenshot: true },
+  { id: "Matrix", label: "Matrix", family: "Hacker", dot: "#00ff41", screenshot: true },
+  { id: "monokai", label: "Monokai", family: "Classic", dot: "#f92672", screenshot: true },
+  { id: "Mr. Robot", label: "Mr. Robot", family: "Hacker", dot: "#ff3b3b", screenshot: true },
+  { id: "nord", label: "Nord", family: "Classic", dot: "#88c0d0", screenshot: true },
+  { id: "one-dark", label: "One Dark", family: "Classic", dot: "#61afef", screenshot: true },
+  { id: "Overwatch", label: "Overwatch", family: "Games", dot: "#f99e1a", screenshot: true },
+  { id: "Pokémon (Charizard)", label: "Pokémon (Charizard)", family: "Games", dot: "#ff6b35", screenshot: true },
+  { id: "Pokémon (Gengar)", label: "Pokémon (Gengar)", family: "Games", dot: "#9d6bff", screenshot: true },
+  { id: "Pokémon (Pikachu)", label: "Pokémon (Pikachu)", family: "Games", dot: "#f6c344", screenshot: true },
+  { id: "Portal", label: "Portal", family: "Games", dot: "#ff8a3d", screenshot: true },
+  { id: "solarized-dark", label: "Solarized Dark", family: "Classic", dot: "#268bd2", screenshot: true },
+  { id: "Stardew Valley", label: "Stardew Valley", family: "Games", dot: "#6aa84f", screenshot: true },
+  { id: "Super Mario", label: "Super Mario", family: "Games", dot: "#e52521", screenshot: true },
+  { id: "Super Mario (Luigi)", label: "Super Mario (Luigi)", family: "Games", dot: "#4a9e5c", screenshot: true },
+  { id: "Synthwave", label: "Synthwave", family: "Hacker", dot: "#ff2ec4", screenshot: true },
+  { id: "tokyo-night", label: "Tokyo Night", family: "Classic", dot: "#7aa2f7", screenshot: true },
+  { id: "Tron", label: "Tron", family: "Hacker", dot: "#00f6ff", screenshot: true },
+  { id: "Zelda", label: "Zelda", family: "Games", dot: "#c6a45c", screenshot: true },
+  { id: "default", label: "Default", family: "System", dot: "#8b949e", screenshot: false },
 ];
 
 const STORAGE_KEY = "shiki-site-theme";
 const DEFAULT_THEME = "gruvbox-dark"; // matches ThemeConfig::default() as of shiki 0.8.1+
 
-// Themes with their own hero demo video (`assets/demo/{id}.mp4`, recorded
-// with that theme active — see scripts/demo-gif.sh's `THEME` env var). Any
-// other theme falls back to the default gruvbox-dark recording. Kept as an
-// explicit list rather than probed per-switch so the site never shows a
-// stale 404'd video; add a theme here when a recording for it is committed.
-const HERO_DEMO_THEMES = [
-  "catppuccin-mocha",
-  "tokyo-night",
-  "Cyberpunk 2077",
-  "LoL (Jinx)",
-  "Matrix",
-];
+// Per-theme hero demo recordings (`assets/demo/{id}.mp4`, shot with that
+// theme active via scripts/demo-gif.sh's `THEME` env var) are probed once
+// per id (HEAD, then cached) rather than hardcoded, so a theme committed
+// with a recording shows up automatically and a missing one falls back to
+// the default gruvbox-dark recording without ever 404ing.
+const demoVideoCache = new Map();
+function demoVideoFor(id) {
+  return id === DEFAULT_THEME ? "assets/demo.mp4" : `assets/demo/${id}.mp4`;
+}
+function ensureDemoVideo(id, onReady) {
+  if (demoVideoCache.has(id)) {
+    onReady(demoVideoCache.get(id));
+    return;
+  }
+  const url = demoVideoFor(id);
+  fetch(url, { method: "HEAD", cache: "force-cache" })
+    .then((r) => {
+      demoVideoCache.set(id, r.ok ? url : demoVideoFor(DEFAULT_THEME));
+      onReady(demoVideoCache.get(id));
+    })
+    .catch(() => {
+      demoVideoCache.set(id, demoVideoFor(DEFAULT_THEME));
+      onReady(demoVideoCache.get(id));
+    });
+}
 
 function applyTheme(themeId) {
   const theme = THEMES.find((t) => t.id === themeId) || THEMES.find((t) => t.id === DEFAULT_THEME);
@@ -83,14 +96,13 @@ function applyTheme(themeId) {
   // home page; `.hero-demo` is gone on every other page, so guard on it.
   const heroVideo = document.getElementById("hero-screenshot");
   if (heroVideo) {
-    const themedDemo = HERO_DEMO_THEMES.includes(theme.id)
-      ? `assets/demo/${theme.id}.mp4`
-      : "assets/demo.mp4";
-    if (heroVideo.getAttribute("src") !== themedDemo) {
-      heroVideo.setAttribute("src", themedDemo);
-      heroVideo.load();
-      heroVideo.play().catch(() => {});
-    }
+    ensureDemoVideo(theme.id, (url) => {
+      if (heroVideo.getAttribute("src") !== url) {
+        heroVideo.setAttribute("src", url);
+        heroVideo.load();
+        heroVideo.play().catch(() => {});
+      }
+    });
   }
 
   // Only present on the home page's Themes section — pages like
@@ -154,11 +166,35 @@ function applyTheme(themeId) {
 function buildSwatches() {
   const container = document.getElementById("theme-swatches");
   if (!container) return; // this script is shared across pages — not every page has a switcher
+
+  // Family filter tabs (All / LoL / Games / Hacker / Classic / System) —
+  // same families the TUI picker groups by. Built here rather than in the
+  // HTML so the tab list can't drift from the THEMES array.
+  const families = ["All", ...new Set(THEMES.map((t) => t.family))];
+  const filterBar = document.getElementById("theme-family-filter");
+  if (filterBar) {
+    families.forEach((family) => {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "family-tab" + (family === "All" ? " active" : "");
+      tab.dataset.family = family;
+      tab.textContent = family;
+      tab.addEventListener("click", () => {
+        filterBar.querySelectorAll(".family-tab").forEach((t) => t.classList.toggle("active", t === tab));
+        document.querySelectorAll(".swatch").forEach((btn) => {
+          btn.hidden = family === "All" || btn.dataset.family === family;
+        });
+      });
+      filterBar.appendChild(tab);
+    });
+  }
+
   THEMES.forEach((theme) => {
     const btn = document.createElement("button");
     btn.className = "swatch";
     btn.type = "button";
     btn.dataset.themeId = theme.id;
+    btn.dataset.family = theme.family;
     btn.innerHTML = `<span class="dot" style="background:${theme.dot}"></span>${theme.label}`;
     btn.addEventListener("click", () => applyTheme(theme.id));
     container.appendChild(btn);

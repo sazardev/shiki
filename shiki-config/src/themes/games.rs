@@ -10,251 +10,131 @@ use crate::theme::Theme;
 /// with harvest amber. Every secondary slot reuses those same franchise colors
 /// the way the rest of the themes in this file do — nothing invented.
 pub fn pokemon_pikachu() -> Theme {
-    Theme {
-        name: "Pokémon (Pikachu)".into(),
-        bg: "#1a1c2e".into(),
-        fg: "#fff5d6".into(),
-        accent: "#f6c344".into(),
-        selection: "#2a2d45".into(),
-        border: "#383c5e".into(),
-        statusbar: "#13141f".into(),
-        highlight: "#ffe066".into(),
-        error: "#ff5252".into(),
-        warning: "#ff9f43".into(),
-        success: "#7bed9f".into(),
-        inactive: "#55597a".into(),
-        scrollbar: "#2a2d45".into(),
-        tab_active: "#ff3b3b".into(),
-        tab_inactive: "#55597a".into(),
-        panel_title: "#f6c344".into(),
-        cursor: "#ff3b3b".into(),
-        link: "#f6c344".into(),
-        tag: "#ff3b3b".into(),
-        muted: "#858aa8".into(),
+    theme! {
+        "Pokémon (Pikachu)", "Games",
+        bg: "#1a1c2e", fg: "#fff5d6", accent: "#f6c344",
+        selection: "#2a2d45", border: "#383c5e", statusbar: "#13141f",
+        highlight: "#ffe066", error: "#ff5252", warning: "#ff9f43",
+        success: "#7bed9f", inactive: "#55597a", scrollbar: "#2a2d45",
+        tab_active: "#ff3b3b", tab_inactive: "#55597a",
+        panel_title: "#f6c344", cursor: "#ff3b3b", link: "#f6c344",
+        tag: "#ff3b3b", muted: "#858aa8"
     }
 }
 
 pub fn pokemon_charizard() -> Theme {
-    Theme {
-        name: "Pokémon (Charizard)".into(),
-        bg: "#1a0f0d".into(),
-        fg: "#ffe9d6".into(),
-        accent: "#ff6b35".into(),
-        selection: "#2d1913".into(),
-        border: "#40241a".into(),
-        statusbar: "#120a09".into(),
-        highlight: "#ffd93d".into(),
-        error: "#ff4444".into(),
-        warning: "#ffa502".into(),
-        success: "#ff8c42".into(),
-        inactive: "#6e4a38".into(),
-        scrollbar: "#2d1913".into(),
-        tab_active: "#ff3b3b".into(),
-        tab_inactive: "#6e4a38".into(),
-        panel_title: "#ff6b35".into(),
-        cursor: "#ffd93d".into(),
-        link: "#ff8c42".into(),
-        tag: "#ff6b35".into(),
-        muted: "#9a7563".into(),
+    theme! {
+        "Pokémon (Charizard)", "Games",
+        bg: "#1a0f0d", fg: "#ffe9d6", accent: "#ff6b35",
+        selection: "#2d1913", border: "#40241a", statusbar: "#120a09",
+        highlight: "#ffd93d", error: "#ff4444", warning: "#ffa502",
+        success: "#ff8c42", inactive: "#6e4a38", scrollbar: "#2d1913",
+        tab_active: "#ff3b3b", tab_inactive: "#6e4a38",
+        panel_title: "#ff6b35", cursor: "#ffd93d", link: "#ff8c42",
+        tag: "#ff6b35", muted: "#9a7563"
     }
 }
 
 pub fn pokemon_gengar() -> Theme {
-    Theme {
-        name: "Pokémon (Gengar)".into(),
-        bg: "#12101f".into(),
-        fg: "#e8d9ff".into(),
-        accent: "#9d6bff".into(),
-        selection: "#1f1b33".into(),
-        border: "#2d2747".into(),
-        statusbar: "#0d0b17".into(),
-        highlight: "#ff6bd6".into(),
-        error: "#c76bff".into(),
-        warning: "#b08cff".into(),
-        success: "#6bffd0".into(),
-        inactive: "#4a4266".into(),
-        scrollbar: "#1f1b33".into(),
-        tab_active: "#c76bff".into(),
-        tab_inactive: "#4a4266".into(),
-        panel_title: "#9d6bff".into(),
-        cursor: "#ff6bd6".into(),
-        link: "#9d6bff".into(),
-        tag: "#c76bff".into(),
-        muted: "#6e6490".into(),
+    theme! {
+        "Pokémon (Gengar)", "Games",
+        bg: "#12101f", fg: "#e8d9ff", accent: "#9d6bff",
+        selection: "#1f1b33", border: "#2d2747", statusbar: "#0d0b17",
+        highlight: "#ff6bd6", error: "#c76bff", warning: "#b08cff",
+        success: "#6bffd0", inactive: "#4a4266", scrollbar: "#1f1b33",
+        tab_active: "#c76bff", tab_inactive: "#4a4266",
+        panel_title: "#9d6bff", cursor: "#ff6bd6", link: "#9d6bff",
+        tag: "#c76bff", muted: "#6e6490"
     }
 }
 
 pub fn zelda() -> Theme {
-    Theme {
-        name: "Zelda".into(),
-        bg: "#0c1710".into(),
-        fg: "#e8f0dc".into(),
-        accent: "#c6a45c".into(),
-        selection: "#15261a".into(),
-        border: "#1e3526".into(),
-        statusbar: "#080f0a".into(),
-        highlight: "#ffd700".into(),
-        error: "#e5533d".into(),
-        warning: "#ffa63d".into(),
-        success: "#6bbf59".into(),
-        inactive: "#3f5344".into(),
-        scrollbar: "#15261a".into(),
-        tab_active: "#0b6e2e".into(),
-        tab_inactive: "#3f5344".into(),
-        panel_title: "#c6a45c".into(),
-        cursor: "#ffd700".into(),
-        link: "#3aa3ff".into(),
-        tag: "#0b6e2e".into(),
-        muted: "#7a8d7e".into(),
+    theme! {
+        "Zelda", "Games",
+        bg: "#0c1710", fg: "#e8f0dc", accent: "#c6a45c",
+        selection: "#15261a", border: "#1e3526", statusbar: "#080f0a",
+        highlight: "#ffd700", error: "#e5533d", warning: "#ffa63d",
+        success: "#6bbf59", inactive: "#3f5344", scrollbar: "#15261a",
+        tab_active: "#0b6e2e", tab_inactive: "#3f5344",
+        panel_title: "#c6a45c", cursor: "#ffd700", link: "#3aa3ff",
+        tag: "#0b6e2e", muted: "#7a8d7e"
     }
 }
 
 pub fn portal() -> Theme {
-    Theme {
-        name: "Portal".into(),
-        bg: "#e8e8e0".into(),
-        fg: "#2b2b2b".into(),
-        accent: "#ff8a3d".into(),
-        selection: "#d0d0c8".into(),
-        border: "#b8b8b0".into(),
-        statusbar: "#dcdcd4".into(),
-        highlight: "#ffb36b".into(),
-        error: "#e0362c".into(),
-        warning: "#ff8a3d".into(),
-        success: "#2f9de0".into(),
-        inactive: "#8a8a85".into(),
-        scrollbar: "#d0d0c8".into(),
-        tab_active: "#2f9de0".into(),
-        tab_inactive: "#8a8a85".into(),
-        panel_title: "#ff8a3d".into(),
-        cursor: "#2f9de0".into(),
-        link: "#2f9de0".into(),
-        tag: "#ff8a3d".into(),
-        muted: "#8a8a85".into(),
+    theme! {
+        "Portal", "Games",
+        bg: "#e8e8e0", fg: "#2b2b2b", accent: "#ff8a3d",
+        selection: "#d0d0c8", border: "#b8b8b0", statusbar: "#dcdcd4",
+        highlight: "#ffb36b", error: "#e0362c", warning: "#ff8a3d",
+        success: "#2f9de0", inactive: "#8a8a85", scrollbar: "#d0d0c8",
+        tab_active: "#2f9de0", tab_inactive: "#8a8a85",
+        panel_title: "#ff8a3d", cursor: "#2f9de0", link: "#2f9de0",
+        tag: "#ff8a3d", muted: "#8a8a85"
     }
 }
 
 pub fn super_mario() -> Theme {
-    Theme {
-        name: "Super Mario".into(),
-        bg: "#16121a".into(),
-        fg: "#f5eee2".into(),
-        accent: "#e52521".into(),
-        selection: "#261f28".into(),
-        border: "#352c38".into(),
-        statusbar: "#0f0c13".into(),
-        highlight: "#ffd75e".into(),
-        error: "#ff3b30".into(),
-        warning: "#ff9f43".into(),
-        success: "#5dbb63".into(),
-        inactive: "#5d5464".into(),
-        scrollbar: "#261f28".into(),
-        tab_active: "#2456a5".into(),
-        tab_inactive: "#5d5464".into(),
-        panel_title: "#e52521".into(),
-        cursor: "#ffd75e".into(),
-        link: "#2456a5".into(),
-        tag: "#ff9f43".into(),
-        muted: "#8a8194".into(),
+    theme! {
+        "Super Mario", "Games",
+        bg: "#16121a", fg: "#f5eee2", accent: "#e52521",
+        selection: "#261f28", border: "#352c38", statusbar: "#0f0c13",
+        highlight: "#ffd75e", error: "#ff3b30", warning: "#ff9f43",
+        success: "#5dbb63", inactive: "#5d5464", scrollbar: "#261f28",
+        tab_active: "#2456a5", tab_inactive: "#5d5464",
+        panel_title: "#e52521", cursor: "#ffd75e", link: "#2456a5",
+        tag: "#ff9f43", muted: "#8a8194"
     }
 }
 
 pub fn super_mario_luigi() -> Theme {
-    Theme {
-        name: "Super Mario (Luigi)".into(),
-        bg: "#0e1a12".into(),
-        fg: "#e4f2e6".into(),
-        accent: "#4a9e5c".into(),
-        selection: "#1a2b1f".into(),
-        border: "#243a2c".into(),
-        statusbar: "#0a130d".into(),
-        highlight: "#ffd75e".into(),
-        error: "#e5533d".into(),
-        warning: "#ff9f43".into(),
-        success: "#6fcf78".into(),
-        inactive: "#4a5d50".into(),
-        scrollbar: "#1a2b1f".into(),
-        tab_active: "#2456a5".into(),
-        tab_inactive: "#4a5d50".into(),
-        panel_title: "#4a9e5c".into(),
-        cursor: "#ffd75e".into(),
-        link: "#2456a5".into(),
-        tag: "#e52521".into(),
-        muted: "#758a7e".into(),
+    theme! {
+        "Super Mario (Luigi)", "Games",
+        bg: "#0e1a12", fg: "#e4f2e6", accent: "#4a9e5c",
+        selection: "#1a2b1f", border: "#243a2c", statusbar: "#0a130d",
+        highlight: "#ffd75e", error: "#e5533d", warning: "#ff9f43",
+        success: "#6fcf78", inactive: "#4a5d50", scrollbar: "#1a2b1f",
+        tab_active: "#2456a5", tab_inactive: "#4a5d50",
+        panel_title: "#4a9e5c", cursor: "#ffd75e", link: "#2456a5",
+        tag: "#e52521", muted: "#758a7e"
     }
 }
 
 pub fn overwatch() -> Theme {
-    Theme {
-        name: "Overwatch".into(),
-        bg: "#14161c".into(),
-        fg: "#e8eaf0".into(),
-        accent: "#f99e1a".into(),
-        selection: "#23262f".into(),
-        border: "#30343f".into(),
-        statusbar: "#0e0f14".into(),
-        highlight: "#ffd75e".into(),
-        error: "#ff5a5a".into(),
-        warning: "#ff9f43".into(),
-        success: "#218ffe".into(),
-        inactive: "#565b66".into(),
-        scrollbar: "#23262f".into(),
-        tab_active: "#218ffe".into(),
-        tab_inactive: "#565b66".into(),
-        panel_title: "#f99e1a".into(),
-        cursor: "#218ffe".into(),
-        link: "#218ffe".into(),
-        tag: "#f99e1a".into(),
-        muted: "#7d828c".into(),
+    theme! {
+        "Overwatch", "Games",
+        bg: "#14161c", fg: "#e8eaf0", accent: "#f99e1a",
+        selection: "#23262f", border: "#30343f", statusbar: "#0e0f14",
+        highlight: "#ffd75e", error: "#ff5a5a", warning: "#ff9f43",
+        success: "#218ffe", inactive: "#565b66", scrollbar: "#23262f",
+        tab_active: "#218ffe", tab_inactive: "#565b66",
+        panel_title: "#f99e1a", cursor: "#218ffe", link: "#218ffe",
+        tag: "#f99e1a", muted: "#7d828c"
     }
 }
 
 pub fn halo() -> Theme {
-    Theme {
-        name: "Halo".into(),
-        bg: "#0d1420".into(),
-        fg: "#dbe6f2".into(),
-        accent: "#6fa55c".into(),
-        selection: "#18233a".into(),
-        border: "#212f4d".into(),
-        statusbar: "#090d16".into(),
-        highlight: "#ffd75e".into(),
-        error: "#ff5a5a".into(),
-        warning: "#ff9f43".into(),
-        success: "#7bbfe0".into(),
-        inactive: "#3f4a63".into(),
-        scrollbar: "#18233a".into(),
-        tab_active: "#3b6ea5".into(),
-        tab_inactive: "#3f4a63".into(),
-        panel_title: "#6fa55c".into(),
-        cursor: "#7bbfe0".into(),
-        link: "#3b6ea5".into(),
-        tag: "#6fa55c".into(),
-        muted: "#64708c".into(),
+    theme! {
+        "Halo", "Games",
+        bg: "#0d1420", fg: "#dbe6f2", accent: "#6fa55c",
+        selection: "#18233a", border: "#212f4d", statusbar: "#090d16",
+        highlight: "#ffd75e", error: "#ff5a5a", warning: "#ff9f43",
+        success: "#7bbfe0", inactive: "#3f4a63", scrollbar: "#18233a",
+        tab_active: "#3b6ea5", tab_inactive: "#3f4a63",
+        panel_title: "#6fa55c", cursor: "#7bbfe0", link: "#3b6ea5",
+        tag: "#6fa55c", muted: "#64708c"
     }
 }
 
 pub fn stardew() -> Theme {
-    Theme {
-        name: "Stardew Valley".into(),
-        bg: "#1a1812".into(),
-        fg: "#f0e8d8".into(),
-        accent: "#6aa84f".into(),
-        selection: "#2a251a".into(),
-        border: "#3a3426".into(),
-        statusbar: "#12100c".into(),
-        highlight: "#e0a020".into(),
-        error: "#c23b22".into(),
-        warning: "#d4881f".into(),
-        success: "#8bc34a".into(),
-        inactive: "#5d5748".into(),
-        scrollbar: "#2a251a".into(),
-        tab_active: "#e0a020".into(),
-        tab_inactive: "#5d5748".into(),
-        panel_title: "#e0a020".into(),
-        cursor: "#f0e8d8".into(),
-        link: "#6aa84f".into(),
-        tag: "#c23b22".into(),
-        muted: "#8a8270".into(),
+    theme! {
+        "Stardew Valley", "Games",
+        bg: "#1a1812", fg: "#f0e8d8", accent: "#6aa84f",
+        selection: "#2a251a", border: "#3a3426", statusbar: "#12100c",
+        highlight: "#e0a020", error: "#c23b22", warning: "#d4881f",
+        success: "#8bc34a", inactive: "#5d5748", scrollbar: "#2a251a",
+        tab_active: "#e0a020", tab_inactive: "#5d5748",
+        panel_title: "#e0a020", cursor: "#f0e8d8", link: "#6aa84f",
+        tag: "#c23b22", muted: "#8a8270"
     }
 }

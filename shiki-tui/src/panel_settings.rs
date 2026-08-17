@@ -461,8 +461,22 @@ fn general_rows(app: &App) -> Vec<Line<'static>> {
 fn theme_rows(app: &App) -> Vec<Line<'static>> {
     let cfg = &app.config;
     let set = cfg.theme.overrides.set_count();
+    // Show the theme actually active for the focused notebook — a
+    // per-notebook override wins over the global `name` there.
+    let effective = cfg
+        .theme
+        .resolve_for(app.selected_notebook().map(|nb| nb.name.as_str()));
+    let label = if app
+        .selected_notebook()
+        .map(|nb| cfg.theme.notebooks.contains_key(&nb.name))
+        .unwrap_or(false)
+    {
+        format!("{} (this notebook)", effective.name)
+    } else {
+        effective.name
+    };
     vec![
-        row_line(app, "name", cfg.theme.name.clone()),
+        row_line(app, "name", label),
         row_line(app, "icons", cfg.theme.icons.to_string()),
         row_line(
             app,

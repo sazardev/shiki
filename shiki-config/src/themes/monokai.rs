@@ -7,26 +7,14 @@ use crate::theme::Theme;
 /// product with a different, cooler-toned palette) — this is the
 /// original, still the far more widely recognized of the two.
 pub fn monokai() -> Theme {
-    Theme {
-        name: "monokai".into(),
-        bg: "#272822".into(),
-        fg: "#f8f8f2".into(),
-        accent: "#f92672".into(),
-        selection: "#49483e".into(),
-        border: "#3e3d32".into(),
-        statusbar: "#1e1f1c".into(),
-        highlight: "#e6db74".into(),
-        error: "#f92672".into(),
-        warning: "#fd971f".into(),
-        success: "#a6e22e".into(),
-        inactive: "#75715e".into(),
-        scrollbar: "#49483e".into(),
-        tab_active: "#f92672".into(),
-        tab_inactive: "#75715e".into(),
-        panel_title: "#66d9ef".into(),
-        cursor: "#f8f8f2".into(),
-        link: "#66d9ef".into(),
-        tag: "#ae81ff".into(),
-        muted: "#75715e".into(),
+    theme! {
+        "monokai", "Classic",
+        bg: "#272822", fg: "#f8f8f2", accent: "#f92672",
+        selection: "#49483e", border: "#3e3d32", statusbar: "#1e1f1c",
+        highlight: "#e6db74", error: "#f92672", warning: "#fd971f",
+        success: "#a6e22e", inactive: "#75715e", scrollbar: "#49483e",
+        tab_active: "#f92672", tab_inactive: "#75715e",
+        panel_title: "#66d9ef", cursor: "#f8f8f2", link: "#66d9ef",
+        tag: "#ae81ff", muted: "#75715e"
     }
 }
