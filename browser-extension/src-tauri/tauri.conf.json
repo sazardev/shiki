@@ -1,0 +1,31 @@
+{
+  "build": {
+    "beforeDevCommand": "",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "",
+    "frontendDist": "../src"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Shiki Capture (Tauri preview)",
+        "width": 400,
+        "height": 640,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon128.png"
+    ]
+  },
+  "productName": "shiki-capture-tauri",
+  "version": "0.1.0",
+  "identifier": "com.shiki.capture.tauri"
+}
