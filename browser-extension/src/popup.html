@@ -14,61 +14,105 @@
         <span class="brand-name">Shiki</span>
         <span class="brand-kanji">私記</span>
       </div>
-      <div id="daemon-status" class="status" title="Capture daemon status">checking…</div>
+      <div class="header-actions">
+        <button id="undo-btn" class="icon-btn" title="Undo last capture">↩</button>
+        <div id="daemon-status" class="status" title="Capture daemon status">checking…</div>
+      </div>
     </header>
 
-    <div class="quick-row">
-      <button id="quick-selection" class="ghost" title="Capture current selection instantly">✦ Capture selection</button>
-      <button id="quick-page" class="ghost" title="Capture current page title + URL">⎙ Capture page</button>
-    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="capture" role="tab" aria-selected="true">Capture</button>
+      <button class="tab" data-tab="search" role="tab">Search</button>
+      <button class="tab" data-tab="recent" role="tab">Recent</button>
+    </nav>
 
-    <div class="field">
-      <label for="notebook">Notebook</label>
-      <div class="row">
-        <select id="notebook"></select>
-        <button id="refresh" title="Refresh notebooks" aria-label="Refresh">↻</button>
+    <!-- Capture tab -->
+    <section id="tab-capture" class="tab-pane active" role="tabpanel">
+      <div class="quick-row">
+        <button id="quick-selection" class="ghost" title="Fill with current selection">✦ Selection</button>
+        <button id="quick-page" class="ghost" title="Fill with page title+URL">⎙ Page</button>
       </div>
-    </div>
 
-    <div class="field">
-      <label for="folder">Folder <span class="muted">— optional</span></label>
-      <div class="row">
-        <select id="folder"></select>
-        <input id="folder-custom" placeholder="custom: work/meetings" />
+      <div class="field">
+        <label for="notebook">Notebook</label>
+        <div class="row">
+          <select id="notebook"></select>
+          <button id="refresh" title="Refresh" aria-label="Refresh">↻</button>
+        </div>
+        <div id="encrypt-warn" class="warn hidden">🔒 Encrypted — unlock in TUI first</div>
       </div>
-    </div>
 
-    <div class="field">
-      <label for="tags">Tags <span class="muted">— comma separated</span></label>
-      <input id="tags" placeholder="work, idea" />
-    </div>
+      <div class="field">
+        <label for="folder">Folder <span class="muted">— optional</span></label>
+        <div class="row">
+          <select id="folder"></select>
+          <input id="folder-custom" placeholder="custom: work/meetings" list="folder-suggestions" />
+          <datalist id="folder-suggestions"></datalist>
+          <button id="create-folder" class="icon-btn" title="Create folder">＋</button>
+        </div>
+      </div>
 
-    <label class="checkbox">
-      <input type="checkbox" id="daily" />
-      <span>Append to today's daily note</span>
-    </label>
+      <div class="field row-2">
+        <div class="field half">
+          <label for="template">Template</label>
+          <select id="template"><option value="">(default)</option></select>
+        </div>
+        <div class="field half">
+          <label for="tags">Tags</label>
+          <input id="tags" placeholder="work, idea" list="tags-suggestions" />
+          <datalist id="tags-suggestions"></datalist>
+        </div>
+      </div>
 
-    <div class="field">
-      <label for="text">Note <span class="muted">— Tip: “work: call Ana” routes automatically</span></label>
-      <textarea id="text" placeholder="Quick idea…"></textarea>
-      <div id="selection-hint" class="hint hidden">↳ Selection from page prefilled</div>
-    </div>
+      <label class="checkbox">
+        <input type="checkbox" id="daily" />
+        <span>Append to today's daily note</span>
+      </label>
 
-    <div class="actions">
-      <button id="capture" class="primary">Capture <span class="kbd">↵</span></button>
-      <button id="copy-capture" title="Copy to clipboard + Capture (copy y mandar)">⎘ Copy + Send</button>
-      <button id="copy-only" title="Copy note to clipboard">Copy</button>
-    </div>
-    <div class="actions" style="margin-top: -4px;">
-      <button id="save-defaults" title="Save as defaults for next time" style="flex:1">Remember defaults</button>
-    </div>
+      <div class="field">
+        <label for="text">Note <span class="muted">— “work: call Ana” routes automatically</span></label>
+        <textarea id="text" placeholder="Quick idea…"></textarea>
+        <div id="selection-hint" class="hint hidden">↳ Selection prefilled</div>
+      </div>
+
+      <div class="actions">
+        <button id="capture" class="primary">Capture <span class="kbd">↵</span></button>
+        <button id="copy-capture" title="Copy + Capture">⎘ Copy+Send</button>
+        <button id="copy-only" title="Copy to clipboard">Copy</button>
+      </div>
+      <div class="actions" style="margin-top:-4px">
+        <button id="save-defaults" style="flex:1">Remember defaults</button>
+      </div>
+    </section>
+
+    <!-- Search tab -->
+    <section id="tab-search" class="tab-pane" role="tabpanel">
+      <div class="field">
+        <label for="search-input">Search notes (title + body)</label>
+        <input id="search-input" placeholder="fuzzy search titles…" autocomplete="off" />
+      </div>
+      <div id="search-results" class="list empty">
+        <div class="empty-state">Type to search across all notebooks</div>
+      </div>
+    </section>
+
+    <!-- Recent tab -->
+    <section id="tab-recent" class="tab-pane" role="tabpanel">
+      <div class="row" style="justify-content: space-between; align-items:center">
+        <label style="margin:0">Recent notes</label>
+        <button id="recent-refresh" class="ghost small">↻ Refresh</button>
+      </div>
+      <div id="recent-list" class="list"><div class="empty-state">Loading…</div></div>
+    </section>
 
     <div id="result" class="result hidden" role="status"></div>
 
     <footer>
       <span id="config-path" class="muted mono" title="Config path"></span>
       <span class="spacer"></span>
-      <a href="#" id="open-help" title="Open Shiki docs">Docs</a>
+      <a href="#" id="open-options">Options</a>
+      <span class="muted">·</span>
+      <a href="#" id="open-help">Docs</a>
     </footer>
   </div>
   <script src="popup.js"></script>

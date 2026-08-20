@@ -69,6 +69,12 @@ async function rebuildContextMenus() {
     contexts: ["link"]
   });
   chrome.contextMenus.create({
+    id: "shiki-capture-image",
+    parentId: "shiki-parent",
+    title: "Save image",
+    contexts: ["image"]
+  });
+  chrome.contextMenus.create({
     id: "shiki-copy-send",
     parentId: "shiki-parent",
     title: "Copy + Send to Shiki",
@@ -122,9 +128,11 @@ async function rebuildContextMenus() {
 
 chrome.runtime.onInstalled.addListener(() => {
   rebuildContextMenus();
+  flushOffline().catch(()=>{});
 });
 chrome.runtime.onStartup.addListener(() => {
   rebuildContextMenus();
+  flushOffline().catch(()=>{});
 });
 
 // Rebuild after a successful capture (notebook may have been created) and periodically
@@ -132,8 +140,8 @@ chrome.storage.onChanged.addListener(() => {
   // Debounce — user changed defaults, not notebooks, but cheap to rebuild
 });
 
-async function doCapture({ text, url, title, notebook, daily }) {
-  const stored = await chrome.storage.sync.get(["defaultNotebook", "defaultFolder", "defaultTags", "appendDaily"]);
+async function doCapture({ text, url, title, notebook, daily, template }) {
+  const stored = await chrome.storage.sync.get(["defaultNotebook", "defaultFolder", "defaultTags", "appendDaily", "defaultTemplate"]);
   const res = await sendToHost({
     action: "capture",
     text,
@@ -142,22 +150,91 @@ async function doCapture({ text, url, title, notebook, daily }) {
     notebook: notebook ?? stored.defaultNotebook ?? undefined,
     folder: stored.defaultFolder ?? undefined,
     tags: stored.defaultTags ?? undefined,
-    daily: daily ?? stored.appendDaily ?? false
+    daily: daily ?? stored.appendDaily ?? false,
+    template: template ?? stored.defaultTemplate ?? undefined
   });
   return res;
 }
 
+// Offline queue — if host unreachable, store and retry on next popup open / startup
+async function queueOffline(entry) {
+  const { offlineQueue = [] } = await chrome.storage.local.get("offlineQueue");
+  offlineQueue.push({ ...entry, ts: Date.now() });
+  await chrome.storage.local.set({ offlineQueue });
+  chrome.action.setBadgeText({ text: "!" });
+  chrome.action.setBadgeBackgroundColor({ color: "#b91c1c" });
+}
+async function flushOffline() {
+  const { offlineQueue = [] } = await chrome.storage.local.get("offlineQueue");
+  if (!offlineQueue.length) return;
+  const remaining = [];
+  for (const e of offlineQueue) {
+    try {
+      const r = await sendToHost({ action: "capture", ...e });
+      if (!r?.ok) remaining.push(e);
+    } catch { remaining.push(e); }
+  }
+  await chrome.storage.local.set({ offlineQueue: remaining });
+  if (!remaining.length) { chrome.action.setBadgeText({ text: "" }); }
+}
+
 function notifyCaptured(res) {
+  const buttons = [{ title: "Undo" }, { title: "Open" }];
   chrome.notifications?.create?.({
     type: "basic",
     iconUrl: "icons/icon128.png",
     title: "Shiki — captured",
-    message: `${res.via_daemon ? "(daemon) " : ""}${res.path.split("/").slice(-2).join("/")}`
+    message: `${res.via_daemon ? "(daemon) " : ""}${res.path.split("/").slice(-2).join("/")}`,
+    buttons
   });
   chrome.action.setBadgeText({ text: "✓" });
   chrome.action.setBadgeBackgroundColor({ color: "#1c1917" });
   setTimeout(() => chrome.action.setBadgeText({ text: "" }), 1800);
+  // store last for notification click
+  chrome.storage.local.set({ lastCapturedPath: res.path });
 }
+chrome.notifications?.onButtonClicked?.addListener(async (id, btnIdx) => {
+  const { lastCapturedPath } = await chrome.storage.local.get("lastCapturedPath");
+  if (btnIdx === 0) {
+    // Undo
+    try { const r = await sendToHost({ action: "undo" }); chrome.notifications.create({ type:"basic", iconUrl:"icons/icon128.png", title:"Shiki — undone", message: r.path || "undone" }); } catch(e){ chrome.notifications.create({ type:"basic", iconUrl:"icons/icon128.png", title:"Undo failed", message: String(e.message).slice(0,100)}); }
+  } else if (btnIdx === 1 && lastCapturedPath) {
+    sendToHost({ action: "open_note", text: lastCapturedPath }).catch(()=>{});
+  }
+});
+chrome.notifications?.onClicked?.addListener(async () => {
+  const { lastCapturedPath } = await chrome.storage.local.get("lastCapturedPath");
+  if (lastCapturedPath) sendToHost({ action: "open_note", text: lastCapturedPath }).catch(()=>{});
+});
+
+// Omnibox: type "shiki <query>" to search
+if (chrome.omnibox) {
+  chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
+    if (!text.trim()) return;
+    try {
+      const res = await sendToHost({ action: "search", query: text, limit: 5 });
+      if (res?.ok && res.hits?.length) {
+        suggest(res.hits.map(h => ({ content: h.path, description: `${h.title} — ${h.notebook}/${h.path.split("/").pop()} ` })));
+      }
+    } catch {}
+  });
+  chrome.omnibox.onInputEntered.addListener(async (text, disposition) => {
+    if (!text.trim()) return;
+    // First hit or open search in popup? For now open the note
+    try {
+      const res = await sendToHost({ action: "search", query: text, limit: 1 });
+      if (res?.ok && res.hits?.length) {
+        await sendToHost({ action: "open_note", text: res.hits[0].path });
+      } else {
+        // No hit — capture the query itself as a quick note
+        await doCapture({ text, title: "Omnibox capture", url: "" });
+        notifyCaptured({ path: text.slice(0,40), via_daemon:false });
+      }
+    } catch(e){ console.error(e); }
+  });
+}
+
+// (flush already handled in onInstalled/onStartup above)
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const url = tab?.url || info.pageUrl || "";
@@ -182,6 +259,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     text = info.selectionText || "";
   } else if (info.menuItemId === "shiki-capture-link") {
     text = info.linkUrl || info.selectionText || "";
+  } else if (info.menuItemId === "shiki-capture-image") {
+    const src = info.srcUrl || "";
+    const alt = info.selectionText || "image";
+    text = src ? `![${alt}](${src})\n\nSource: ${url}` : (info.selectionText || `${title}\n${url}`);
   } else if (info.menuItemId === "shiki-capture-page") {
     text = info.selectionText ? info.selectionText : `${title}\n${url}`;
   } else if (info.menuItemId === "shiki-capture-daily") {
@@ -214,22 +295,33 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 
   try {
-    const res = await doCapture({ text, url: info.linkUrl || url, title, notebook: explicitNotebook, daily });
+    const res = await doCapture({ text, url: info.linkUrl || info.srcUrl || url, title, notebook: explicitNotebook, daily });
     if (res?.ok) {
       notifyCaptured(res);
-      // Rebuild menus so newly created notebooks appear next time
       rebuildContextMenus().catch(()=>{});
     } else {
       throw new Error(res?.error || "unknown error");
     }
   } catch (e) {
     console.error("[shiki] capture failed", e);
-    chrome.notifications?.create?.({
-      type: "basic",
-      iconUrl: "icons/icon128.png",
-      title: "Shiki — capture failed",
-      message: String(e.message).slice(0, 120)
-    });
+    // Offline queue: keep for retry if host unreachable
+    const msg = String(e.message);
+    if (msg.includes("Native host not found") || msg.includes("not reachable") || msg.includes("Failed to connect")) {
+      await queueOffline({ text, url: info.linkUrl || info.srcUrl || url, title, notebook: explicitNotebook, daily });
+      chrome.notifications?.create?.({
+        type: "basic",
+        iconUrl: "icons/icon128.png",
+        title: "Shiki — queued offline",
+        message: "Will retry when host is back"
+      });
+    } else {
+      chrome.notifications?.create?.({
+        type: "basic",
+        iconUrl: "icons/icon128.png",
+        title: "Shiki — capture failed",
+        message: msg.slice(0, 120)
+      });
+    }
   }
 });
 
@@ -243,7 +335,7 @@ chrome.commands.onCommand.addListener(async (command) => {
         console.warn(chrome.runtime.lastError.message);
         return;
       }
-      const text = resp?.text || "";
+      const text = resp?.markdown || resp?.text || "";
       const url = tab.url || "";
       const title = tab.title || "";
       if (!text && !url) return;
@@ -253,9 +345,12 @@ chrome.commands.onCommand.addListener(async (command) => {
         if (res?.ok) {
           chrome.action.setBadgeText({ text: "✓" });
           setTimeout(() => chrome.action.setBadgeText({ text: "" }), 1500);
-        }
+          notifyCaptured(res);
+        } else { throw new Error(res?.error || "capture failed"); }
       } catch (e) {
         console.error(e);
+        const msg = String(e.message);
+        if (msg.includes("Native host")) await queueOffline({ text: finalText, url, title });
       }
     });
   }
@@ -265,6 +360,10 @@ chrome.commands.onCommand.addListener(async (command) => {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.action === "rebuildMenus") {
     rebuildContextMenus().then(() => sendResponse({ ok: true })).catch(e => sendResponse({ ok: false, error: e.message }));
+    return true;
+  }
+  if (msg?.action === "flushOffline") {
+    flushOffline().then(() => sendResponse({ ok: true })).catch(e => sendResponse({ ok: false, error: e.message }));
     return true;
   }
   (async () => {

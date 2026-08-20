@@ -22,7 +22,7 @@ use shiki_core::NotebookStore;
 fn read_message() -> anyhow::Result<Option<serde_json::Value>> {
     let mut len_buf = [0u8; 4];
     match std::io::stdin().read_exact(&mut len_buf) {
-        Ok(()) => {},
+        Ok(()) => {}
         Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
         Err(e) => return Err(e.into()),
     }
@@ -30,7 +30,6 @@ fn read_message() -> anyhow::Result<Option<serde_json::Value>> {
     if len == 0 {
         return Ok(None);
     }
-    // Guard against insane size (browser caps at 1MB per spec)
     if len > 1024 * 1024 {
         anyhow::bail!("message too large: {len} bytes");
     }
@@ -69,6 +68,14 @@ struct Request {
     url: Option<String>,
     #[serde(default)]
     title: Option<String>,
+    #[serde(default)]
+    query: Option<String>,
+    #[serde(default)]
+    limit: Option<usize>,
+    #[serde(default)]
+    template: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -125,6 +132,56 @@ struct CaptureResponse {
     via_daemon: bool,
     daily: bool,
     notebook: String,
+}
+
+#[derive(Debug, Serialize)]
+struct TagsResponse {
+    ok: bool,
+    tags: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct TemplatesResponse {
+    ok: bool,
+    templates: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct SearchResponse {
+    ok: bool,
+    hits: Vec<SearchHit>,
+    query: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SearchHit {
+    title: String,
+    path: String,
+    notebook: String,
+    preview: String,
+    score: u32,
+}
+
+#[derive(Debug, Serialize)]
+struct RecentResponse {
+    ok: bool,
+    notes: Vec<RecentNote>,
+}
+
+#[derive(Debug, Serialize)]
+struct RecentNote {
+    title: String,
+    path: String,
+    notebook: String,
+    relative: String,
+    tags: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct UndoResponse {
+    ok: bool,
+    path: String,
+    via_daemon: bool,
 }
 
 // ── Daemon client (mirrors shiki-cli/src/commands/capture.rs) ─────────────
@@ -235,15 +292,11 @@ fn handle_ping() -> anyhow::Result<serde_json::Value> {
     let daemon = check_daemon();
     let config_info = match load_config_and_store() {
         Ok((config, _)) => {
-            let data_dir = config
-                .general
-                .data_dir
-                .clone()
-                .unwrap_or_else(|| {
-                    Config::default_data_dir()
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_default()
-                });
+            let data_dir = config.general.data_dir.clone().unwrap_or_else(|| {
+                Config::default_data_dir()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default()
+            });
             let config_path = Config::default_path()
                 .map(|p| p.display().to_string())
                 .unwrap_or_default();
@@ -288,7 +341,7 @@ fn handle_list_folders(notebook_name: &str) -> anyhow::Result<serde_json::Value>
     let nb = store
         .get(notebook_name)
         .map_err(|e| anyhow::anyhow!("notebook '{notebook_name}' not found: {e}"))?;
-    let mut folders = vec!["".to_string()]; // root
+    let mut folders = vec!["".to_string()];
     let mut nested = Vec::new();
     collect_folders(&nb, Path::new(""), &mut nested);
     folders.extend(nested);
@@ -300,25 +353,226 @@ fn handle_list_folders(notebook_name: &str) -> anyhow::Result<serde_json::Value>
     })?)
 }
 
+fn handle_list_tags() -> anyhow::Result<serde_json::Value> {
+    let (_, store) = load_config_and_store()?;
+    let pool = store.all_notes().unwrap_or_default();
+    let tags = shiki_core::tags::all_tags(&pool);
+    Ok(serde_json::to_value(TagsResponse { ok: true, tags })?)
+}
+
+fn handle_list_templates() -> anyhow::Result<serde_json::Value> {
+    let dir = Config::default_templates_dir()?;
+    shiki_core::templates::ensure_defaults(&dir).ok();
+    let mut templates = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.extension().and_then(|s| s.to_str()) == Some("md") {
+                if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                    templates.push(stem.to_string());
+                }
+            }
+        }
+    }
+    templates.sort();
+    Ok(serde_json::to_value(TemplatesResponse {
+        ok: true,
+        templates,
+    })?)
+}
+
+fn handle_search(query: &str, limit: usize) -> anyhow::Result<serde_json::Value> {
+    let (_, store) = load_config_and_store()?;
+    let pool = store.all_notes().unwrap_or_default();
+    if query.trim().is_empty() {
+        return Ok(serde_json::to_value(SearchResponse {
+            ok: true,
+            hits: vec![],
+            query: query.to_string(),
+        })?);
+    }
+    let notes: Vec<shiki_core::Note> = pool.iter().map(|(_, n)| n.clone()).collect();
+    let mut engine = shiki_core::SearchEngine::new();
+    // Search titles and also body preview? For popup, search title + body snippet
+    let haystacks: Vec<String> = notes
+        .iter()
+        .map(|n| {
+            format!(
+                "{} {}",
+                n.frontmatter.title,
+                n.body.chars().take(200).collect::<String>()
+            )
+        })
+        .collect();
+    let hay_refs: Vec<&str> = haystacks.iter().map(|s| s.as_str()).collect();
+    let hits = engine.search_text(query, &hay_refs);
+    let mut out = Vec::new();
+    for h in hits.into_iter().take(limit) {
+        if let Some((nb, note)) = pool.get(h.index) {
+            out.push(SearchHit {
+                title: note.frontmatter.title.clone(),
+                path: note.path.display().to_string(),
+                notebook: nb.name.clone(),
+                preview: note
+                    .body
+                    .chars()
+                    .take(120)
+                    .collect::<String>()
+                    .replace('\n', " "),
+                score: h.score,
+            });
+        }
+    }
+    Ok(serde_json::to_value(SearchResponse {
+        ok: true,
+        hits: out,
+        query: query.to_string(),
+    })?)
+}
+
+fn handle_recent(limit: usize) -> anyhow::Result<serde_json::Value> {
+    let (_, store) = load_config_and_store()?;
+    let pool = store.all_notes().unwrap_or_default();
+    // Sort by file mtime or frontmatter date descending
+    let mut items: Vec<(
+        std::time::SystemTime,
+        shiki_core::Notebook,
+        shiki_core::Note,
+    )> = Vec::new();
+    for (nb, note) in pool {
+        let mtime = std::fs::metadata(&note.path)
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        items.push((mtime, nb, note));
+    }
+    items.sort_by_key(|b| std::cmp::Reverse(b.0));
+    let notes: Vec<RecentNote> = items
+        .into_iter()
+        .take(limit)
+        .map(|(_, nb, note)| {
+            let rel = note
+                .path
+                .strip_prefix(&nb.path)
+                .unwrap_or(&note.path)
+                .display()
+                .to_string();
+            RecentNote {
+                title: note.frontmatter.title.clone(),
+                path: note.path.display().to_string(),
+                notebook: nb.name.clone(),
+                relative: rel,
+                tags: note.frontmatter.tags.clone(),
+            }
+        })
+        .collect();
+    Ok(serde_json::to_value(RecentResponse { ok: true, notes })?)
+}
+
+fn handle_create_folder(notebook: &str, folder: &str) -> anyhow::Result<serde_json::Value> {
+    let (_, store) = load_config_and_store()?;
+    let nb = store
+        .get(notebook)
+        .map_err(|e| anyhow::anyhow!("notebook '{notebook}' not found: {e}"))?;
+    let rel = shiki_core::notebook::validate_relative_path(folder)?;
+    // Create nested path step by step
+    let mut cur = PathBuf::new();
+    for comp in rel.components() {
+        cur.push(comp);
+        nb.create_folder_in(
+            cur.parent().unwrap_or(Path::new("")),
+            &comp.as_os_str().to_string_lossy(),
+        )?;
+    }
+    Ok(serde_json::json!({"ok": true, "path": nb.path.join(rel).display().to_string()}))
+}
+
+fn handle_undo() -> anyhow::Result<serde_json::Value> {
+    // Try daemon first
+    if let Some(resp) = try_daemon("UNDO\n\n") {
+        match resp {
+            DaemonResponse::Ok(path) => {
+                return Ok(serde_json::to_value(UndoResponse {
+                    ok: true,
+                    path,
+                    via_daemon: true,
+                })?);
+            }
+            DaemonResponse::Err(msg) if msg.starts_with("locked:") => {
+                anyhow::bail!(msg);
+            }
+            _ => {}
+        }
+    }
+    // Fallback standalone
+    let record_path = Config::default_last_capture_path()?;
+    let Some(record) = LastCapture::load(&record_path) else {
+        anyhow::bail!("nothing to undo");
+    };
+    let (notebook, path) = match &record {
+        LastCapture::Note { notebook, path } => (notebook.clone(), path.clone()),
+        LastCapture::DailyAppend { notebook, path, .. } => (notebook.clone(), path.clone()),
+    };
+    let config_path = Config::default_path()?;
+    let config = Config::load_or_init(&config_path)?;
+    let data_dir = match config.general.data_dir.as_ref() {
+        Some(dir) => PathBuf::from(dir),
+        None => Config::default_data_dir()?,
+    };
+    let store = NotebookStore::new_with_custom_paths(data_dir, config.notebook_custom_paths());
+    let _nb = store
+        .get(&notebook)
+        .map_err(|e| anyhow::anyhow!("notebook '{notebook}' not found: {e}"))?;
+    match &record {
+        LastCapture::Note { path, .. } => {
+            let trash_dir = Config::default_trash_dir()?.join(&notebook);
+            let suffix = chrono::Local::now().format("%Y%m%d%H%M%S%3f").to_string();
+            shiki_core::trash::move_to_trash(Path::new(path), &trash_dir, &suffix)
+                .map_err(|e| anyhow::anyhow!("could not move '{path}' to trash: {e}"))?;
+        }
+        LastCapture::DailyAppend { path, appended, .. } => {
+            // Need crypto handling — fail if encrypted locked
+            let encrypted = config.encrypt_for(&notebook);
+            if encrypted {
+                anyhow::bail!("notebook '{notebook}' is encrypted and locked");
+            }
+            let mut note = shiki_core::Note::from_file_in_notebook_with_crypto(
+                Path::new(path),
+                &notebook,
+                None,
+            )
+            .map_err(|e| anyhow::anyhow!("could not read '{path}': {e}"))?;
+            if !note.body.ends_with(appended.as_str()) {
+                anyhow::bail!("the daily note has changed since that capture — not undoing");
+            }
+            let new_len = note.body.len() - appended.len();
+            note.body.truncate(new_len);
+            note.save_with_crypto(None)
+                .map_err(|e| anyhow::anyhow!("could not save '{path}': {e}"))?;
+        }
+    }
+    LastCapture::clear(&record_path);
+    Ok(serde_json::to_value(UndoResponse {
+        ok: true,
+        path,
+        via_daemon: false,
+    })?)
+}
+
 fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
     let text = req.text.clone().unwrap_or_default();
-    // Allow caller to pass url/title for richer capture
     let mut full_text = text.clone();
     if let Some(url) = &req.url {
         if !url.is_empty() && !full_text.contains(url) {
             if full_text.is_empty() {
                 full_text = url.clone();
-            } else {
-                // Append source URL as markdown link if title available
-                if let Some(title) = &req.title {
-                    if !title.is_empty() {
-                        full_text = format!("{full_text}\n\nSource: [{title}]({url})");
-                    } else {
-                        full_text = format!("{full_text}\n\nSource: {url}");
-                    }
+            } else if let Some(title) = &req.title {
+                if !title.is_empty() {
+                    full_text = format!("{full_text}\n\nSource: [{title}]({url})");
                 } else {
                     full_text = format!("{full_text}\n\nSource: {url}");
                 }
+            } else {
+                full_text = format!("{full_text}\n\nSource: {url}");
             }
         }
     }
@@ -330,14 +584,13 @@ fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
     let tags = req.tags.clone().unwrap_or_default();
     let notebook = req.notebook.clone();
     let folder = req.folder.clone();
+    let template = req.template.clone();
 
-    // Try daemon first
-    let daemon_req = build_capture_request(&text, daily, &tags, notebook.as_deref(), folder.as_deref());
+    let daemon_req =
+        build_capture_request(&text, daily, &tags, notebook.as_deref(), folder.as_deref());
     match try_daemon(&daemon_req) {
         Some(DaemonResponse::Ok(path)) => {
-            // Record notebook name for response — try to extract from path or use default
             let nb_name = notebook.clone().unwrap_or_else(|| {
-                // Fallback: try to infer from path
                 Path::new(&path)
                     .parent()
                     .and_then(|p| p.file_name())
@@ -355,12 +608,9 @@ fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
         Some(DaemonResponse::Err(msg)) if msg.starts_with("locked:") => {
             anyhow::bail!("{msg}");
         }
-        _ => {
-            // Fall through to direct write
-        }
+        _ => {}
     }
 
-    // Direct disk write (same as shiki-cli fallback)
     let (config, store) = load_config_and_store()?;
     let existing_notebooks: Vec<String> = store
         .list()
@@ -371,12 +621,11 @@ fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
     let (target, text_ref) = match notebook.as_deref() {
         Some(name) => (name.to_string(), text.as_str()),
         None => shiki_core::notebook::route_by_prefix(&text, &existing_notebooks)
-            .map(|(n, t)| (n, t))
             .unwrap_or((config.general.default_notebook.clone(), text.as_str())),
     };
-    // Need owned string if route_by_prefix trimmed
     let text_owned;
-    let text_final = if text_ref.as_ptr() == text.as_str().as_ptr() && text_ref.len() == text.len() {
+    let text_final = if text_ref.as_ptr() == text.as_str().as_ptr() && text_ref.len() == text.len()
+    {
         text_ref
     } else {
         text_owned = text_ref.to_string();
@@ -389,7 +638,6 @@ fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
             .create(&target)
             .map_err(|e| anyhow::anyhow!("could not create notebook '{target}': {e}"))?,
     };
-    // Handle encryption — host can't prompt for passphrase, so fail clearly
     let encrypted = config.encrypt_for(&target);
     if encrypted {
         anyhow::bail!(
@@ -397,8 +645,11 @@ fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
         );
     }
 
+    // If template is requested, create note via template rendering (for non-daily)
     let (path, record) = if daily {
         capture_into_daily(&store, &config, &nb, text_final)?
+    } else if let Some(tmpl_name) = template.filter(|s| !s.is_empty()) {
+        capture_into_templated(&nb, text_final, &tags, folder.as_deref(), &tmpl_name)?
     } else {
         capture_into_new_note(&nb, text_final, &tags, folder.as_deref())?
     };
@@ -427,6 +678,46 @@ fn capture_into_new_note(
             nb.create_note_in(&relative, &title, text)?
         }
         _ => nb.create_note(&title, text)?,
+    };
+    if !tags.is_empty() {
+        note.frontmatter.tags = tags.to_vec();
+        note.save_with_crypto(nb.crypto.as_ref())?;
+    }
+    let record = LastCapture::Note {
+        notebook: nb.name.clone(),
+        path: note.path.display().to_string(),
+    };
+    Ok((note.path, record))
+}
+
+fn capture_into_templated(
+    nb: &shiki_core::Notebook,
+    text: &str,
+    tags: &[String],
+    folder: Option<&str>,
+    template_name: &str,
+) -> anyhow::Result<(PathBuf, LastCapture)> {
+    let templates_dir = Config::default_templates_dir()?;
+    let tmpl = shiki_core::Template::load(&templates_dir, template_name)
+        .map_err(|e| anyhow::anyhow!("template '{template_name}' not found: {e}"))?;
+    let mut vars = std::collections::HashMap::new();
+    let title = format!("Capture {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
+    vars.insert("title", title.clone());
+    vars.insert("date", chrono::Local::now().format("%Y-%m-%d").to_string());
+    vars.insert("body", text.to_string());
+    let rendered = tmpl.render(&vars);
+    // Template already contains title/date, append body if not present
+    let body = if rendered.contains(text) {
+        rendered
+    } else {
+        format!("{rendered}\n{text}\n")
+    };
+    let mut note = match folder {
+        Some(folder) if !folder.is_empty() => {
+            let relative = shiki_core::notebook::validate_relative_path(folder)?;
+            nb.create_note_in(&relative, &title, body)?
+        }
+        _ => nb.create_note(&title, body)?,
     };
     if !tags.is_empty() {
         note.frontmatter.tags = tags.to_vec();
@@ -490,7 +781,54 @@ fn dispatch(req: Request) -> serde_json::Value {
                 handle_list_folders(&nb)
             }
         }
+        "list_tags" => handle_list_tags(),
+        "list_templates" => handle_list_templates(),
+        "search" => {
+            let q = req
+                .query
+                .clone()
+                .unwrap_or_else(|| req.text.clone().unwrap_or_default());
+            let limit = req.limit.unwrap_or(8);
+            handle_search(&q, limit)
+        }
+        "recent" => {
+            let limit = req.limit.unwrap_or(8);
+            handle_recent(limit)
+        }
+        "create_folder" => {
+            let nb = req.notebook.clone().unwrap_or_default();
+            let folder = req.folder.clone().or(req.name.clone()).unwrap_or_default();
+            if nb.is_empty() || folder.is_empty() {
+                Err(anyhow::anyhow!("notebook and folder/name required"))
+            } else {
+                handle_create_folder(&nb, &folder)
+            }
+        }
         "capture" => handle_capture(&req),
+        "undo" => handle_undo(),
+        "open_note" => {
+            // For product: open note in system editor / reveal in file manager
+            let path = req.text.clone().or(req.query.clone()).unwrap_or_default();
+            if path.is_empty() {
+                Err(anyhow::anyhow!("path required"))
+            } else {
+                // Try to open with xdg-open / open
+                let p = Path::new(&path);
+                if !p.exists() {
+                    Err(anyhow::anyhow!("file not found: {path}"))
+                } else {
+                    #[cfg(target_os = "linux")]
+                    let _ = std::process::Command::new("xdg-open").arg(p).spawn();
+                    #[cfg(target_os = "macos")]
+                    let _ = std::process::Command::new("open").arg(p).spawn();
+                    #[cfg(target_os = "windows")]
+                    let _ = std::process::Command::new("cmd")
+                        .args(["/C", "start", "", &path])
+                        .spawn();
+                    Ok(serde_json::json!({"ok": true, "path": path}))
+                }
+            }
+        }
         other => Err(anyhow::anyhow!("unknown action: {other}")),
     };
     match result {
@@ -504,12 +842,10 @@ fn dispatch(req: Request) -> serde_json::Value {
 }
 
 fn main() -> anyhow::Result<()> {
-    // Native messaging hosts must not write to stdout/stderr except framed JSON to stdout.
-    // Redirect logs to a file if needed; keep stderr for crash diagnostics but avoid polluting stdout.
     loop {
         let msg = read_message()?;
         let Some(val) = msg else {
-            break; // EOF — browser closed port
+            break;
         };
         let req: Result<Request, _> = serde_json::from_value(val);
         let response = match req {

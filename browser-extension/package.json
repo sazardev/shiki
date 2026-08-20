@@ -2,7 +2,7 @@
   "name": "shiki-browser-extension",
   "version": "0.1.0",
   "private": true,
-  "description": "Shiki Capture — browser extension dev harness",
+  "description": "Shiki Capture \u2014 browser extension dev harness",
   "type": "module",
   "scripts": {
     "host:build": "cargo build -p shiki-native-host --release",
@@ -17,8 +17,13 @@
     "dev:tauri": "npx --yes @tauri/cli@latest dev",
     "dev:tauri:init": "node scripts/init-tauri.mjs",
     "lint": "node --check src/background.js && node --check src/popup.js && node --check src/content.js && echo \"js syntax ok\"",
-    "validate": "node -e \"JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest ok')\" && npm run lint"
+    "validate": "node -e \"JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest ok')\" && npm run lint",
+    "build:zip": "zip -r shiki-capture-0.1.0.zip manifest.json src/ icons/ -x '*.DS_Store' && echo 'zip ready' && ls -lh shiki-capture-0.1.0.zip"
   },
   "devDependencies": {},
-  "keywords": ["shiki", "chrome-extension", "native-messaging"]
+  "keywords": [
+    "shiki",
+    "chrome-extension",
+    "native-messaging"
+  ]
 }

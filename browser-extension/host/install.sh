@@ -48,6 +48,29 @@ install_manifest() {
   local dir="$1"
   mkdir -p "$dir"
   local dest="$dir/com.shiki.native.json"
+  # Prod: merge allowed_origins if manifest already exists (keeps multiple IDs)
+  if [[ -f "$dest" && "$EXT_ID" != "__REPLACE_WITH_EXTENSION_ID__" ]]; then
+    # Try to merge with python (keeps existing IDs + adds new one)
+    if command -v python3 >/dev/null 2>&1; then
+      python3 -c "
+import json, pathlib
+dest = pathlib.Path('$dest')
+data = json.loads(dest.read_text()) if dest.exists() else {}
+origins = set(data.get('allowed_origins', []))
+origins.add(f'chrome-extension://$EXT_ID/')
+data['name'] = 'com.shiki.native'
+data['description'] = 'Shiki native messaging host - bridges browser to shiki capture daemon'
+data['path'] = '$HOST_BIN'
+data['type'] = 'stdio'
+data['allowed_origins'] = sorted(origins)
+dest.write_text(json.dumps(data, indent=2))
+print(f'    merged manifest: {dest} (now {len(origins)} origin(s))')
+import sys
+print(open(dest).read())
+sys.exit(0)
+" && return 0
+    fi
+  fi
   sed -e "s#__REPLACE_WITH_ABSOLUTE_PATH_TO_shiki-native-host__#$HOST_BIN#g" \
       -e "s#__REPLACE_WITH_EXTENSION_ID__#$EXT_ID#g" \
       "$MANIFEST_TEMPLATE" > "$dest"

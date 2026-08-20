@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shiki Options</title>
+  <link rel="stylesheet" href="popup.css" />
+  <style>
+    body { width: auto; max-width: 760px; margin: 0 auto; background: var(--bg); }
+    #app { gap: 16px; }
+    h1 { font-size: 20px; margin: 0; display:flex; align-items:center; gap:10px; }
+    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 16px 0 8px; border-top:1px solid var(--border); padding-top:12px; }
+    .card { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius); padding:16px; display:flex; flex-direction:column; gap:12px; }
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    .rule-row { display:flex; gap:8px; align-items:center; }
+    .rule-row input, .rule-row select { flex:1; }
+    .small { font-size:11px; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1><img src="../icons/icon32.png" width="24" height="24" style="border-radius:6px"/> Shiki Options</h1>
+      <span class="status" id="status">saved</span>
+    </header>
+
+    <div class="card">
+      <h2 style="margin-top:0; border:none; padding:0;">Defaults</h2>
+      <div class="grid2">
+        <div class="field"><label>Default notebook</label><select id="defaultNotebook"></select></div>
+        <div class="field"><label>Default folder</label><input id="defaultFolder" placeholder="(root) or work/meetings" list="foldersOpts" /><datalist id="foldersOpts"></datalist></div>
+        <div class="field"><label>Default tags</label><input id="defaultTags" placeholder="work, idea" list="tagsOpts" /><datalist id="tagsOpts"></datalist></div>
+        <div class="field"><label>Default template</label><select id="defaultTemplate"><option value="">(default)</option></select></div>
+      </div>
+      <label class="checkbox"><input type="checkbox" id="appendDaily" /> Append to daily note by default</label>
+      <label class="checkbox"><input type="checkbox" id="showNotifications" checked /> Show notifications after capture</label>
+    </div>
+
+    <div class="card">
+      <h2>Per-domain rules <span class="small">— e.g. github.com → work</span></h2>
+      <div id="rules"></div>
+      <button id="addRule" class="ghost">＋ Add rule</button>
+      <div class="small">Hostname exact or without www. Selection is copied and routed automatically: “work: task” also works.</div>
+    </div>
+
+    <div class="card">
+      <h2>Advanced</h2>
+      <div class="field"><label>Custom host path (rare)</label><input id="customHostPath" placeholder="(auto)" /></div>
+      <div class="small">Leave empty for auto. Only change if you built shiki-native-host elsewhere.</div>
+      <div class="row"><button id="testHost" class="ghost">Test host connection</button><span id="testResult" class="small"></span></div>
+    </div>
+
+    <div class="actions">
+      <button id="save" class="primary">Save options</button>
+      <button id="reset">Reset to defaults</button>
+    </div>
+    <div id="result" class="result hidden"></div>
+    <footer><span class="muted small">Shiki browser extension — prod build. Docs: <a href="https://sazardev.github.io/shiki/documentation.html" target="_blank">sazardev.github.io/shiki</a></span></footer>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
