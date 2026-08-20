@@ -234,6 +234,11 @@ enum Commands {
         #[command(subcommand)]
         action: ThemeAction,
     },
+    /// Browser extension — install the native host and pack the extension (limpio y guardado)
+    Extension {
+        #[command(subcommand)]
+        action: commands::extension::ExtensionAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -347,11 +352,13 @@ fn main() -> Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
 
-    // Handled before `Context::load()` — doctor needs to work (and say why)
-    // even when the config is broken, which is precisely the situation
-    // someone reaching for it is usually in.
+    // Handled before `Context::load()` — doctor and extension need to work
+    // even when the config is broken.
+    if let Some(Commands::Extension { action }) = cli.command.take() {
+        return commands::extension::run(action);
+    }
     if matches!(cli.command, Some(Commands::Doctor)) {
         return commands::doctor::run();
     }
@@ -560,5 +567,6 @@ fn main() -> Result<()> {
                 commands::theme::create(&mut ctx.config, from.as_deref())
             }
         },
+        Some(Commands::Extension { .. }) => unreachable!("handled before Context::load"),
     }
 }

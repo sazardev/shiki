@@ -4,6 +4,7 @@ pub mod daily;
 pub mod doctor;
 pub mod edit;
 pub mod export;
+pub mod extension;
 pub mod graph;
 pub mod list;
 pub mod new;

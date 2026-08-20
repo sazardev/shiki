@@ -10,3 +10,4 @@
 /.agents/
 /.serena/
 /skills-lock.json
+browser-extension/*.zip
