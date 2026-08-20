@@ -214,6 +214,38 @@ els.saveDefaults.addEventListener("click", async () => {
 });
 els.quickSelection?.addEventListener("click", fillSelection);
 els.quickPage?.addEventListener("click", fillPage);
+
+// Copy helpers — ejemplo de copy y mandar
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // fallback via content script (needs active tab)
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id) {
+        const res = await new Promise(r => chrome.tabs.sendMessage(tab.id, { action: "copyText", text }, r));
+        return !!res?.ok;
+      }
+    } catch {}
+    return false;
+  }
+}
+document.getElementById("copy-only")?.addEventListener("click", async () => {
+  const text = els.text.value.trim();
+  if (!text) { showResult(false, "Nothing to copy"); return; }
+  const ok = await copyToClipboard(text);
+  showResult(ok, ok ? `Copied ${text.length} chars` : "Copy failed — check permissions");
+  setTimeout(()=> ok && els.result.classList.add("hidden"), 1200);
+});
+document.getElementById("copy-capture")?.addEventListener("click", async () => {
+  const text = els.text.value.trim();
+  if (!text) { showResult(false, "Write something to copy+send"); return; }
+  const copied = await copyToClipboard(text);
+  showResult(copied, copied ? "Copied — now capturing…" : "Capture without copy (clipboard blocked)…");
+  await doCapture();
+});
 els.openHelp?.addEventListener("click", (e) => {
   e.preventDefault();
   chrome.tabs.create({ url: "https://sazardev.github.io/shiki/documentation.html" });

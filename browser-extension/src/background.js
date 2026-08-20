@@ -69,6 +69,12 @@ async function rebuildContextMenus() {
     contexts: ["link"]
   });
   chrome.contextMenus.create({
+    id: "shiki-copy-send",
+    parentId: "shiki-parent",
+    title: "Copy + Send to Shiki",
+    contexts: ["selection"]
+  });
+  chrome.contextMenus.create({
     id: "shiki-capture-daily",
     parentId: "shiki-parent",
     title: "Append to daily note",
@@ -159,6 +165,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   let text = "";
   let explicitNotebook = null;
   let daily = null;
+  let doCopy = false;
 
   // Dynamic notebook submenu
   if (info.menuItemId.startsWith("shiki-to-nb::")) {
@@ -168,6 +175,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       text = info.linkUrl;
       // keep link url as source
     }
+  } else if (info.menuItemId === "shiki-copy-send") {
+    text = info.selectionText || "";
+    doCopy = true;
   } else if (info.menuItemId === "shiki-capture-selection" || info.menuItemId === "shiki-capture-selection-parent") {
     text = info.selectionText || "";
   } else if (info.menuItemId === "shiki-capture-link") {
@@ -192,6 +202,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   // Enrich link case with title
   if (info.linkUrl && !text.includes(info.linkUrl)) {
     text = `${text}\n\nSource: [${title}](${url})`;
+  }
+
+  // Ejemplo copy y mandar: si es copy-send, copia al portapapeles primero
+  if (doCopy && tab?.id) {
+    try {
+      await new Promise((resolve) => chrome.tabs.sendMessage(tab.id, { action: "copyText", text }, () => resolve()));
+    } catch (e) {
+      console.warn("[shiki] copy failed", e);
+    }
   }
 
   try {
