@@ -1,0 +1,53 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 13px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: #1a1b26;
+  color: #c0caf5;
+  width: 380px;
+}
+#app { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+header { display: flex; justify-content: space-between; align-items: center; }
+.logo { font-weight: 700; font-size: 14px; letter-spacing: 0.04em; color: #7aa2f7; }
+.status { font-size: 11px; padding: 2px 6px; border-radius: 999px; background: #24283b; }
+.status.ok { color: #9ece6a; }
+.status.warn { color: #e0af68; }
+.status.err { color: #f7768e; }
+label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #565f89; margin-top: 4px; }
+.muted { color: #565f89; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.row { display: flex; gap: 6px; }
+select, input, textarea {
+  width: 100%;
+  background: #24283b;
+  color: #c0caf5;
+  border: 1px solid #414868;
+  border-radius: 6px;
+  padding: 6px 8px;
+  outline: none;
+}
+select:focus, input:focus, textarea:focus { border-color: #7aa2f7; }
+#refresh { width: 36px; flex-shrink: 0; cursor: pointer; }
+textarea { min-height: 110px; resize: vertical; font-family: inherit; }
+.hint { font-size: 11px; color: #7aa2f7; }
+.checkbox { display: flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-size: 12px; color: #c0caf5; cursor: pointer; }
+.checkbox input { width: auto; }
+.actions { display: flex; gap: 8px; margin-top: 4px; }
+button {
+  background: #24283b;
+  color: #c0caf5;
+  border: 1px solid #414868;
+  border-radius: 6px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+button.primary { background: #7aa2f7; color: #1a1b26; border-color: #7aa2f7; font-weight: 600; flex: 1; }
+button.primary:disabled { opacity: 0.6; cursor: wait; }
+.kbd { font-size: 10px; opacity: 0.7; margin-left: 6px; }
+.result { padding: 8px; border-radius: 6px; font-size: 12px; word-break: break-all; }
+.result.ok { background: #2a3a2a; color: #9ece6a; border: 1px solid #3a5a3a; }
+.result.err { background: #3a2a2e; color: #f7768e; border: 1px solid #5a3a40; }
+.hidden { display: none; }
+footer { display: flex; gap: 6px; align-items: center; font-size: 11px; margin-top: 2px; }
+footer a { color: #7aa2f7; text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+code { background: #24283b; padding: 1px 4px; border-radius: 3px; font-size: 11px; }

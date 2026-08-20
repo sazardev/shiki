@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shiki Capture</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="logo">私 Shiki</div>
+      <div id="daemon-status" class="status">checking…</div>
+    </header>
+
+    <label for="notebook">Notebook</label>
+    <div class="row">
+      <select id="notebook"></select>
+      <button id="refresh" title="Refresh notebooks">↻</button>
+    </div>
+
+    <label for="folder">Folder <span class="muted">(optional, e.g. work/meetings)</span></label>
+    <div class="row">
+      <select id="folder"></select>
+      <input id="folder-custom" placeholder="or type custom path" />
+    </div>
+
+    <label for="tags">Tags <span class="muted">(comma separated)</span></label>
+    <input id="tags" placeholder="work, idea" />
+
+    <label class="checkbox">
+      <input type="checkbox" id="daily" />
+      Append to today's daily note (<code>--daily</code>)
+    </label>
+
+    <label for="text">Note</label>
+    <textarea id="text" placeholder="Quick idea…  Tip: 'work: call Ana' routes to notebook work automatically if you leave notebook on default."></textarea>
+    <div id="selection-hint" class="hint hidden">Selection from page prefilled ↓</div>
+
+    <div class="actions">
+      <button id="capture" class="primary">Capture <span class="kbd">Ctrl+Enter</span></button>
+      <button id="save-defaults" title="Save notebook/folder/tags/daily as defaults">Save defaults</button>
+    </div>
+
+    <div id="result" class="result hidden"></div>
+
+    <footer>
+      <a href="#" id="open-options">Options</a>
+      <span class="muted">·</span>
+      <span id="config-path" class="muted"></span>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

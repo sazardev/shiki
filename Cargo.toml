@@ -5,6 +5,7 @@ members = [
     "shiki-config",
     "shiki-tui",
     "shiki-cli",
+    "shiki-native-host",
 ]
 
 [workspace.package]

@@ -3787,6 +3787,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "shiki-native-host"
+version = "0.9.2"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "shiki-config",
+ "shiki-core",
+]
+
+[[package]]
 name = "shiki-tui"
 version = "0.9.2"
 dependencies = [

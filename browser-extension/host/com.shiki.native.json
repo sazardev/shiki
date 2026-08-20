@@ -1,0 +1,9 @@
+{
+  "name": "com.shiki.native",
+  "description": "Shiki native messaging host - bridges browser to shiki capture daemon",
+  "path": "__REPLACE_WITH_ABSOLUTE_PATH_TO_shiki-native-host__",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://__REPLACE_WITH_EXTENSION_ID__/"
+  ]
+}

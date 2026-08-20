@@ -1,0 +1,19 @@
+[package]
+name = "shiki-native-host"
+version.workspace = true
+edition.workspace = true
+description = "Native messaging host for Shiki browser extension - bridges Chrome/Firefox to shiki capture daemon"
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "shiki-native-host"
+path = "src/main.rs"
+
+[dependencies]
+shiki-core = { workspace = true }
+shiki-config = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
