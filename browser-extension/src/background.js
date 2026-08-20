@@ -4,7 +4,7 @@
 const NATIVE_HOST = "com.shiki.native";
 const LOG_LIMIT = 200;
 async function addLog(level, action, message, data=null) {
-  const entry = { ts: Date.now(), level, action, message: String(message).slice(0,500), data: data?JSON.stringify(data).slice(0,800):null };
+  const entry = { ts: Date.now(), level, action, message: String(message).slice(0,500), data: data?JSON.stringify(data).slice(0,1000):null };
   try {
     const { logs=[] } = await chrome.storage.local.get("logs");
     logs.unshift(entry);
@@ -438,8 +438,18 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 });
 
-// Relay messages from popup/content + allow popup to trigger menu rebuild
+// Relay messages from popup/content + allow popup to trigger menu rebuild — with allowlist
+const ALLOWED_ACTIONS = new Set(["ping","check_daemon","list_notebooks","list_folders","list_tags","list_templates","search","recent","create_folder","capture","undo","open_note","rebuildMenus","flushOffline"]);
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Only allow messages from this extension (popup/options/content of same extension)
+  if (sender.id && sender.id !== chrome.runtime.id) {
+    sendResponse({ ok: false, error: "blocked: external sender" });
+    return true;
+  }
+  if (!msg || typeof msg.action !== "string" || !ALLOWED_ACTIONS.has(msg.action)) {
+    sendResponse({ ok: false, error: `blocked: unknown action ${msg?.action}` });
+    return true;
+  }
   if (msg?.action === "rebuildMenus") {
     rebuildContextMenus().then(() => sendResponse({ ok: true })).catch(e => sendResponse({ ok: false, error: e.message }));
     return true;

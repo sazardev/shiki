@@ -3,8 +3,9 @@
   "name": "Shiki Capture",
   "version": "0.1.0",
   "description": "Quick capture to Shiki notebooks — save selection, page, or quick note instantly. Talks to your local Shiki via native host.",
-  "permissions": ["storage", "contextMenus", "activeTab", "scripting", "nativeMessaging", "notifications", "tabs", "clipboardWrite", "downloads"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": ["storage", "contextMenus", "activeTab", "scripting", "nativeMessaging", "notifications"],
+  "optional_permissions": ["downloads"],
+  "host_permissions": [],
   "action": {
     "default_title": "Shiki Capture",
     "default_popup": "src/popup.html",
@@ -22,8 +23,13 @@
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "128": "icons/icon128.png",
+    "256": "icons/icon256.png"
   },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "incognito": "spanning",
   "commands": {
     "_execute_action": {
       "suggested_key": {
@@ -43,8 +49,10 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
+      "exclude_matches": ["chrome://*/*", "chrome-extension://*/*", "about:*", "data:*"],
       "js": ["src/content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ],
   "options_ui": {

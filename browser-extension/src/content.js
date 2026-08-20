@@ -18,12 +18,19 @@ function htmlToMarkdown(html) {
     if (tag === "code") return node.parentElement?.tagName === "PRE" ? inner : `\`${inner}\``;
     if (tag === "pre") return `\n\`\`\`\n${inner}\n\`\`\`\n`;
     if (tag === "a") {
-      const href = node.getAttribute("href") || "";
-      return href ? `[${inner}](${href})` : inner;
+      let href = node.getAttribute("href") || "";
+      // Sanitize href: only allow http/https/mailto/# or relative, block javascript: and data:
+      if (/^\s*javascript:/i.test(href) || /^\s*data:/i.test(href)) href = "";
+      // Escape ) and ] to not break markdown
+      href = href.replace(/\)/g, "%29").replace(/\]/g, "%5D");
+      const safeInner = inner.replace(/\]/g, "\\]");
+      return href ? `[${safeInner}](${href})` : inner;
     }
     if (tag === "img") {
-      const alt = node.getAttribute("alt") || "image";
-      const src = node.getAttribute("src") || "";
+      const alt = (node.getAttribute("alt") || "image").replace(/[\[\]]/g, "");
+      let src = node.getAttribute("src") || "";
+      if (/^\s*javascript:/i.test(src) || /^\s*data:text\/html/i.test(src)) src = "";
+      src = src.replace(/\)/g, "%29");
       return src ? `![${alt}](${src})` : "";
     }
     if (tag === "li") return `- ${inner}\n`;

@@ -62,12 +62,23 @@ async function loadTemplates() {
 function addRuleRow(domain="", notebook="") {
   const row = document.createElement("div");
   row.className = "rule-row";
-  row.innerHTML = `<input placeholder="example.com" value="${domain.replace(/"/g,'&quot;')}" class="rule-domain" /><select class="rule-notebook"></select><button class="icon-btn" title="Remove">✕</button>`;
-  const sel = row.querySelector("select");
+  const input = document.createElement("input");
+  input.placeholder = "example.com";
+  input.value = domain;
+  input.className = "rule-domain";
+  const sel = document.createElement("select");
+  sel.className = "rule-notebook";
+  const btn = document.createElement("button");
+  btn.className = "icon-btn";
+  btn.title = "Remove";
+  btn.textContent = "✕";
+  row.appendChild(input);
+  row.appendChild(sel);
+  row.appendChild(btn);
   for (const nb of notebooks) {
     const o = document.createElement("option"); o.value = nb.name; o.textContent = nb.name; if (nb.name===notebook) o.selected=true; sel.appendChild(o);
   }
-  row.querySelector("button").addEventListener("click", () => row.remove());
+  btn.addEventListener("click", () => row.remove());
   // update folders datalist when notebook changes
   sel.addEventListener("change", async () => {
     const folders = await loadFoldersFor(sel.value);

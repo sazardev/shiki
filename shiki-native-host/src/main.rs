@@ -272,7 +272,18 @@ fn load_config_and_store() -> anyhow::Result<(Config, NotebookStore)> {
     Ok((config, store))
 }
 
-fn collect_folders(notebook: &shiki_core::Notebook, relative: &Path, out: &mut Vec<String>) {
+fn collect_folders_inner(
+    notebook: &shiki_core::Notebook,
+    relative: &Path,
+    out: &mut Vec<String>,
+    visited: &mut std::collections::HashSet<PathBuf>,
+) {
+    let dir = notebook.path.join(relative);
+    if let Ok(real) = dir.canonicalize() {
+        if !visited.insert(real) {
+            return;
+        }
+    }
     if let Ok((folders, _)) = notebook.list_dir(relative) {
         for folder in folders {
             let rel = if relative.as_os_str().is_empty() {
@@ -281,9 +292,14 @@ fn collect_folders(notebook: &shiki_core::Notebook, relative: &Path, out: &mut V
                 relative.join(&folder)
             };
             out.push(rel.display().to_string());
-            collect_folders(notebook, &rel, out);
+            collect_folders_inner(notebook, &rel, out, visited);
         }
     }
+}
+
+fn collect_folders(notebook: &shiki_core::Notebook, relative: &Path, out: &mut Vec<String>) {
+    let mut visited = std::collections::HashSet::new();
+    collect_folders_inner(notebook, relative, out, &mut visited);
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -586,6 +602,37 @@ fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
     let folder = req.folder.clone();
     let template = req.template.clone();
 
+    // Header injection guard: daemon protocol is \n-delimited
+    for t in &tags {
+        if t.contains('\n') || t.contains('\r') {
+            anyhow::bail!("invalid tag: must not contain newline");
+        }
+    }
+    if let Some(nb) = &notebook {
+        if nb.contains('\n') || nb.contains('\r') {
+            anyhow::bail!("invalid notebook: must not contain newline");
+        }
+    }
+    if let Some(f) = &folder {
+        if f.contains('\n') || f.contains('\r') {
+            anyhow::bail!("invalid folder: must not contain newline");
+        }
+    }
+    if let Some(t) = &template {
+        if t.contains('\n')
+            || t.contains('\r')
+            || t.contains('/')
+            || t.contains('\\')
+            || t.contains('.')
+        {
+            anyhow::bail!("invalid template");
+        }
+        // also validate via same rule as notebook name
+        if t.contains('/') || t.contains('\\') {
+            anyhow::bail!("invalid template");
+        }
+    }
+
     let daemon_req =
         build_capture_request(&text, daily, &tags, notebook.as_deref(), folder.as_deref());
     match try_daemon(&daemon_req) {
@@ -618,18 +665,16 @@ fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
         .into_iter()
         .map(|nb| nb.name)
         .collect();
-    let (target, text_ref) = match notebook.as_deref() {
-        Some(name) => (name.to_string(), text.as_str()),
-        None => shiki_core::notebook::route_by_prefix(&text, &existing_notebooks)
-            .unwrap_or((config.general.default_notebook.clone(), text.as_str())),
-    };
-    let text_owned;
-    let text_final = if text_ref.as_ptr() == text.as_str().as_ptr() && text_ref.len() == text.len()
-    {
-        text_ref
-    } else {
-        text_owned = text_ref.to_string();
-        &*Box::leak(text_owned.into_boxed_str())
+    let (target, text_final) = match notebook.as_deref() {
+        Some(name) => (name.to_string(), text.clone()),
+        None => {
+            if let Some((n, t)) = shiki_core::notebook::route_by_prefix(&text, &existing_notebooks)
+            {
+                (n, t.to_string())
+            } else {
+                (config.general.default_notebook.clone(), text.clone())
+            }
+        }
     };
 
     let nb = match store.get(&target) {
@@ -647,11 +692,11 @@ fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
 
     // If template is requested, create note via template rendering (for non-daily)
     let (path, record) = if daily {
-        capture_into_daily(&store, &config, &nb, text_final)?
+        capture_into_daily(&store, &config, &nb, &text_final)?
     } else if let Some(tmpl_name) = template.filter(|s| !s.is_empty()) {
-        capture_into_templated(&nb, text_final, &tags, folder.as_deref(), &tmpl_name)?
+        capture_into_templated(&nb, &text_final, &tags, folder.as_deref(), &tmpl_name)?
     } else {
-        capture_into_new_note(&nb, text_final, &tags, folder.as_deref())?
+        capture_into_new_note(&nb, &text_final, &tags, folder.as_deref())?
     };
     if let Ok(record_path) = Config::default_last_capture_path() {
         let _ = record.save(&record_path);
@@ -788,11 +833,18 @@ fn dispatch(req: Request) -> serde_json::Value {
                 .query
                 .clone()
                 .unwrap_or_else(|| req.text.clone().unwrap_or_default());
-            let limit = req.limit.unwrap_or(8);
+            let mut limit = req.limit.unwrap_or(8);
+            if limit > 50 {
+                limit = 50;
+            }
+            let q = q.chars().take(500).collect::<String>();
             handle_search(&q, limit)
         }
         "recent" => {
-            let limit = req.limit.unwrap_or(8);
+            let mut limit = req.limit.unwrap_or(8);
+            if limit > 50 {
+                limit = 50;
+            }
             handle_recent(limit)
         }
         "create_folder" => {
@@ -807,25 +859,63 @@ fn dispatch(req: Request) -> serde_json::Value {
         "capture" => handle_capture(&req),
         "undo" => handle_undo(),
         "open_note" => {
-            // For product: open note in system editor / reveal in file manager
             let path = req.text.clone().or(req.query.clone()).unwrap_or_default();
             if path.is_empty() {
                 Err(anyhow::anyhow!("path required"))
             } else {
-                // Try to open with xdg-open / open
                 let p = Path::new(&path);
                 if !p.exists() {
                     Err(anyhow::anyhow!("file not found: {path}"))
                 } else {
-                    #[cfg(target_os = "linux")]
-                    let _ = std::process::Command::new("xdg-open").arg(p).spawn();
-                    #[cfg(target_os = "macos")]
-                    let _ = std::process::Command::new("open").arg(p).spawn();
-                    #[cfg(target_os = "windows")]
-                    let _ = std::process::Command::new("cmd")
-                        .args(["/C", "start", "", &path])
-                        .spawn();
-                    Ok(serde_json::json!({"ok": true, "path": path}))
+                    match load_config_and_store() {
+                        Ok((_, store)) => {
+                            let data_dir = store.root.canonicalize().unwrap_or(store.root.clone());
+                            let p_real = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+                            let mut allowed = p_real.starts_with(&data_dir);
+                            if !allowed {
+                                for cpath in store.custom_paths.values() {
+                                    if let Ok(c) = cpath.canonicalize() {
+                                        if p_real.starts_with(&c) {
+                                            allowed = true;
+                                            break;
+                                        }
+                                    } else if p_real.starts_with(cpath) {
+                                        allowed = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if !allowed {
+                                if let Ok(notes) = store.all_notes() {
+                                    for (_, note) in notes {
+                                        if let Ok(r) = note.path.canonicalize() {
+                                            if r == p_real {
+                                                allowed = true;
+                                                break;
+                                            }
+                                        } else if note.path == p_real {
+                                            allowed = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if !allowed {
+                                Err(anyhow::anyhow!("path not inside a notebook: {path}"))
+                            } else {
+                                #[cfg(target_os = "linux")]
+                                let _ = std::process::Command::new("xdg-open").arg(p).spawn();
+                                #[cfg(target_os = "macos")]
+                                let _ = std::process::Command::new("open").arg(p).spawn();
+                                #[cfg(target_os = "windows")]
+                                let _ = std::process::Command::new("cmd")
+                                    .args(["/C", "start", "", &path])
+                                    .spawn();
+                                Ok(serde_json::json!({"ok": true, "path": path}))
+                            }
+                        }
+                        Err(e) => Err(anyhow::anyhow!("could not load store: {e}")),
+                    }
                 }
             }
         }

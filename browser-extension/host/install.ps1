@@ -18,14 +18,14 @@ if (-not $ExtensionId) {
   $ExtensionId = "__REPLACE_WITH_EXTENSION_ID__"
 }
 
-# Chrome on Windows uses registry, not file. We write manifest to a stable location and register it.
+# Chrome on Windows uses registry, not file. We write manifest via JSON to handle escaping.
 $ManifestDir = "$env:APPDATA\shiki"
 New-Item -ItemType Directory -Force -Path $ManifestDir | Out-Null
 $Dest = Join-Path $ManifestDir "com.shiki.native.json"
-(Get-Content $Template -Raw) `
-  -replace "__REPLACE_WITH_ABSOLUTE_PATH_TO_shiki-native-host__", ($HostBin -replace "\\","\\") `
-  -replace "__REPLACE_WITH_EXTENSION_ID__", $ExtensionId `
-  | Set-Content -Path $Dest -Encoding UTF8
+$manifest = Get-Content $Template -Raw | ConvertFrom-Json
+$manifest.path = $HostBin
+$manifest.allowed_origins = @("chrome-extension://$ExtensionId/")
+$manifest | ConvertTo-Json -Depth 3 | Set-Content -Path $Dest -Encoding UTF8
 Write-Host "    installed manifest: $Dest"
 Get-Content $Dest | Write-Host
 
