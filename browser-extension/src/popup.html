@@ -24,6 +24,7 @@
       <button class="tab active" data-tab="capture" role="tab" aria-selected="true">Capture</button>
       <button class="tab" data-tab="search" role="tab">Search</button>
       <button class="tab" data-tab="recent" role="tab">Recent</button>
+      <button class="tab" data-tab="logs" role="tab">Logs</button>
     </nav>
 
     <!-- Capture tab -->
@@ -103,6 +104,20 @@
         <button id="recent-refresh" class="ghost small">↻ Refresh</button>
       </div>
       <div id="recent-list" class="list"><div class="empty-state">Loading…</div></div>
+    </section>
+
+    <!-- Logs tab -->
+    <section id="tab-logs" class="tab-pane" role="tabpanel">
+      <div class="row" style="justify-content: space-between; align-items:center">
+        <label style="margin:0">Logs <span class="muted" id="logs-count"></span></label>
+        <div class="row" style="gap:4px">
+          <button id="logs-refresh" class="ghost small" title="Refresh logs">↻</button>
+          <button id="logs-clear" class="ghost small" title="Clear logs">Clear</button>
+          <button id="logs-export" class="ghost small" title="Export logs">Export</button>
+        </div>
+      </div>
+      <div id="logs-list" class="list" style="font-family: ui-monospace, monospace; font-size:11px; max-height:220px"></div>
+      <div class="small" style="color:var(--muted)">Tip: si el menú “Send to notebook” no aparece, revisa aquí el error de <code>rebuildMenus</code> y ejecuta Test host en Options.</div>
     </section>
 
     <div id="result" class="result hidden" role="status"></div>

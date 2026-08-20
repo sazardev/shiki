@@ -2,6 +2,18 @@
 // Handles context menus, keyboard shortcut, and relays to native host.
 
 const NATIVE_HOST = "com.shiki.native";
+const LOG_LIMIT = 200;
+async function addLog(level, action, message, data=null) {
+  const entry = { ts: Date.now(), level, action, message: String(message).slice(0,500), data: data?JSON.stringify(data).slice(0,800):null };
+  try {
+    const { logs=[] } = await chrome.storage.local.get("logs");
+    logs.unshift(entry);
+    if (logs.length>LOG_LIMIT) logs.length=LOG_LIMIT;
+    await chrome.storage.local.set({ logs });
+  } catch {}
+  const fn = level==="error"?console.error:level==="warn"?console.warn:console.log;
+  fn(`[shiki:${action}] ${message}`, data||"");
+}
 
 async function sendToHost(msg) {
   return new Promise((resolve, reject) => {
@@ -12,14 +24,21 @@ async function sendToHost(msg) {
     try {
       chrome.runtime.sendNativeMessage(NATIVE_HOST, msg, (response) => {
         if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
+          const err = new Error(chrome.runtime.lastError.message);
+          addLog("error", msg.action, err.message, msg);
+          reject(err);
         } else if (response === undefined) {
-          reject(new Error("Native host not found or not allowed for this extension ID. Run: ./host/install.sh --extension-id " + chrome.runtime.id + "  (current ID: " + chrome.runtime.id + ")"));
+          const err = new Error("Native host not found or not allowed for this extension ID. Run: ./host/install.sh --extension-id " + chrome.runtime.id + "  (current ID: " + chrome.runtime.id + ")");
+          addLog("error", msg.action, err.message, msg);
+          reject(err);
         } else {
+          if (response?.ok===false) addLog("warn", msg.action, response.error||"host error", msg);
+          else addLog("info", msg.action, "ok", { action: msg.action });
           resolve(response);
         }
       });
     } catch (e) {
+      addLog("error", msg.action, String(e.message||e), msg);
       reject(e);
     }
   });
@@ -93,30 +112,60 @@ async function rebuildContextMenus() {
     contexts: ["all"]
   });
 
-  // Dynamic: Send to notebook → (list from host)
+  // Dynamic: Send to notebook → (list from host) — reliable with retry + logs
+  let notebooksForMenu = [];
   try {
     const res = await sendToHost({ action: "list_notebooks" });
     if (res?.ok && Array.isArray(res.notebooks) && res.notebooks.length) {
-      chrome.contextMenus.create({
-        id: "shiki-to-notebook-parent",
-        parentId: "shiki-parent",
-        title: "Send to notebook",
-        contexts: ["selection", "page", "link"]
-      });
-      for (const nb of res.notebooks) {
-        const label = nb.is_encrypted ? `${nb.name} 🔒` : nb.name;
-        chrome.contextMenus.create({
-          id: `shiki-to-nb::${nb.name}`,
-          parentId: "shiki-to-notebook-parent",
-          title: label,
-          contexts: ["selection", "page", "link"]
-        });
-      }
+      notebooksForMenu = res.notebooks;
+      addLog("info", "rebuildMenus", `built ${res.notebooks.length} notebook submenus`, null);
+    } else {
+      addLog("warn", "rebuildMenus", `list_notebooks empty or not ok: ${res?.error||"empty"}`, res);
     }
   } catch (e) {
-    // Host not ready yet — keep static menus, will retry on next click via fallback
+    addLog("error", "rebuildMenus", `could not build notebook submenus: ${e.message}`, null);
     console.warn("[shiki] could not build notebook submenus", e.message);
   }
+  // Always create parent, even if empty, with placeholder to indicate status
+  chrome.contextMenus.create({
+    id: "shiki-to-notebook-parent",
+    parentId: "shiki-parent",
+    title: notebooksForMenu.length ? "Send to notebook" : "Send to notebook (no host)",
+    contexts: ["selection", "page", "link", "image"]
+  });
+  if (notebooksForMenu.length) {
+    for (const nb of notebooksForMenu) {
+      const label = nb.is_encrypted ? `${nb.name} 🔒` : nb.name;
+      chrome.contextMenus.create({
+        id: `shiki-to-nb::${nb.name}`,
+        parentId: "shiki-to-notebook-parent",
+        title: label,
+        contexts: ["selection", "page", "link", "image"]
+      });
+    }
+  } else {
+    chrome.contextMenus.create({
+      id: "shiki-no-notebooks",
+      parentId: "shiki-to-notebook-parent",
+      title: "No notebooks — check host/logs",
+      enabled: false,
+      contexts: ["selection", "page", "link", "image"]
+    });
+  }
+
+  // Save page extras: bookmark vs article
+  chrome.contextMenus.create({
+    id: "shiki-save-bookmark",
+    parentId: "shiki-parent",
+    title: "Save bookmark",
+    contexts: ["page", "link"]
+  });
+  chrome.contextMenus.create({
+    id: "shiki-save-article",
+    parentId: "shiki-parent",
+    title: "Save article (Reader)",
+    contexts: ["page"]
+  });
 
   chrome.contextMenus.create({
     id: "shiki-settings",
@@ -263,6 +312,39 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const src = info.srcUrl || "";
     const alt = info.selectionText || "image";
     text = src ? `![${alt}](${src})\n\nSource: ${url}` : (info.selectionText || `${title}\n${url}`);
+  } else if (info.menuItemId === "shiki-save-bookmark") {
+    const link = info.linkUrl || url;
+    const linkTitle = info.linkUrl ? (info.selectionText || link) : title;
+    text = `# ${linkTitle}\n\n🔖 Bookmark: [${linkTitle}](${link})\n\nSource: ${url}\nTags: bookmark`;
+    // will add bookmark tag via doCapture tags
+    // Do immediate capture with bookmark tag
+    try {
+      const res = await doCapture({ text, url: link, title: linkTitle, notebook: explicitNotebook, daily });
+      // add bookmark tag manually if not present? doCapture already handles tags from defaults, but we want to ensure bookmark
+      if (res?.ok) { notifyCaptured(res); rebuildContextMenus().catch(()=>{}); }
+      else throw new Error(res?.error||"unknown");
+      return;
+    } catch(e){ console.error(e); addLog("error","bookmark",e.message,null); }
+    return;
+  } else if (info.menuItemId === "shiki-save-article") {
+    // Extract article via content script (Reader mode)
+    if (tab?.id) {
+      try {
+        const article = await new Promise((resolve) => chrome.tabs.sendMessage(tab.id, { action: "extractArticle" }, (r) => resolve(r)));
+        if (article?.text) {
+          text = `# ${article.title || title}\n\n${article.text}\n\nSource: ${url}\n`;
+          if (article.excerpt) text += `\n> ${article.excerpt}\n`;
+          const res = await doCapture({ text, url, title: article.title || title, notebook: explicitNotebook, daily });
+          if (res?.ok) { notifyCaptured(res); rebuildContextMenus().catch(()=>{}); }
+          else throw new Error(res?.error||"unknown");
+          return;
+        } else {
+          text = `${title}\n${url}\n\n(Article extraction failed, saved as bookmark)`;
+        }
+      } catch(e){ addLog("error","article",String(e.message),null); text = `${title}\n${url}\n\n(Extraction error: ${e.message})`; }
+    } else {
+      text = `${title}\n${url}`;
+    }
   } else if (info.menuItemId === "shiki-capture-page") {
     text = info.selectionText ? info.selectionText : `${title}\n${url}`;
   } else if (info.menuItemId === "shiki-capture-daily") {

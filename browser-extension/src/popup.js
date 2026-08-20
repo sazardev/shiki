@@ -38,6 +38,11 @@ const els = {
   searchResults: document.getElementById("search-results"),
   recentList: document.getElementById("recent-list"),
   recentRefresh: document.getElementById("recent-refresh"),
+  logsList: document.getElementById("logs-list"),
+  logsRefresh: document.getElementById("logs-refresh"),
+  logsClear: document.getElementById("logs-clear"),
+  logsExport: document.getElementById("logs-export"),
+  logsCount: document.getElementById("logs-count"),
 };
 
 let notebooksCache = [];
@@ -60,6 +65,7 @@ function switchTab(name) {
   });
   if (name === "recent") loadRecent();
   if (name === "search") els.searchInput?.focus();
+  if (name === "logs") loadLogs();
 }
 
 document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => switchTab(t.dataset.tab)));
@@ -377,6 +383,43 @@ els.searchInput?.addEventListener("input", (e) => {
   searchDebounce = setTimeout(() => doSearch(e.target.value), 250);
 });
 els.recentRefresh?.addEventListener("click", loadRecent);
+
+async function loadLogs() {
+  if (!els.logsList) return;
+  const { logs = [] } = await chrome.storage.local.get("logs");
+  if (els.logsCount) els.logsCount.textContent = logs.length ? `(${logs.length})` : "";
+  if (!logs.length) {
+    els.logsList.innerHTML = '<div class="empty-state">No logs yet — try a capture. Errors from right-click menu appear here.</div>';
+    return;
+  }
+  els.logsList.innerHTML = "";
+  els.logsList.classList.remove("empty");
+  for (const e of logs.slice(0, 50)) {
+    const div = document.createElement("div");
+    div.className = "item";
+    const ts = new Date(e.ts).toLocaleTimeString();
+    const lvl = e.level === "error" ? "🔴" : e.level === "warn" ? "🟡" : "🟢";
+    div.innerHTML = `<div class="item-meta">${lvl} ${ts} — ${escapeHtml(e.action)}</div><div class="item-title" style="font-weight:400; font-family: ui-monospace, monospace; font-size:11px; white-space:pre-wrap; word-break:break-all">${escapeHtml(e.message)}${e.data ? "\n" + escapeHtml(e.data.slice(0,200)) : ""}</div>`;
+    els.logsList.appendChild(div);
+  }
+}
+els.logsRefresh?.addEventListener("click", loadLogs);
+els.logsClear?.addEventListener("click", async () => {
+  await chrome.storage.local.set({ logs: [] });
+  loadLogs();
+  showResult(true, "Logs cleared");
+});
+els.logsExport?.addEventListener("click", async () => {
+  const { logs = [] } = await chrome.storage.local.get("logs");
+  const blob = new Blob([JSON.stringify(logs, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  chrome.downloads?.download?.({ url, filename: `shiki-logs-${new Date().toISOString().slice(0,10)}.json` }, () => {
+    if (chrome.runtime.lastError) {
+      // fallback: copy to clipboard
+      navigator.clipboard.writeText(JSON.stringify(logs, null, 2)).then(()=> showResult(true,"Logs copied to clipboard"), ()=> showResult(false, "Export failed"));
+    } else showResult(true, "Logs exported");
+  }) || navigator.clipboard.writeText(JSON.stringify(logs, null, 2)).then(()=> showResult(true,"Logs copied"), ()=>{});
+});
 document.getElementById("copy-only")?.addEventListener("click", async () => {
   const text = els.text.value.trim();
   if (!text) { showResult(false, "Nothing to copy"); return; }

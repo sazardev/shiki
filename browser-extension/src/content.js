@@ -47,6 +47,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     } catch {}
     const md = html ? htmlToMarkdown(html) : "";
     sendResponse({ text: text.trim(), html, markdown: md });
+  } else if (msg.action === "extractArticle") {
+    try {
+      // Simple Reader: remove scripts/styles/nav, find largest text block
+      const docClone = document.cloneNode(true);
+      docClone.querySelectorAll("script, style, nav, header, footer, aside, noscript, iframe, .ad, .ads").forEach(el=>el.remove());
+      let article = docClone.querySelector("article") || docClone.querySelector("main") || docClone.body;
+      // If body, try to find densest container
+      if (article === docClone.body) {
+        let best = null, bestScore = 0;
+        const candidates = docClone.querySelectorAll("div, section, article");
+        for (const c of candidates) {
+          const txt = c.innerText || "";
+          const score = txt.length - (c.querySelectorAll("a").length * 20);
+          if (score > bestScore && txt.length > 200) { bestScore = score; best = c; }
+        }
+        if (best) article = best;
+      }
+      const title = document.title || "";
+      const byline = docClone.querySelector('meta[name="author"]')?.content || "";
+      const excerpt = (article.innerText || "").trim().slice(0, 300);
+      const md = htmlToMarkdown(article.innerHTML);
+      sendResponse({ title, text: md.slice(0, 8000), excerpt, byline, length: md.length });
+    } catch(e){ sendResponse({ title: document.title, text: document.body.innerText.slice(0,8000), excerpt: "", error: String(e) }); }
+    return true;
   } else if (msg.action === "getPageInfo") {
     const sel = window.getSelection()?.toString() || "";
     sendResponse({ url: location.href, title: document.title, selection: sel.trim(), html: document.documentElement.outerHTML.slice(0, 5000) });
