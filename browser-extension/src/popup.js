@@ -23,6 +23,9 @@ const els = {
   hint: document.getElementById("selection-hint"),
   configPath: document.getElementById("config-path"),
   saveDefaults: document.getElementById("save-defaults"),
+  quickSelection: document.getElementById("quick-selection"),
+  quickPage: document.getElementById("quick-page"),
+  openHelp: document.getElementById("open-help"),
 };
 
 let notebooksCache = [];
@@ -32,17 +35,22 @@ async function refreshStatus() {
   if (!res || res.ok === false) {
     els.status.textContent = "host not installed";
     els.status.className = "status err";
-    showResult(false, res?.error || "Native host not reachable. Run host/install.sh");
+    showResult(false, res?.error || "Native host not reachable. Run host/install.sh --extension-id " + (chrome.runtime.id || ""));
     return;
   }
   if (res.daemon?.reachable) {
-    els.status.textContent = res.daemon.enabled ? "daemon: on" : "daemon: off (fallback)";
+    els.status.textContent = res.daemon.enabled ? "daemon: on" : "daemon: off";
     els.status.className = res.daemon.enabled ? "status ok" : "status warn";
+    els.status.title = res.daemon.enabled ? "TUI daemon is handling captures live" : "Captures will be written directly to disk";
   } else {
-    els.status.textContent = "daemon: not running";
+    els.status.textContent = "daemon: off";
     els.status.className = "status warn";
+    els.status.title = "No TUI daemon — capture still works, just not live";
   }
-  if (res.config?.config_path) els.configPath.textContent = res.config.config_path;
+  if (res.config?.config_path) {
+    els.configPath.textContent = res.config.config_path.replace(/^.*\/shiki\//, "shiki/");
+    els.configPath.title = res.config.config_path;
+  }
 }
 
 async function loadNotebooks() {
@@ -85,10 +93,8 @@ async function loadFolders() {
       els.folder.appendChild(opt);
     }
   }
-  // restore saved folder if it belongs to this notebook
   const stored = await chrome.storage.sync.get(["defaultFolder"]);
   if (stored.defaultFolder) {
-    // if custom path matches an option, select it, else put in custom input
     const exists = [...els.folder.options].some(o => o.value === stored.defaultFolder);
     if (exists) els.folder.value = stored.defaultFolder;
     else { els.folder.value = ""; els.folderCustom.value = stored.defaultFolder; }
@@ -115,7 +121,6 @@ async function doCapture() {
   els.capture.textContent = "Capturing…";
   els.result.classList.add("hidden");
 
-  // try to enrich with page url/title
   let url, title;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -128,15 +133,15 @@ async function doCapture() {
   els.capture.textContent = "Capture";
 
   if (res?.ok) {
-    showResult(true, `${res.via_daemon ? "captured (daemon): " : "captured: "}${res.path}`);
-    // keep text for quick edits, but select it for next capture
+    showResult(true, `${res.via_daemon ? "captured (daemon): " : "captured: "}${res.path.split("/").slice(-2).join("/")}`);
     els.text.select();
+    // Let background rebuild notebook submenus if a new notebook was created
+    chrome.runtime.sendMessage({ action: "rebuildMenus" }, () => void chrome.runtime.lastError);
   } else {
     showResult(false, res?.error || "Capture failed");
   }
 }
 
-// Prefill from selection / page
 async function prefillFromTab() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -150,6 +155,43 @@ async function prefillFromTab() {
       }
     });
   } catch {}
+}
+
+async function fillSelection() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return;
+    chrome.tabs.sendMessage(tab.id, { action: "getSelection" }, (resp) => {
+      if (chrome.runtime.lastError) {
+        showResult(false, "Could not read selection — reload the page and try again");
+        return;
+      }
+      const sel = resp?.text?.trim() || "";
+      if (sel) {
+        els.text.value = sel;
+        els.text.focus();
+        els.hint.classList.remove("hidden");
+      } else {
+        showResult(false, "No selection on this page");
+        setTimeout(()=> els.result.classList.add("hidden"), 1500);
+      }
+    });
+  } catch (e) {
+    showResult(false, String(e.message));
+  }
+}
+
+async function fillPage() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url) return;
+    els.text.value = `${tab.title || ""}\n${tab.url}`.trim();
+    els.text.focus();
+    els.hint.textContent = "↳ Page info prefilled";
+    els.hint.classList.remove("hidden");
+  } catch (e) {
+    showResult(false, String(e.message));
+  }
 }
 
 // Events
@@ -169,6 +211,12 @@ els.saveDefaults.addEventListener("click", async () => {
   });
   showResult(true, "Defaults saved");
   setTimeout(()=> els.result.classList.add("hidden"), 1500);
+});
+els.quickSelection?.addEventListener("click", fillSelection);
+els.quickPage?.addEventListener("click", fillPage);
+els.openHelp?.addEventListener("click", (e) => {
+  e.preventDefault();
+  chrome.tabs.create({ url: "https://sazardev.github.io/shiki/documentation.html" });
 });
 
 // Init

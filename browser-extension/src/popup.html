@@ -9,45 +9,62 @@
 <body>
   <div id="app">
     <header>
-      <div class="logo">私 Shiki</div>
-      <div id="daemon-status" class="status">checking…</div>
+      <div class="brand">
+        <img src="../icons/icon32.png" alt="Shiki" class="brand-icon" width="20" height="20" />
+        <span class="brand-name">Shiki</span>
+        <span class="brand-kanji">私記</span>
+      </div>
+      <div id="daemon-status" class="status" title="Capture daemon status">checking…</div>
     </header>
 
-    <label for="notebook">Notebook</label>
-    <div class="row">
-      <select id="notebook"></select>
-      <button id="refresh" title="Refresh notebooks">↻</button>
+    <div class="quick-row">
+      <button id="quick-selection" class="ghost" title="Capture current selection instantly">✦ Capture selection</button>
+      <button id="quick-page" class="ghost" title="Capture current page title + URL">⎙ Capture page</button>
     </div>
 
-    <label for="folder">Folder <span class="muted">(optional, e.g. work/meetings)</span></label>
-    <div class="row">
-      <select id="folder"></select>
-      <input id="folder-custom" placeholder="or type custom path" />
+    <div class="field">
+      <label for="notebook">Notebook</label>
+      <div class="row">
+        <select id="notebook"></select>
+        <button id="refresh" title="Refresh notebooks" aria-label="Refresh">↻</button>
+      </div>
     </div>
 
-    <label for="tags">Tags <span class="muted">(comma separated)</span></label>
-    <input id="tags" placeholder="work, idea" />
+    <div class="field">
+      <label for="folder">Folder <span class="muted">— optional</span></label>
+      <div class="row">
+        <select id="folder"></select>
+        <input id="folder-custom" placeholder="custom: work/meetings" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="tags">Tags <span class="muted">— comma separated</span></label>
+      <input id="tags" placeholder="work, idea" />
+    </div>
 
     <label class="checkbox">
       <input type="checkbox" id="daily" />
-      Append to today's daily note (<code>--daily</code>)
+      <span>Append to today's daily note</span>
     </label>
 
-    <label for="text">Note</label>
-    <textarea id="text" placeholder="Quick idea…  Tip: 'work: call Ana' routes to notebook work automatically if you leave notebook on default."></textarea>
-    <div id="selection-hint" class="hint hidden">Selection from page prefilled ↓</div>
-
-    <div class="actions">
-      <button id="capture" class="primary">Capture <span class="kbd">Ctrl+Enter</span></button>
-      <button id="save-defaults" title="Save notebook/folder/tags/daily as defaults">Save defaults</button>
+    <div class="field">
+      <label for="text">Note <span class="muted">— Tip: “work: call Ana” routes automatically</span></label>
+      <textarea id="text" placeholder="Quick idea…"></textarea>
+      <div id="selection-hint" class="hint hidden">↳ Selection from page prefilled</div>
     </div>
 
-    <div id="result" class="result hidden"></div>
+    <div class="actions">
+      <button id="capture" class="primary">Capture <span class="kbd">↵</span></button>
+      <button id="save-defaults" title="Save as defaults for next time">Remember</button>
+    </div>
+
+    <div id="result" class="result hidden" role="status"></div>
 
     <footer>
-      <a href="#" id="open-options">Options</a>
-      <span class="muted">·</span>
-      <span id="config-path" class="muted"></span>
+      <span id="config-path" class="muted mono" title="Config path"></span>
+      <span class="spacer"></span>
+      <a href="#" id="open-help" title="Open Shiki docs">Docs</a>
     </footer>
   </div>
   <script src="popup.js"></script>
