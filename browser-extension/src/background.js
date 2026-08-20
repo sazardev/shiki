@@ -5,10 +5,17 @@ const NATIVE_HOST = "com.shiki.native";
 
 async function sendToHost(msg) {
   return new Promise((resolve, reject) => {
+    if (typeof chrome.runtime.sendNativeMessage !== "function") {
+      reject(new Error("chrome.runtime.sendNativeMessage is not available — missing 'nativeMessaging' permission? Check manifest.json and reload extension. Manifest permissions: " + JSON.stringify(chrome.runtime.getManifest().permissions)));
+      return;
+    }
     try {
       chrome.runtime.sendNativeMessage(NATIVE_HOST, msg, (response) => {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
+        } else if (response === undefined) {
+          // Host not found or manifest missing for this extension ID
+          reject(new Error("Native host not found or not allowed for this extension ID. Run: ./host/install.sh --extension-id " + chrome.runtime.id + "  (current ID: " + chrome.runtime.id + ")"));
         } else {
           resolve(response);
         }

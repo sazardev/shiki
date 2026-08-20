@@ -3,7 +3,7 @@
   "name": "Shiki Capture",
   "version": "0.1.0",
   "description": "Quick capture to Shiki notebooks — save selection, page, or quick note instantly. Talks to your local Shiki via native host.",
-  "permissions": ["storage", "contextMenus", "activeTab", "scripting"],
+  "permissions": ["storage", "contextMenus", "activeTab", "scripting", "nativeMessaging", "notifications"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_title": "Shiki Capture",
