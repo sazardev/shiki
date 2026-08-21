@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="gruvbox-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — shiki (私記)</title>
+  <meta name="description" content="Privacy policy for shiki and the Shiki Capture browser extension. No data collection, no tracking, everything stays on your machine." />
+  <link rel="canonical" href="https://sazardev.github.io/shiki/privacy.html" />
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 16px/1.7 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 720px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 1.8rem; } h2 { margin-top: 2rem; }
+    a { color: #7aa2f7; }
+    .updated { color: #888; font-size: 0.9rem; }
+    ul { padding-left: 1.4rem; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy — shiki (私記)</h1>
+  <p class="updated">Last updated: August 2026</p>
+
+  <h2>Short version</h2>
+  <p><strong>We collect nothing.</strong> shiki is a local-first note-taking app. Your notes never leave your machine unless you push them to a git remote you configured yourself.</p>
+
+  <h2>shiki (TUI/CLI app)</h2>
+  <ul>
+    <li>All notes are plain Markdown files stored in your own filesystem (<code>~/.local/share/shiki</code> or a directory you configure).</li>
+    <li>Git sync uses remotes <em>you</em> configure (GitHub, GitLab, a bare repo on your NAS…). We never see or proxy that traffic.</li>
+    <li>No telemetry, no analytics, no crash reporting, no accounts.</li>
+  </ul>
+
+  <h2>Shiki Capture browser extension</h2>
+  <ul>
+    <li><strong>Data collected:</strong> none. Nothing is transmitted to us or any third party.</li>
+    <li><strong>Local storage:</strong> the extension stores your preferences (default notebook, folder, tags, per-domain rules) in <code>chrome.storage.sync</code>, and an offline capture queue plus diagnostic logs in <code>chrome.storage.local</code>. This data stays in your browser profile.</li>
+    <li><strong>Captures:</strong> text/pages/images you explicitly send are written by a companion native host (<code>shiki-native-host</code>, open source) directly into your local notebooks folder on disk. The host only accepts connections from <code>127.0.0.1</code>.</li>
+    <li><strong>Content script access:</strong> the extension reads page selection/title/URL only when <em>you</em> trigger a capture (right-click menu, popup, or keyboard shortcut). It does not browse, scrape, or report anything in the background.</li>
+    <li><strong>Permissions used:</strong> <code>storage</code> (preferences), <code>contextMenus</code> (right-click actions), <code>activeTab</code>/<code>scripting</code> (read selection of the tab you act on), <code>nativeMessaging</code> (talk to the local host), <code>notifications</code> (capture feedback). <code>downloads</code> is optional and only used to export your own logs.</li>
+  </ul>
+
+  <h2>Third parties</h2>
+  <p>None. No CDNs, no fonts fetched at runtime by the extension, no remote code. The marketing site loads Google Fonts, but the app and extension do not.</p>
+
+  <h2>Contact</h2>
+  <p>Questions or requests: <a href="https://github.com/sazardev/shiki/issues">github.com/sazardev/shiki/issues</a></p>
+
+  <p><a href="index.html">← back to shiki</a></p>
+</body>
+</html>
