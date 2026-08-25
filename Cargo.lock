@@ -3830,6 +3830,7 @@ name = "shiki-cli"
 version = "0.9.2"
 dependencies = [
  "anyhow",
+ "arboard",
  "chrono",
  "clap",
  "crossterm",

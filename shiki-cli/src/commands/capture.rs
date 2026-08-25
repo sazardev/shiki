@@ -12,7 +12,7 @@ use super::unlock_if_encrypted;
 /// capture.rs`) — `OK <payload>` or `ERR <message>`. What `<payload>`
 /// means depends on which request was sent: a note path for `CAPTURE`/
 /// `UNDO`, or `enabled`/`disabled` for `PING`.
-enum DaemonResponse {
+pub(crate) enum DaemonResponse {
     Ok(String),
     Err(String),
 }
@@ -36,12 +36,17 @@ fn parse_response_line(line: &str) -> Option<DaemonResponse> {
 /// minimal two-line request. `notebook` is only sent when the caller
 /// explicitly passed `-n` — omitting it lets the daemon apply its own
 /// content-prefix routing/`default_notebook` fallback instead.
+#[allow(clippy::too_many_arguments)]
 fn build_capture_request(
     text: &str,
     daily: bool,
     tags: &[String],
     notebook: Option<&str>,
     folder: Option<&str>,
+    template: Option<&str>,
+    url: Option<&str>,
+    title: Option<&str>,
+    source: Option<&str>,
 ) -> String {
     let mut req = String::from("CAPTURE\n");
     if daily {
@@ -56,9 +61,51 @@ fn build_capture_request(
     if let Some(folder) = folder {
         req.push_str(&format!("folder={folder}\n"));
     }
+    if let Some(template) = template {
+        req.push_str(&format!("template={template}\n"));
+    }
+    if let Some(url) = url {
+        req.push_str(&format!("url={url}\n"));
+    }
+    if let Some(title) = title {
+        req.push_str(&format!("title={title}\n"));
+    }
+    if let Some(source) = source {
+        req.push_str(&format!("source={source}\n"));
+    }
     req.push('\n');
     req.push_str(text);
     req
+}
+
+pub(crate) fn with_source(text: &str, url: Option<&str>, title: Option<&str>) -> String {
+    let Some(url) = url.filter(|s| !s.is_empty()) else {
+        return text.to_string();
+    };
+    if text.contains(url) {
+        return text.to_string();
+    }
+    if let Some(title) = title.filter(|t| !t.is_empty()) {
+        format!("{text}\n\nSource: [{title}]({url})")
+    } else {
+        format!("{text}\n\nSource: {url}")
+    }
+}
+
+fn read_clipboard_text() -> Result<String> {
+    let mut cb = arboard::Clipboard::new().context("could not open clipboard (no display?)")?;
+    let text = cb.get_text().context("clipboard has no text")?;
+    if text.trim().is_empty() {
+        anyhow::bail!("clipboard is empty");
+    }
+    Ok(text)
+}
+
+fn validate_no_newline(value: &str, field: &str) -> Result<()> {
+    if value.contains('\n') || value.contains('\r') {
+        anyhow::bail!("{field} must not contain newline");
+    }
+    Ok(())
 }
 
 /// Captures a quick note. Tries a running TUI's capture daemon first — if
@@ -83,6 +130,14 @@ pub fn run(
     check: bool,
     undo: bool,
     folder: Option<String>,
+    template: Option<String>,
+    url: Option<String>,
+    title: Option<String>,
+    clip: bool,
+    source: Option<String>,
+    voice: bool,
+    seconds: u32,
+    model: &str,
 ) -> Result<()> {
     if check {
         return run_check(json);
@@ -91,18 +146,76 @@ pub fn run(
         return run_undo(json);
     }
 
-    let text = match text {
-        Some(t) => t,
-        None => {
-            let mut buf = String::new();
-            std::io::stdin()
-                .read_to_string(&mut buf)
-                .context("failed to read capture text from stdin")?;
-            buf
+    // Guard against header injection — daemon protocol is \n-delimited
+    if let Some(t) = &template {
+        validate_no_newline(t, "template")?;
+        if t.contains('/') || t.contains('\\') || t.contains('.') {
+            anyhow::bail!("invalid template: must be a plain name");
+        }
+    }
+    if let Some(u) = &url {
+        validate_no_newline(u, "url")?;
+    }
+    if let Some(t) = &title {
+        validate_no_newline(t, "title")?;
+    }
+    if let Some(s) = &source {
+        validate_no_newline(s, "source")?;
+    }
+    if let Some(nb) = &notebook {
+        validate_no_newline(nb, "notebook")?;
+    }
+    if let Some(f) = &folder {
+        validate_no_newline(f, "folder")?;
+    }
+    for t in tags {
+        validate_no_newline(t, "tag")?;
+    }
+
+    // `--voice`: record + transcribe locally first, then treat the
+    // transcript as the capture text (source defaults to "voice").
+    let voice_text = if voice {
+        if text.is_some() || clip {
+            anyhow::bail!("--voice cannot be combined with a positional text argument or --clip");
+        }
+        Some(shiki_core::voice::capture_transcript(
+            &store.root.join("bin"),
+            seconds,
+            model,
+        )?)
+    } else {
+        None
+    };
+    let source = source.or_else(|| voice.then(|| "voice".to_string()));
+
+    let raw_text = if let Some(vt) = voice_text {
+        vt
+    } else if clip {
+        read_clipboard_text()?
+    } else {
+        match text {
+            Some(t) => t,
+            None => {
+                let mut buf = String::new();
+                std::io::stdin()
+                    .read_to_string(&mut buf)
+                    .context("failed to read capture text from stdin")?;
+                buf
+            }
         }
     };
 
-    let request = build_capture_request(&text, daily, tags, notebook.as_deref(), folder.as_deref());
+    let request = build_capture_request(
+        &raw_text,
+        daily,
+        tags,
+        notebook.as_deref(),
+        folder.as_deref(),
+        template.as_deref(),
+        url.as_deref(),
+        title.as_deref(),
+        source.as_deref(),
+    );
     match try_daemon(&request) {
         Some(DaemonResponse::Ok(path)) => {
             print_capture_result(&path, true, daily, json);
@@ -117,17 +230,54 @@ pub fn run(
         }
     }
 
+    let (path, daily) = perform_direct_capture(
+        store, config, notebook, &raw_text, tags, daily, folder, template, url, title, true,
+    )?;
+    print_capture_result(&path.display().to_string(), false, daily, json);
+    Ok(())
+}
+
+/// The direct-disk fallback for `shiki capture` — the exact same
+/// note-creation path the daemon-less path always took, factored out so
+/// the standalone `shiki daemon` (headless) handler reuses it instead of
+/// duplicating it. Resolves the target notebook (explicit `-n` >
+/// content-prefix routing > `default_notebook`), appends the `Source:`
+/// footer, and writes through `capture_into_daily`/`capture_into_templated`/
+/// `capture_into_new_note`. `interactive` controls the encrypted-notebook
+/// case: `true` (a human at a terminal) prompts for the passphrase, `false`
+/// (a background daemon) replies `locked:` instead.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn perform_direct_capture(
+    store: &NotebookStore,
+    config: &Config,
+    notebook: Option<String>,
+    raw_text: &str,
+    tags: &[String],
+    daily: bool,
+    folder: Option<String>,
+    template: Option<String>,
+    url: Option<String>,
+    title: Option<String>,
+    interactive: bool,
+) -> Result<(std::path::PathBuf, bool)> {
     let existing_notebooks: Vec<String> = store
         .list()
         .unwrap_or_default()
         .into_iter()
         .map(|nb| nb.name)
         .collect();
-    let (target, text) = match notebook.as_deref() {
-        Some(name) => (name.to_string(), text.as_str()),
-        None => shiki_core::notebook::route_by_prefix(&text, &existing_notebooks)
-            .unwrap_or_else(|| (config.general.default_notebook.clone(), &text)),
+    let (target, body_owned) = match notebook.as_deref() {
+        Some(name) => (name.to_string(), raw_text.to_string()),
+        None => shiki_core::notebook::route_by_prefix(raw_text, &existing_notebooks)
+            .map(|(n, t)| (n, t.to_string()))
+            .unwrap_or_else(|| {
+                (
+                    config.general.default_notebook.clone(),
+                    raw_text.to_string(),
+                )
+            }),
     };
+    let text = with_source(&body_owned, url.as_deref(), title.as_deref());
 
     let nb = match store.get(&target) {
         Ok(nb) => nb,
@@ -135,18 +285,69 @@ pub fn run(
             .create(&target)
             .with_context(|| format!("could not create notebook '{target}'"))?,
     };
-    let nb = unlock_if_encrypted(config, nb)?;
+    let nb = if config.encrypt_for(&target) {
+        if !interactive {
+            anyhow::bail!(
+                "locked: notebook '{target}' is encrypted and locked \u{2014} unlock it in the TUI \
+                 or run `shiki capture` from a terminal instead"
+            );
+        }
+        unlock_if_encrypted(config, nb)?
+    } else {
+        nb
+    };
 
     let (path, record) = if daily {
-        capture_into_daily(store, config, &nb, text)?
+        capture_into_daily(store, config, &nb, &text)?
+    } else if let Some(tmpl) = template.as_deref().filter(|s| !s.is_empty()) {
+        capture_into_templated(&nb, &text, tags, folder.as_deref(), tmpl)?
     } else {
-        capture_into_new_note(&nb, text, tags, folder.as_deref())?
+        capture_into_new_note(&nb, &text, tags, folder.as_deref())?
     };
     if let Ok(record_path) = Config::default_last_capture_path() {
         let _ = record.save(&record_path);
     }
-    print_capture_result(&path.display().to_string(), false, daily, json);
-    Ok(())
+    Ok((path, daily))
+}
+
+fn capture_into_templated(
+    nb: &shiki_core::Notebook,
+    text: &str,
+    tags: &[String],
+    folder: Option<&str>,
+    template_name: &str,
+) -> Result<(std::path::PathBuf, LastCapture)> {
+    let templates_dir = Config::default_templates_dir()?;
+    let tmpl = shiki_core::Template::load(&templates_dir, template_name)
+        .map_err(|_| anyhow::anyhow!("template '{template_name}' not found"))?;
+    let title = format!("Capture {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
+    let mut vars = std::collections::HashMap::new();
+    vars.insert("title", title.clone());
+    vars.insert("date", chrono::Local::now().format("%Y-%m-%d").to_string());
+    vars.insert("body", text.to_string());
+    vars.insert("notebook", nb.name.clone());
+    let rendered = tmpl.render(&vars);
+    let body = if rendered.contains(text) {
+        rendered
+    } else {
+        format!("{rendered}\n{text}\n")
+    };
+    let mut note = match folder {
+        Some(folder) if !folder.is_empty() => {
+            let relative = shiki_core::notebook::validate_relative_path(folder)?;
+            nb.create_note_in(&relative, &title, body)?
+        }
+        _ => nb.create_note(&title, body)?,
+    };
+    if !tags.is_empty() {
+        note.frontmatter.tags = tags.to_vec();
+        note.save_with_crypto(nb.crypto.as_ref())?;
+    }
+    let record = LastCapture::Note {
+        notebook: nb.name.clone(),
+        path: note.path.display().to_string(),
+    };
+    Ok((note.path, record))
 }
 
 fn capture_into_new_note(
@@ -251,13 +452,34 @@ fn run_undo(json: bool) -> Result<()> {
 }
 
 fn run_undo_standalone(json: bool) -> Result<()> {
+    match perform_direct_undo(true) {
+        Ok(path) => {
+            print_undo_result(&path.display().to_string(), false, json);
+            Ok(())
+        }
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("nothing to undo") {
+                if json {
+                    println!(r#"{{"undone": false, "error": "nothing to undo"}}"#);
+                } else {
+                    println!("nothing to undo");
+                }
+            }
+            Err(e)
+        }
+    }
+}
+
+/// Reverses the single most recent capture directly (no daemon): moves a
+/// plain note to trash, or strips the bullet back off a `--daily` append —
+/// the shared implementation used by `shiki capture --undo`'s fallback and
+/// the headless `shiki daemon`. `interactive` controls the encrypted-
+/// notebook case like `perform_direct_capture`: a terminal prompts for the
+/// passphrase, a background daemon returns `locked:` instead.
+pub(crate) fn perform_direct_undo(interactive: bool) -> Result<std::path::PathBuf> {
     let record_path = Config::default_last_capture_path()?;
     let Some(record) = LastCapture::load(&record_path) else {
-        if json {
-            println!(r#"{{"undone": false, "error": "nothing to undo"}}"#);
-        } else {
-            println!("nothing to undo");
-        }
         anyhow::bail!("nothing to undo");
     };
 
@@ -285,7 +507,18 @@ fn run_undo_standalone(json: bool) -> Result<()> {
                 .with_context(|| format!("could not move '{path}' to trash"))?;
         }
         LastCapture::DailyAppend { path, appended, .. } => {
-            let nb = unlock_if_encrypted(&config, nb)?;
+            let encrypted = config.encrypt_for(&notebook);
+            let nb = if encrypted {
+                if !interactive {
+                    anyhow::bail!(
+                        "locked: notebook '{notebook}' is encrypted and locked \u{2014} unlock it \
+                         in the TUI or run `shiki capture` from a terminal instead"
+                    );
+                }
+                unlock_if_encrypted(&config, nb)?
+            } else {
+                nb
+            };
             let mut note = shiki_core::Note::from_file_in_notebook_with_crypto(
                 std::path::Path::new(path),
                 &notebook,
@@ -302,8 +535,7 @@ fn run_undo_standalone(json: bool) -> Result<()> {
     }
 
     LastCapture::clear(&record_path);
-    print_undo_result(&path, false, json);
-    Ok(())
+    Ok(std::path::PathBuf::from(path))
 }
 
 fn format_undo_result(path: &str, via_daemon: bool, json: bool) -> String {
@@ -354,8 +586,9 @@ fn format_check_result(reachable: bool, enabled: bool, json: bool) -> String {
 /// `None` means "nothing to connect to" (no port file, unparsable
 /// content, connection refused/timed out) — the caller treats that
 /// identically to "daemon disabled". `Some` means the daemon actually
-/// answered and its response must be respected.
-fn try_daemon(request: &str) -> Option<DaemonResponse> {
+/// answered and its response must be respected. `pub(crate)` so `shiki
+/// doctor` can report daemon reachability the same way `--check` does.
+pub(crate) fn try_daemon(request: &str) -> Option<DaemonResponse> {
     let port_path = Config::default_capture_port_path().ok()?;
     let contents = std::fs::read_to_string(port_path).ok()?;
     let port = parse_port_file(&contents)?;
@@ -412,7 +645,7 @@ mod tests {
     #[test]
     fn build_capture_request_omits_absent_headers() {
         assert_eq!(
-            build_capture_request("buy milk", false, &[], None, None),
+            build_capture_request("buy milk", false, &[], None, None, None, None, None, None),
             "CAPTURE\n\nbuy milk"
         );
     }
@@ -421,9 +654,36 @@ mod tests {
     fn build_capture_request_includes_every_header_when_given() {
         let tags = vec!["work".to_string(), "idea".to_string()];
         assert_eq!(
-            build_capture_request("buy milk", true, &tags, Some("work"), Some("work/meetings")),
-            "CAPTURE\ndaily=1\ntags=work,idea\nnotebook=work\nfolder=work/meetings\n\nbuy milk"
+            build_capture_request(
+                "buy milk",
+                true,
+                &tags,
+                Some("work"),
+                Some("work/meetings"),
+                Some("meeting"),
+                Some("https://example.com"),
+                Some("Example"),
+                Some("browser")
+            ),
+            "CAPTURE\ndaily=1\ntags=work,idea\nnotebook=work\nfolder=work/meetings\ntemplate=meeting\nurl=https://example.com\ntitle=Example\nsource=browser\n\nbuy milk"
         );
+    }
+
+    #[test]
+    fn with_source_appends_url_and_title() {
+        assert_eq!(
+            with_source("hello", Some("https://x.com"), Some("X")),
+            "hello\n\nSource: [X](https://x.com)"
+        );
+        assert_eq!(
+            with_source("hello", Some("https://x.com"), None),
+            "hello\n\nSource: https://x.com"
+        );
+        assert_eq!(
+            with_source("hello https://x.com world", Some("https://x.com"), None),
+            "hello https://x.com world"
+        );
+        assert_eq!(with_source("hello", None, None), "hello");
     }
 
     #[test]

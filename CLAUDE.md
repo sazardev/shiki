@@ -1626,8 +1626,8 @@ child inherits the parent's now-restored-to-normal terminal and does its own com
 `enable_raw_mode`/`EnterAlternateScreen` startup — from the user's perspective it just looks like
 shiki restarted itself onto the new version.
 
-**`shiki capture "text"` (`shiki-cli/src/commands/capture.rs`) plus the optional in-TUI capture
-daemon (`shiki-tui/src/capture.rs`, `general.enable_capture_daemon`, off by default) exist so
+**`shiki capture "text"` (`shiki-cli/src/commands/capture.rs`) plus the in-TUI capture
+daemon (`shiki-tui/src/capture.rs`, `general.enable_capture_daemon`, on by default) exist so
 external launchers — rofi/waybar/polybar, Raycast/Alfred, AutoHotkey, a bare OS hotkey — have one
 command to shell out to for near-instant note capture, with or without a TUI open.** `shiki
 capture` itself never depends on the daemon: it always falls all the way back to a direct
@@ -1635,6 +1635,26 @@ capture` itself never depends on the daemon: it always falls all the way back to
 creating the target notebook if missing) when nothing answers. The daemon only exists to make an
 *already-running* TUI find out about a capture immediately instead of only picking it up on the
 next manual reload.
+
+**The same daemon transport can run headless via `shiki daemon`** (`shiki-cli/src/commands/
+daemon.rs`) — it calls the *same* `spawn_capture_daemon` from `shiki-tui/src/capture.rs` (the
+module and its `CaptureRequest`/`RequestKind`/`CaptureReply`/`spawn_capture_daemon` are `pub`
+specifically for this) and handles each request by reusing `commands/capture.rs`'s
+`perform_direct_capture`/`perform_direct_undo` with `interactive = false`, so an encrypted-locked
+notebook replies `locked:` instead of prompting a background process. Every request is appended to
+the shared `shiki.log`. `shiki capture` can't tell a TUI daemon from a headless one — same port
+file, same wire protocol. One consequence: `perform_direct_capture`/`perform_direct_undo` are the
+single shared implementations of the "direct disk write" path used by both `shiki capture`'s
+fallback (interactive = true) and the headless daemon (interactive = false) — don't fork them.
+
+**`shiki capture --voice` lives in `shiki-core/src/voice.rs`** — records `--seconds` of mic audio
+(`arecord` → `ffmpeg` → `sox`, each attempt watchdog-timed via `run_with_timeout` so a missing
+audio device fails fast instead of hanging on `ffmpeg -f pulse`; on Linux the `ffmpeg` attempt is
+skipped entirely when no pulse/pipewire socket exists) and transcribes locally with `whisper-cli`
+(whisper.cpp), auto-fetched from ggml-org/whisper.cpp's release like `publish::ensure_binary` (the
+release asset is the full `whisper-bin-ubuntu-x64.tar.gz` name so `self_update` doesn't match
+`whisper-blas-bin-*.zip`), with the model (`ggml-*.bin`) downloaded once via `curl`/`wget` from
+Hugging Face into `{data_dir}/bin/models/`. `shiki doctor` reports recorder/whisper availability.
 
 **Transport is a TCP loopback socket (`127.0.0.1`, OS-assigned ephemeral port), not a Unix domain
 socket** — the deciding factor was that shiki genuinely ships and CI-tests Windows binaries

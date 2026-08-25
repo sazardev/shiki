@@ -39,11 +39,11 @@ pub struct General {
     /// When true, the TUI listens on a local TCP loopback port
     /// (`Config::default_capture_port_path` records which one) so external
     /// `shiki capture "text"` invocations land in this running instance
-    /// live instead of only writing to disk unnoticed. Off by default —
+    /// live instead of only writing to disk unnoticed. On by default —
     /// `shiki capture` itself always works regardless of this setting; it
     /// only controls whether an already-open TUI finds out about it
     /// immediately.
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub enable_capture_daemon: bool,
     /// When true, click-and-drag over a note's body in PREVIEW selects text
     /// and copies it to the clipboard (OSC 52) on release. Defaults to
@@ -199,7 +199,7 @@ impl Default for General {
             editor: default_editor(),
             daily_template: default_daily_template(),
             use_favorite_editor: false,
-            enable_capture_daemon: false,
+            enable_capture_daemon: true,
             mouse_drag_selection: true,
             data_dir: None,
             show_hints: true,
@@ -1615,7 +1615,7 @@ fn section_comment(line: &str) -> Option<&'static str> {
 #   instead selects text and copies it to the clipboard on release.
 # - enable_capture_daemon: when true, an already-running TUI listens on a
 #   local loopback port so external `shiki capture \"text\"` invocations land
-#   in it live instead of only writing to disk unnoticed. Off by default;
+#   in it live instead of only writing to disk unnoticed. On by default;
 #   `shiki capture` itself always works regardless.
 # - data_dir: optional path override for the notebooks directory. Point this
 #   at an existing Obsidian vault or any markdown folder to use it as the

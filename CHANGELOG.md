@@ -60,6 +60,29 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   display aliases preserved when they differ from the target's name, and
   CSV databases plus non-markdown assets are counted and reported as
   skipped. Accepts the raw `.zip` or an already-extracted directory.
+- **OS Capture supreme — `shiki capture` as system daemon**: `general.enable_capture_daemon` is now
+  **on by default** (was off), so a running TUI is live by construction. The capture wire protocol
+  gains `template=`, `url=`, `title=`, `source=` headers; the daemon (`shiki-tui/src/capture.rs`)
+  centralizes `Source: [title](url)` appending so every client (CLI, `shiki-native-host`, rofi/waybar pipes)
+  gets the same provenance footer. CLI gains `shiki capture --clip` (OS clipboard via `arboard`, Wayland/X11/macOS),
+  `--url`/`--title` (appended once as `Source:`), `--template <name>` (render through any `{{title}}`/`{{date}}`/`{{body}}`
+  template), and `--source` (origin marker for logs). The browser extension and `shiki-native-host` now send
+  those headers instead of pre-appending. Plus `scripts/rofi-capture.sh` (rofi/wofi/dmenu), `scripts/waybar-shiki.sh`
+  (Waybar/Polybar overdue + daemon dot, `shiki tasks --overdue --count` + `shiki capture --check`), `scripts/clip-capture.sh`,
+  and `contrib/` examples (Hyprland, Waybar, Raycast). One command powers every hotkey: `shiki capture`.
+- **Headless capture daemon (`shiki daemon`)** — the same loopback-port capture daemon the TUI runs,
+  standalone with no UI: `shiki capture`/`--undo`/`--check` work identically (same `capture.port` +
+  wire protocol), every request is appended to the shared `shiki.log`, and encrypted-locked notebooks
+  reply `locked:` instead of prompting a background process. `contrib/shiki-daemon.service` wires it
+  to `systemctl --user`, so capture stays live from boot with no TUI ever opened. `shiki doctor`
+  now reports daemon reachability.
+- **Voice capture (`shiki capture --voice`)** — records the microphone (`arecord` → `ffmpeg` → `sox`,
+  watchdog-timed so a missing audio device fails fast instead of hanging) and transcribes locally via
+  whisper.cpp: `whisper-cli` is auto-fetched from ggml-org/whisper.cpp's release on first use (same
+  pattern as `pretty-pdf`), and the model (`ggml-base.en.bin` by default, `--model` to change) is
+  downloaded once from Hugging Face into `{data_dir}/bin/models/`. Nothing leaves the machine.
+  `--seconds N` sets the recording length; works with every other capture flag (`--daily`,
+  `--tags`, `--folder`, `-n`). `shiki doctor` reports recorder + whisper availability.
 
 ### Fixed
 

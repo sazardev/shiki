@@ -234,6 +234,52 @@ pub fn run() -> Result<()> {
         );
     }
 
+    // `whisper-cli` (whisper.cpp, used by `shiki capture --voice`) is
+    // fetched automatically the first time it's needed if it's missing from
+    // both `$PATH` and shiki's own cache — same self-healing state as
+    // `pretty-pdf`, so always a `pass`; only the recorder (which shiki can't
+    // install for you) is worth a `warn` when missing.
+    let bin_dir = data_dir.join("bin");
+    if shiki_core::voice::whisper_available(&bin_dir) {
+        r.pass(
+            "whisper-cli (voice capture)",
+            "found \u{2014} `shiki capture --voice` can transcribe locally",
+        );
+    } else {
+        r.pass(
+            "whisper-cli (voice capture)",
+            "not yet downloaded \u{2014} fetched automatically on first `shiki capture --voice`",
+        );
+    }
+    if shiki_core::voice::recorder_available() {
+        r.pass(
+            "voice recorder",
+            "found (arecord/ffmpeg/sox) \u{2014} `--voice` can record the microphone",
+        );
+    } else {
+        r.warn(
+            "voice recorder",
+            "none of arecord/ffmpeg/sox found \u{2014} `shiki capture --voice` will fail at the recording step",
+        );
+    }
+
+    // Capture-daemon reachability, the same probe `shiki capture --check`
+    // uses — a running TUI or `shiki daemon` makes captures land live;
+    // otherwise they still work, just as a direct disk write.
+    match super::capture::try_daemon("PING\n\n") {
+        Some(super::capture::DaemonResponse::Ok(status)) if status == "enabled" => {
+            r.pass("capture daemon", "reachable and enabled");
+        }
+        Some(super::capture::DaemonResponse::Ok(_)) => {
+            r.warn("capture daemon", "reachable but disabled");
+        }
+        _ => r.warn(
+            "capture daemon",
+            "not running \u{2014} `shiki capture` falls back to a direct disk write; run the TUI \
+             or `shiki daemon` to get live capture",
+        ),
+    }
+
     let colorterm = std::env::var("COLORTERM").unwrap_or_default();
     if colorterm.contains("truecolor") || colorterm.contains("24bit") {
         r.pass("terminal truecolor", format!("COLORTERM={colorterm}"));

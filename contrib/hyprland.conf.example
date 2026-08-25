@@ -1,0 +1,7 @@
+# Hyprland — global capture
+# Put your shiki repo/scripts somewhere stable, e.g. ~/.local/share/shiki/scripts/
+bind = SUPER, C, exec, shiki/scripts/rofi-capture.sh
+bind = SUPER SHIFT, C, exec, shiki/scripts/rofi-capture.sh --clip
+bind = SUPER, D, exec, shiki/scripts/rofi-capture.sh --daily
+# Clipboard + URL from browser (needs SHIKI_URL env from extension helper - see clip-capture.sh)
+bind = SUPER SHIFT, V, exec, shiki/scripts/clip-capture.sh

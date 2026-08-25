@@ -1,0 +1,17 @@
+// Waybar example — add "custom/shiki" to your modules-right
+// Requires: shiki, jq, scripts/waybar-shiki.sh executable
+{
+  "custom/shiki": {
+    "exec": "~/.config/shiki/scripts/waybar-shiki.sh",
+    "interval": 30,
+    "return-type": "json",
+    "format": "{}",
+    "on-click": "~/.config/shiki/scripts/rofi-capture.sh",
+    "on-click-right": "foot -- shiki tasks --overdue",
+    "tooltip": true
+  }
+}
+// Waybar CSS example:
+// #custom-shiki.daemon-on { color: #a6e3a1; }
+// #custom-shiki.daemon-off { color: #6c7086; }
+// #custom-shiki.overdue { color: #f38ba8; font-weight: bold; }

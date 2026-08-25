@@ -17,6 +17,7 @@ pub mod tasks;
 pub mod templates;
 pub mod trash;
 pub mod update;
+pub mod voice;
 pub mod wikilinks;
 
 pub use daily::daily_note_path;
@@ -76,6 +77,10 @@ pub enum Error {
     /// checking/suggesting.
     #[error("spell check error: {0}")]
     Spell(String),
+    /// A `voice::` failure — no recorder/whisper binary, a download
+    /// failure, or whisper-cli errored while transcribing.
+    #[error("voice capture error: {0}")]
+    Voice(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

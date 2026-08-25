@@ -1,5 +1,6 @@
 pub mod capture;
 pub mod config;
+pub mod daemon;
 pub mod daily;
 pub mod doctor;
 pub mod edit;

@@ -205,12 +205,17 @@ fn parse_response_line(line: &str) -> Option<DaemonResponse> {
         .map(|rest| DaemonResponse::Err(rest.to_string()))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_capture_request(
     text: &str,
     daily: bool,
     tags: &[String],
     notebook: Option<&str>,
     folder: Option<&str>,
+    template: Option<&str>,
+    url: Option<&str>,
+    title: Option<&str>,
+    source: Option<&str>,
 ) -> String {
     let mut req = String::from("CAPTURE\n");
     if daily {
@@ -225,9 +230,35 @@ fn build_capture_request(
     if let Some(f) = folder {
         req.push_str(&format!("folder={f}\n"));
     }
+    if let Some(tmpl) = template {
+        req.push_str(&format!("template={tmpl}\n"));
+    }
+    if let Some(url) = url {
+        req.push_str(&format!("url={url}\n"));
+    }
+    if let Some(title) = title {
+        req.push_str(&format!("title={title}\n"));
+    }
+    if let Some(source) = source {
+        req.push_str(&format!("source={source}\n"));
+    }
     req.push('\n');
     req.push_str(text);
     req
+}
+
+fn with_source(text: &str, url: Option<&str>, title: Option<&str>) -> String {
+    let Some(url) = url.filter(|s| !s.is_empty()) else {
+        return text.to_string();
+    };
+    if text.contains(url) {
+        return text.to_string();
+    }
+    if let Some(title) = title.filter(|t| !t.is_empty()) {
+        format!("{text}\n\nSource: [{title}]({url})")
+    } else {
+        format!("{text}\n\nSource: {url}")
+    }
 }
 
 fn try_daemon(request: &str) -> Option<DaemonResponse> {
@@ -589,24 +620,18 @@ fn handle_undo() -> anyhow::Result<serde_json::Value> {
 }
 
 fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
-    let text = req.text.clone().unwrap_or_default();
-    let mut full_text = text.clone();
-    if let Some(url) = &req.url {
-        if !url.is_empty() && !full_text.contains(url) {
-            if full_text.is_empty() {
-                full_text = url.clone();
-            } else if let Some(title) = &req.title {
-                if !title.is_empty() {
-                    full_text = format!("{full_text}\n\nSource: [{title}]({url})");
-                } else {
-                    full_text = format!("{full_text}\n\nSource: {url}");
-                }
-            } else {
-                full_text = format!("{full_text}\n\nSource: {url}");
+    let mut text = req.text.clone().unwrap_or_default();
+    // If text is empty but url is given (browser clip with no selection), use url as body
+    // and let with_source handle provenance — keep raw text separate so daemon
+    // appends Source consistently.
+    if text.trim().is_empty() {
+        if let Some(u) = &req.url {
+            if !u.trim().is_empty() {
+                text = u.clone();
             }
         }
     }
-    let text = full_text.trim().to_string();
+    let text = text.trim().to_string();
     if text.is_empty() {
         anyhow::bail!("empty capture text");
     }
@@ -615,6 +640,10 @@ fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
     let notebook = req.notebook.clone();
     let folder = req.folder.clone();
     let template = req.template.clone();
+    let url = req.url.clone();
+    let title = req.title.clone();
+    // Native host doesn't set source header itself; browser popup can pass it later
+    let source: Option<String> = None;
 
     // Header injection guard: daemon protocol is \n-delimited
     for t in &tags {
@@ -646,9 +675,33 @@ fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
             anyhow::bail!("invalid template");
         }
     }
+    if let Some(u) = &url {
+        if u.contains('\n') || u.contains('\r') {
+            anyhow::bail!("invalid url: must not contain newline");
+        }
+    }
+    if let Some(t) = &title {
+        if t.contains('\n') || t.contains('\r') {
+            anyhow::bail!("invalid title: must not contain newline");
+        }
+    }
+    if let Some(s) = &source {
+        if s.contains('\n') || s.contains('\r') {
+            anyhow::bail!("invalid source: must not contain newline");
+        }
+    }
 
-    let daemon_req =
-        build_capture_request(&text, daily, &tags, notebook.as_deref(), folder.as_deref());
+    let daemon_req = build_capture_request(
+        &text,
+        daily,
+        &tags,
+        notebook.as_deref(),
+        folder.as_deref(),
+        template.as_deref(),
+        url.as_deref(),
+        title.as_deref(),
+        source.as_deref(),
+    );
     match try_daemon(&daemon_req) {
         Some(DaemonResponse::Ok(path)) => {
             let nb_name = notebook.clone().unwrap_or_else(|| {
@@ -673,6 +726,9 @@ fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
     }
 
     let (config, store) = load_config_and_store()?;
+    // Fallback path must produce the same final body the daemon does, so
+    // apply the Source footer here too before routing/templating.
+    let final_text = with_source(&text, url.as_deref(), title.as_deref());
     let existing_notebooks: Vec<String> = store
         .list()
         .unwrap_or_default()
@@ -680,13 +736,14 @@ fn handle_capture(req: &Request) -> anyhow::Result<serde_json::Value> {
         .map(|nb| nb.name)
         .collect();
     let (target, text_final) = match notebook.as_deref() {
-        Some(name) => (name.to_string(), text.clone()),
+        Some(name) => (name.to_string(), final_text.clone()),
         None => {
-            if let Some((n, t)) = shiki_core::notebook::route_by_prefix(&text, &existing_notebooks)
+            if let Some((n, t)) =
+                shiki_core::notebook::route_by_prefix(&final_text, &existing_notebooks)
             {
                 (n, t.to_string())
             } else {
-                (config.general.default_notebook.clone(), text.clone())
+                (config.general.default_notebook.clone(), final_text.clone())
             }
         }
     };
@@ -975,7 +1032,7 @@ mod tests {
     #[test]
     fn build_request_minimal() {
         assert_eq!(
-            build_capture_request("hello", false, &[], None, None),
+            build_capture_request("hello", false, &[], None, None, None, None, None, None),
             "CAPTURE\n\nhello"
         );
     }
@@ -984,8 +1041,34 @@ mod tests {
     fn build_request_with_all_headers() {
         let tags = vec!["work".into(), "idea".into()];
         assert_eq!(
-            build_capture_request("hi", true, &tags, Some("work"), Some("a/b")),
-            "CAPTURE\ndaily=1\ntags=work,idea\nnotebook=work\nfolder=a/b\n\nhi"
+            build_capture_request(
+                "hi",
+                true,
+                &tags,
+                Some("work"),
+                Some("a/b"),
+                Some("meeting"),
+                Some("https://example.com"),
+                Some("Example"),
+                Some("browser")
+            ),
+            "CAPTURE\ndaily=1\ntags=work,idea\nnotebook=work\nfolder=a/b\ntemplate=meeting\nurl=https://example.com\ntitle=Example\nsource=browser\n\nhi"
+        );
+    }
+
+    #[test]
+    fn with_source_appends_url_and_title() {
+        assert_eq!(
+            with_source("hello", Some("https://x.com"), Some("X")),
+            "hello\n\nSource: [X](https://x.com)"
+        );
+        assert_eq!(
+            with_source("hello", Some("https://x.com"), None),
+            "hello\n\nSource: https://x.com"
+        );
+        assert_eq!(
+            with_source("hello https://x.com world", Some("https://x.com"), None),
+            "hello https://x.com world"
         );
     }
 

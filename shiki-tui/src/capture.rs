@@ -1,7 +1,7 @@
 //! Quick-capture daemon (`general.enable_capture_daemon`) — lets an
 //! external `shiki capture "text"` invocation (`shiki-cli/src/commands/
 //! capture.rs`) land in an already-running TUI instance live, instead of
-//! only writing to disk unnoticed. Off by default; `shiki capture` itself
+//! only writing to disk unnoticed. On by default; `shiki capture` itself
 //! always works with or without this running (see the CLI side's direct-
 //! write fallback) — this module only covers the "TUI is open and wants to
 //! know immediately" path.
@@ -30,10 +30,11 @@
 //!   `LastCapture` record).
 //! - `CAPTURE\n<headers>\n\n<body>` — `<headers>` is zero or more
 //!   `key=value` lines (`daily=1`, `tags=a,b,c`, `notebook=work`,
-//!   `folder=work/meetings`), ending at the first blank line; `<body>` is
-//!   the raw capture text, not line-delimited (it may itself contain blank
-//!   lines/newlines) since it's simply "everything after the header
-//!   block's terminating blank line."
+//!   `folder=work/meetings`, `template=meeting`, `url=https://...`,
+//!   `title=Page Title`, `source=browser|clip|voice|pipe|rofi`), ending at
+//!   the first blank line; `<body>` is the raw capture text, not line-
+//!   delimited (it may itself contain blank lines/newlines) since it's
+//!   simply "everything after the header block's terminating blank line."
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -52,12 +53,12 @@ use crate::app::App;
 /// client connection open, waiting to write the result back, and the
 /// existing git-sync/self-update background-thread channels are fire-and-
 /// forget with no "reply to this specific caller" concept.
-pub(crate) struct CaptureRequest {
+pub struct CaptureRequest {
     pub kind: RequestKind,
     pub reply_tx: Sender<CaptureReply>,
 }
 
-pub(crate) enum RequestKind {
+pub enum RequestKind {
     Capture {
         text: String,
         daily: bool,
@@ -69,11 +70,19 @@ pub(crate) enum RequestKind {
         /// inside this subfolder instead of the notebook's root. Ignored
         /// when `daily` is set (a daily note's path is always fixed).
         folder: Option<String>,
+        /// Template name (`--template <name>`), if any. Ignored for `--daily`.
+        template: Option<String>,
+        /// Source URL, if any — appended as `Source: [title](url)` when present.
+        url: Option<String>,
+        /// Page title for `url`, if any.
+        title: Option<String>,
+        /// Origin marker (`browser|clip|voice|pipe|rofi`) — for logging only.
+        source: Option<String>,
     },
     Undo,
 }
 
-pub(crate) enum CaptureReply {
+pub enum CaptureReply {
     Ok(PathBuf),
     Err(String),
 }
@@ -82,7 +91,7 @@ pub(crate) enum CaptureReply {
 /// session. The listener thread is never torn down — see
 /// `App::set_capture_daemon_enabled` for why toggling this off just flips
 /// the flag instead.
-pub(crate) struct CaptureDaemonHandle {
+pub struct CaptureDaemonHandle {
     pub enabled: Arc<AtomicBool>,
 }
 
@@ -96,6 +105,10 @@ enum ParsedRequest {
         tags: Vec<String>,
         notebook: Option<String>,
         folder: Option<String>,
+        template: Option<String>,
+        url: Option<String>,
+        title: Option<String>,
+        source: Option<String>,
         text: String,
     },
     /// Anything not starting with a recognized command word.
@@ -119,6 +132,10 @@ fn parse_request(raw: &str) -> ParsedRequest {
             let mut tags = Vec::new();
             let mut notebook = None;
             let mut folder = None;
+            let mut template = None;
+            let mut url = None;
+            let mut title = None;
+            let mut source = None;
             for line in lines {
                 if let Some(v) = line.strip_prefix("daily=") {
                     daily = matches!(v.trim(), "1" | "true");
@@ -132,6 +149,14 @@ fn parse_request(raw: &str) -> ParsedRequest {
                     notebook = Some(v.trim().to_string()).filter(|s| !s.is_empty());
                 } else if let Some(v) = line.strip_prefix("folder=") {
                     folder = Some(v.trim().to_string()).filter(|s| !s.is_empty());
+                } else if let Some(v) = line.strip_prefix("template=") {
+                    template = Some(v.trim().to_string()).filter(|s| !s.is_empty());
+                } else if let Some(v) = line.strip_prefix("url=") {
+                    url = Some(v.trim().to_string()).filter(|s| !s.is_empty());
+                } else if let Some(v) = line.strip_prefix("title=") {
+                    title = Some(v.trim().to_string()).filter(|s| !s.is_empty());
+                } else if let Some(v) = line.strip_prefix("source=") {
+                    source = Some(v.trim().to_string()).filter(|s| !s.is_empty());
                 }
             }
             ParsedRequest::Capture {
@@ -139,6 +164,10 @@ fn parse_request(raw: &str) -> ParsedRequest {
                 tags,
                 notebook,
                 folder,
+                template,
+                url,
+                title,
+                source,
                 text: body.to_string(),
             }
         }
@@ -148,8 +177,9 @@ fn parse_request(raw: &str) -> ParsedRequest {
 
 /// Binds an ephemeral loopback port, records it, and spawns the accept-loop
 /// thread. Returns as soon as the port is known and written to disk, so a
-/// capture issued moments later reliably finds it.
-pub(crate) fn spawn_capture_daemon(
+/// capture issued moments later reliably finds it. Shared by the TUI's
+/// in-app daemon and the standalone `shiki daemon` (headless) process.
+pub fn spawn_capture_daemon(
     capture_tx: Sender<CaptureRequest>,
 ) -> anyhow::Result<CaptureDaemonHandle> {
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
@@ -215,6 +245,10 @@ fn accept_loop(
                 tags,
                 notebook,
                 folder,
+                template,
+                url,
+                title,
+                source,
                 text,
             } => {
                 if !enabled.load(Ordering::Relaxed) {
@@ -230,6 +264,10 @@ fn accept_loop(
                         tags,
                         notebook,
                         folder,
+                        template,
+                        url,
+                        title,
+                        source,
                     },
                 );
             }
@@ -284,6 +322,10 @@ pub(crate) fn handle_request(app: &mut App, request: &RequestKind) -> CaptureRep
             tags,
             notebook,
             folder,
+            template,
+            url,
+            title,
+            source,
         } => perform_capture(
             app,
             text,
@@ -291,6 +333,10 @@ pub(crate) fn handle_request(app: &mut App, request: &RequestKind) -> CaptureRep
             tags,
             notebook.as_deref(),
             folder.as_deref(),
+            template.as_deref(),
+            url.as_deref(),
+            title.as_deref(),
+            source.as_deref(),
         ),
         RequestKind::Undo => perform_undo(app),
     }
@@ -320,6 +366,21 @@ fn resolve_notebook_and_text<'a>(
 /// `App::set_status`, so a capture that happened while the TUI was
 /// unattended still leaves a trace in the logs modal (`leader` then `l`),
 /// not just a footer message nobody was there to read.
+fn with_source(text: &str, url: Option<&str>, title: Option<&str>) -> String {
+    let Some(url) = url else {
+        return text.to_string();
+    };
+    if url.is_empty() || text.contains(url) {
+        return text.to_string();
+    }
+    if let Some(title) = title.filter(|t| !t.is_empty()) {
+        format!("{text}\n\nSource: [{title}]({url})")
+    } else {
+        format!("{text}\n\nSource: {url}")
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn perform_capture(
     app: &mut App,
     text: &str,
@@ -327,6 +388,10 @@ fn perform_capture(
     tags: &[String],
     explicit_notebook: Option<&str>,
     folder: Option<&str>,
+    template: Option<&str>,
+    url: Option<&str>,
+    title: Option<&str>,
+    source: Option<&str>,
 ) -> CaptureReply {
     let text = text.trim();
     if text.is_empty() {
@@ -334,6 +399,11 @@ fn perform_capture(
         app.set_status("capture failed: empty text".into());
         return reply;
     }
+    // Unify source-URL appending here so every client (CLI, native host,
+    // rofi/waybar pipes) gets the same provenance footer, not just the
+    // browser extension's own `handle_capture` path.
+    let text_owned = with_source(text, url, title);
+    let text = text_owned.as_str();
 
     let existing_notebooks: Vec<String> = app.notebooks.iter().map(|nb| nb.name.clone()).collect();
     let (name, text) = resolve_notebook_and_text(
@@ -369,6 +439,8 @@ fn perform_capture(
 
     let result = if daily {
         capture_into_daily(app, &nb, text)
+    } else if let Some(tmpl) = template.filter(|s| !s.is_empty()) {
+        capture_into_templated(&nb, text, tags, folder, tmpl, source)
     } else {
         capture_into_new_note(&nb, text, tags, folder)
     };
@@ -399,6 +471,48 @@ fn perform_capture(
     app.set_status(format!("captured: {}", path.display()));
 
     CaptureReply::Ok(path)
+}
+
+fn capture_into_templated(
+    nb: &shiki_core::Notebook,
+    text: &str,
+    tags: &[String],
+    folder: Option<&str>,
+    template_name: &str,
+    _source: Option<&str>,
+) -> shiki_core::Result<(PathBuf, LastCapture)> {
+    let templates_dir = Config::default_templates_dir().unwrap_or_default();
+    let tmpl = shiki_core::Template::load(&templates_dir, template_name)
+        .map_err(|_| shiki_core::Error::TemplateNotFound(template_name.to_string()))?;
+    let title = format!("Capture {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
+    let mut vars = std::collections::HashMap::new();
+    vars.insert("title", title.clone());
+    vars.insert("date", chrono::Local::now().format("%Y-%m-%d").to_string());
+    vars.insert("body", text.to_string());
+    // Also expose notebook name for templates that want it
+    vars.insert("notebook", nb.name.clone());
+    let rendered = tmpl.render(&vars);
+    let body = if rendered.contains(text) {
+        rendered
+    } else {
+        format!("{rendered}\n{text}\n")
+    };
+    let mut note = match folder {
+        Some(folder) if !folder.is_empty() => {
+            let relative = shiki_core::notebook::validate_relative_path(folder)?;
+            nb.create_note_in(&relative, &title, body)?
+        }
+        _ => nb.create_note(&title, body)?,
+    };
+    if !tags.is_empty() {
+        note.frontmatter.tags = tags.to_vec();
+        note.save_with_crypto(nb.crypto.as_ref())?;
+    }
+    let record = LastCapture::Note {
+        notebook: nb.name.clone(),
+        path: note.path.display().to_string(),
+    };
+    Ok((note.path, record))
 }
 
 fn capture_into_new_note(
@@ -579,12 +693,20 @@ mod tests {
                 tags,
                 notebook,
                 folder,
+                template,
+                url,
+                title,
+                source,
                 text,
             } => {
                 assert!(!daily);
                 assert!(tags.is_empty());
                 assert!(notebook.is_none());
                 assert!(folder.is_none());
+                assert!(template.is_none());
+                assert!(url.is_none());
+                assert!(title.is_none());
+                assert!(source.is_none());
                 assert_eq!(text, "buy milk");
             }
             _ => panic!("expected Capture"),
@@ -594,23 +716,49 @@ mod tests {
     #[test]
     fn parse_request_parses_all_headers() {
         match parse_request(
-            "CAPTURE\ndaily=1\ntags=work,idea\nnotebook=work\nfolder=work/meetings\n\nbuy milk",
+            "CAPTURE\ndaily=1\ntags=work,idea\nnotebook=work\nfolder=work/meetings\ntemplate=meeting\nurl=https://example.com\ntitle=Example\nsource=browser\n\nbuy milk",
         ) {
             ParsedRequest::Capture {
                 daily,
                 tags,
                 notebook,
                 folder,
+                template,
+                url,
+                title,
+                source,
                 text,
             } => {
                 assert!(daily);
                 assert_eq!(tags, vec!["work".to_string(), "idea".to_string()]);
                 assert_eq!(notebook.as_deref(), Some("work"));
                 assert_eq!(folder.as_deref(), Some("work/meetings"));
+                assert_eq!(template.as_deref(), Some("meeting"));
+                assert_eq!(url.as_deref(), Some("https://example.com"));
+                assert_eq!(title.as_deref(), Some("Example"));
+                assert_eq!(source.as_deref(), Some("browser"));
                 assert_eq!(text, "buy milk");
             }
             _ => panic!("expected Capture"),
         }
+    }
+
+    #[test]
+    fn with_source_appends_url_and_title() {
+        assert_eq!(
+            with_source("hello", Some("https://x.com"), Some("X")),
+            "hello\n\nSource: [X](https://x.com)"
+        );
+        assert_eq!(
+            with_source("hello", Some("https://x.com"), None),
+            "hello\n\nSource: https://x.com"
+        );
+        // Already contains url -> no duplicate
+        assert_eq!(
+            with_source("hello https://x.com world", Some("https://x.com"), None),
+            "hello https://x.com world"
+        );
+        assert_eq!(with_source("hello", None, None), "hello");
     }
 
     #[test]

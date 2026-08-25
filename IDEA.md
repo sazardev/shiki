@@ -476,13 +476,19 @@ shiki search <query>      # search and show results
 shiki capture "quick idea"       # near-instant note capture, no $EDITOR, no TUI drawn
 shiki capture "text" -n work     # capture into a specific notebook instead of default_notebook
 echo "piped idea" | shiki capture      # reads the text from stdin when no argument is given
+shiki capture --clip                  # reads the text from the OS clipboard (Wayland/X11/macOS), no TUI drawn
 shiki capture "call Ana" --tags work,idea   # comma-separated tags, same flag as `shiki new`
 shiki capture "call Ana" --daily      # appends as a bullet to today's daily note instead of a new note
+shiki capture "call Ana" --template meeting  # renders through a template before saving
+shiki capture "clip" --url https://x.com --title "X" # appends Source: [title](url)
 shiki capture "call Ana" --json       # emits {"path":..,"daemon":..,"daily":..} for scripts
 shiki capture --check                 # is a capture daemon reachable right now? exits non-zero if not
+shiki capture --voice                 # record the mic + transcribe locally via whisper.cpp, then capture
+shiki capture --voice --seconds 10    # longer recording (default 5s)
 shiki capture "meeting notes" --folder work/meetings -n work   # into a subfolder, not the notebook root
 shiki capture "work: call Ana"        # no -n given -> routed into the "work" notebook automatically
 shiki capture --undo                  # reverses the single most recent capture (any kind)
+shiki daemon                          # headless capture daemon (no TUI) — for systemd user services
 shiki new "title" --body "text"     # create non-interactively, no $EDITOR spawned
 shiki new "title" --stdin --tags work,idea  # body piped in, tags attached, still no $EDITOR
 shiki list --json         # list/search/show all take --json for scripting (list/search: array, show: object)
@@ -563,6 +569,13 @@ keybinding/`shiki daily` already use — template + agenda section included on f
 already-existing daily is just opened and appended to) — for treating the daily note as a running
 inbox for the whole day rather than one note per capture. `--tags` is ignored when `--daily` is
 also given, since an appended bullet has no frontmatter of its own to carry tags on.
+`--template meeting` renders the capture through that template (`{{title}}`/`{{date}}`/`{{body}}`
+already substituted) before saving — ignored when `--daily` is given, since a daily note's path is
+always fixed. `--clip` reads the text from the OS clipboard (`arboard`, Wayland/X11/macOS, OSC 52
+fallback) instead of the positional argument or stdin — for global hotkeys and `rofi` pipes;
+`--clip` cannot be combined with a positional `TEXT`. `--url https://...` + `--title "..."` appends a
+`Source: [title](url)` footer (only if the text doesn't already contain the URL) — for browser clips
+via `shiki-native-host` or `scripts/rofi-capture.sh` / `scripts/clip-capture.sh`.
 `--json` emits `{"path": "...", "daemon": true|false, "daily": true|false}` instead of the plain
 sentence, for a script or browser extension that wants to act on the result without string-matching
 `"captured (daemon): "`. `--folder work/meetings` creates the note inside that subfolder of the
@@ -576,7 +589,7 @@ Ana"` needs no `-n work` at all. An explicit `-n` always wins outright and skips
 entirely, so a genuine note that happens to start with `"word: "` is never mis-routed as long as a
 target was actually given.
 
-**The optional daemon** (`general.enable_capture_daemon`, off by default — toggle it from
+**The capture daemon** (`general.enable_capture_daemon`, on by default — toggle it from
 `leader+s` → GENERAL → `enable_capture_daemon`) makes a *running* TUI aware of captures the instant
 they happen, instead of only writing to disk unnoticed until the next manual reload. With it on,
 the TUI listens on a local TCP loopback port (`127.0.0.1`, OS-assigned, recorded in
@@ -607,6 +620,24 @@ Every capture handled by the daemon (not the standalone fallback — there's no 
 into in that case) is also recorded in the TUI's own log history (`leader` then `l`), so a capture
 that happened while nobody was watching the screen still leaves a trace, the same way a background
 git sync result does.
+
+**`shiki daemon` runs the same capture daemon headless, with no TUI at all** — the same loopback
+port, the same `capture.port` file, the same wire protocol, so `shiki capture` can't tell whether a
+TUI or a standalone process answered. It's meant to be managed by a service manager
+(`contrib/shiki-daemon.service`, `systemctl --user enable --now shiki-daemon`), which makes the
+capture path live from boot even if no TUI is ever opened — rofi/waybar/browser captures just land
+on disk and every request is appended to the shared `shiki.log`. `shiki capture --check` reports
+"reachable" for either kind of daemon.
+
+**`shiki capture --voice` records the microphone and transcribes it locally with whisper.cpp**
+(`whisper-cli`, auto-fetched from ggml-org/whisper.cpp's release the first time it's needed, the
+same pattern as `pretty-pdf`), then captures the transcript exactly like any other text — nothing
+leaves the machine. Recording uses `arecord` (Linux) → `ffmpeg` → `sox` (each attempt is
+watchdog-timed so a missing audio device fails fast instead of hanging); `--seconds N` (default 5)
+sets the length and `--model <name>` picks the whisper model (default `ggml-base.en.bin`,
+downloaded once from Hugging Face into `{data_dir}/bin/models/`). Works with every other capture
+flag (`--daily`, `--tags`, `--folder`, `-n`), and `shiki doctor` reports recorder + whisper
+availability.
 
 `shiki capture --undo` reverses the single most recent capture — a plain note is moved to trash
 (restorable exactly like any other deleted note); a `--daily` append instead strips exactly the
@@ -830,8 +861,8 @@ use_favorite_editor = false
 # `shiki capture "text"` invocations land here live instead of only
 # writing to disk unnoticed. `shiki capture` itself always works either
 # way — this only controls whether an already-open TUI finds out
-# immediately. Off by default; toggle from leader+s -> GENERAL.
-enable_capture_daemon = false
+# immediately. On by default; toggle from leader+s -> GENERAL.
+enable_capture_daemon = true
 # When true, click-and-drag over a note's body in PREVIEW selects text and
 # copies it to the clipboard (OSC 52, same mechanism as the logs modal's
 # `y`/`c`) as soon as the mouse button is released.

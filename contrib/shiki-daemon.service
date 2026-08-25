@@ -1,0 +1,31 @@
+# shiki-daemon.service — headless capture daemon (no TUI)
+#
+# Makes `shiki capture` from scripts/launchers/rofi/waybar/browser-land live
+# even with no TUI open: same 127.0.0.1 loopback port + wire protocol as the
+# in-TUI daemon, every capture logged to ~/.config/shiki/shiki.log.
+#
+# Install:
+#   mkdir -p ~/.config/systemd/user
+#   cp contrib/shiki-daemon.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now shiki-daemon
+#
+# Check it's up:
+#   shiki capture --check    # -> reachable, enabled
+#   journalctl --user -u shiki-daemon -f
+
+[Unit]
+Description=shiki capture daemon (headless)
+After=graphical-session.target
+
+[Service]
+# Adjust the path if `shiki` isn't in ~/.cargo/bin
+ExecStart=%h/.cargo/bin/shiki daemon
+Restart=on-failure
+RestartSec=2
+# The daemon only listens on 127.0.0.1 and writes to the user's own
+# config/data dirs — a private user service, no system-wide exposure.
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
