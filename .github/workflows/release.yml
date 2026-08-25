@@ -467,7 +467,7 @@ jobs:
           # appends instead of wiping so each matrix member owns its own dir.
           ONLY="$ONLY" bash scripts/screenshots.sh "screenshots-${{ matrix.group }}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: screenshots-${{ matrix.group }}
           path: screenshots-${{ matrix.group }}
@@ -531,7 +531,7 @@ jobs:
             cp "/tmp/demo-$t.mp4" "docs/assets/demo/$t.mp4"
           done
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: demo-assets
           path: |
