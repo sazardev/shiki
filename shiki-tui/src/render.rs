@@ -756,16 +756,20 @@ pub(crate) fn markdown_to_lines_indexed(
             continue;
         }
 
-        // A block-level `![alt](path)` image on its own line renders as
-        // terminal art (via `term_image`, which shells out to chafa) when
-        // that's enabled and possible — multi-row, so it reuses the same
-        // one-source-line-to-many-rows mechanism as tables and mermaid.
-        // Anything else (inline image mid-line, missing chafa, remote URL,
-        // undecodable file) falls through to the single-span icon+alt below.
+        // A block-level `![alt](path)` image — or Obsidian's `![[file]]`
+        // embed form, which imported vaults are full of — on its own line
+        // renders as terminal art (via `term_image`, which shells out to
+        // chafa) when that's enabled and possible. Embeds get the extra
+        // name-anywhere-in-the-vault resolution since they usually carry a
+        // bare file name. Anything else (inline image mid-line, missing
+        // chafa, remote URL, undecodable file) falls through to the
+        // single-span icon+alt below.
         if let Some(ctx) = images {
             if ctx.enabled && ctx.chafa.is_some() {
-                if let Some(spec) = crate::term_image::whole_line_image_path(line) {
-                    let resolved = crate::term_image::resolve_image_path(&ctx.base_dirs, &spec);
+                let spec = crate::term_image::whole_line_embed_path(line)
+                    .or_else(|| crate::term_image::whole_line_image_path(line));
+                if let Some(spec) = spec {
+                    let resolved = crate::term_image::resolve_embed_path(&ctx.base_dirs, &spec);
                     if let (Some(path), Some(chafa)) = (resolved, &ctx.chafa) {
                         if let Some(rows) = crate::term_image::render_rows(chafa, &path, ctx.cols) {
                             for row in rows {

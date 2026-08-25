@@ -552,6 +552,10 @@ impl App {
                 "preview_image_scale",
                 self.config.general.preview_image_scale.to_string(),
             ),
+            GeneralField::AttachmentsDir => (
+                "attachments_dir",
+                self.config.general.attachments_dir.clone(),
+            ),
             GeneralField::UseFavoriteEditor
             | GeneralField::EnableCaptureDaemon
             | GeneralField::MouseDragSelection
@@ -721,6 +725,10 @@ impl App {
             EditorField::PasteUrlAsLink => {
                 self.config.editor.paste_url_as_link = !self.config.editor.paste_url_as_link;
                 ("paste_url_as_link", self.config.editor.paste_url_as_link)
+            }
+            EditorField::PasteImages => {
+                self.config.editor.paste_images = !self.config.editor.paste_images;
+                ("paste_images", self.config.editor.paste_images)
             }
             EditorField::SnippetExpandTab => {
                 self.config.editor.snippet_expand_tab = !self.config.editor.snippet_expand_tab;
@@ -2145,6 +2153,7 @@ impl App {
                 KeyCode::Char('o') => self.resolve_selected_conflict(ConflictSideChoice::Ours),
                 KeyCode::Char('t') => self.resolve_selected_conflict(ConflictSideChoice::Theirs),
                 KeyCode::Char('e') => self.mark_selected_conflict_resolved(),
+                KeyCode::Char('i') => self.open_conflict_in_editor(),
                 KeyCode::Char('j') | KeyCode::Down => {
                     if let Some(view) = &mut self.conflict_viewing {
                         view.scroll = view.scroll.saturating_add(1);
@@ -2176,6 +2185,8 @@ impl App {
             KeyCode::Enter => self.view_selected_conflict(),
             KeyCode::Char('o') => self.resolve_selected_conflict(ConflictSideChoice::Ours),
             KeyCode::Char('t') => self.resolve_selected_conflict(ConflictSideChoice::Theirs),
+            KeyCode::Char('e') => self.mark_selected_conflict_resolved(),
+            KeyCode::Char('i') => self.open_conflict_in_editor(),
             KeyCode::Char('a') => self.start_abort_merge(),
             KeyCode::Char('j') | KeyCode::Down => {
                 if self.conflict_selected + 1 < self.conflict_files.len() {
@@ -2272,6 +2283,38 @@ impl App {
             }
         };
         self.finish_resolving_conflict_file(&nb.path.clone(), &file, &content);
+    }
+    /// The in-app version of the "edit by hand" escape hatch: loads the
+    /// conflicted file's raw content (markers and all) into the same inline
+    /// editor a note edit uses, so removing conflict markers never requires
+    /// an external `$EDITOR`. Saving (`save_and_exit_edit`'s
+    /// `editing_conflict` arm) writes the raw text back and stages it as
+    /// this file's resolution — the same bookkeeping `e` triggers after an
+    /// external edit, just without leaving the TUI.
+    fn open_conflict_in_editor(&mut self) {
+        let Some(nb) = self.conflict_notebook_ref() else {
+            return;
+        };
+        let Some(file) = self.conflict_target_file() else {
+            return;
+        };
+        let contents = match std::fs::read_to_string(nb.path.join(&file)) {
+            Ok(c) => c,
+            Err(e) => {
+                self.set_status(format!("could not read '{}': {e}", file.display()));
+                return;
+            }
+        };
+        let mut editor = InlineEditor::from_contents(&contents);
+        let title = format!(" {}Resolving: {} ", icons::PENCIL, file.display());
+        self.style_inline_editor(&mut editor, title);
+        self.editor = Some(editor);
+        self.editing_conflict = Some((self.conflict_notebook.clone(), file));
+        // The editor renders full-screen over everything; leaving the modal
+        // visible underneath would just repaint behind it. It comes back
+        // (with the resolved file gone from its list) once the save lands.
+        self.show_conflicts = false;
+        self.mode = Mode::Edit;
     }
     fn finish_resolving_conflict_file(
         &mut self,
@@ -4297,6 +4340,102 @@ impl App {
             self.start_input(PendingInput::RenameNote, title);
         }
     }
+    /// How many notes (across every visible notebook — cross-notebook
+    /// `[[wikilinks]]` are legal since resolution falls back globally)
+    /// currently link to the note at `path`. The number the rename flow
+    /// quotes in its "update links?" confirm.
+    fn backlink_count_for(&self, path: &std::path::Path) -> usize {
+        let pool = self.visible_notes_pool();
+        let notes_only: Vec<shiki_core::Note> = pool.into_iter().map(|(_, n)| n).collect();
+        shiki_core::wikilinks::backlinks(path, &notes_only).len()
+    }
+    /// Every note of every notebook the session can see, paired with its
+    /// (crypto-attached) notebook — the pool `rewrite_links_to` walks. A
+    /// locked encrypted notebook contributes nothing rather than failing
+    /// the whole walk.
+    fn visible_notes_pool(&self) -> Vec<(shiki_core::Notebook, shiki_core::Note)> {
+        let mut pool = Vec::new();
+        for nb in &self.notebooks {
+            if let Ok(notes) = nb.all_notes_recursive() {
+                for note in notes {
+                    pool.push((nb.clone(), note));
+                }
+            }
+        }
+        pool
+    }
+    /// The plain half of the rename flow: file + frontmatter title swap,
+    /// no link rewriting.
+    fn perform_rename_note(&mut self, nb_name: &str, path: &std::path::Path, new_title: &str) {
+        let Some(nb) = self.notebooks.iter().find(|n| n.name == nb_name).cloned() else {
+            self.set_status(format!("'{nb_name}' no longer available"));
+            return;
+        };
+        match nb.rename_note_at(path, new_title) {
+            Ok(_) => {
+                self.refresh_notes_preserve_selection();
+                self.note_changed(nb_name);
+                self.set_status(format!("renamed to '{new_title}'"));
+            }
+            Err(e) => self.set_status(format!("could not rename: {e}")),
+        }
+    }
+    /// The confirmed-yes side: rewrite every inbound `[[link]]` first (the
+    /// old title/slug must still be current for the match to find them),
+    /// then do the actual rename. Both notebooks that gained rewritten
+    /// notes *and* the renamed one register a change, so auto_sync picks
+    /// everything up.
+    fn perform_rename_with_link_update(
+        &mut self,
+        nb_name: &str,
+        path: &std::path::Path,
+        new_title: &str,
+    ) {
+        let Some(nb) = self.notebooks.iter().find(|n| n.name == nb_name).cloned() else {
+            self.set_status(format!("'{nb_name}' no longer available"));
+            return;
+        };
+        let old = match shiki_core::Note::from_file_in_notebook_with_crypto(
+            path,
+            nb_name,
+            nb.crypto.as_ref(),
+        ) {
+            Ok(n) => n,
+            Err(e) => {
+                self.set_status(format!("could not read note before renaming: {e}"));
+                return;
+            }
+        };
+        let old_targets = vec![old.frontmatter.title.clone(), old.file_stem()];
+        let pool = self.visible_notes_pool();
+        let (links, files, touched) =
+            match shiki_core::wikilinks::rewrite_links_to(&old_targets, new_title, &pool) {
+                Ok(result) => result,
+                Err(e) => {
+                    self.set_status(format!("could not update links: {e}"));
+                    return;
+                }
+            };
+        match nb.rename_note_at(path, new_title) {
+            Ok(_) => {
+                self.refresh_notes_preserve_selection();
+                for name in &touched {
+                    self.note_changed(name);
+                }
+                if !touched.iter().any(|name| name == nb_name) {
+                    self.note_changed(nb_name);
+                }
+                self.set_status(if links > 0 {
+                    format!(
+                        "renamed to '{new_title}' — {links} link(s) updated across {files} note(s)"
+                    )
+                } else {
+                    format!("renamed to '{new_title}'")
+                });
+            }
+            Err(e) => self.set_status(format!("could not rename: {e}")),
+        }
+    }
     /// Starts a move or copy — in `Mode::Visual`, for every item in the
     /// selected range; otherwise for whichever single note/folder is
     /// currently selected. Both branches populate the same `pending_batch`
@@ -4878,6 +5017,31 @@ impl App {
             self.mode = Mode::Normal;
             return;
         }
+        // A merge-conflict edit: the raw buffer *is* the resolution — write
+        // it back and stage it, then bring the resolver modal back up (the
+        // edited file has left its list) unless the whole merge is done, in
+        // which case `finish_resolving_conflict_file` has already staged the
+        // "commit this merge?" confirm on top of it.
+        if let Some((notebook, file)) = self.editing_conflict.take() {
+            let nb_path = self
+                .notebooks
+                .iter()
+                .find(|n| n.name == notebook)
+                .map(|n| n.path.clone());
+            self.mode = Mode::Normal;
+            match nb_path {
+                Some(nb_path) => {
+                    let contents = editor.map(|e| e.contents()).unwrap_or_default();
+                    self.finish_resolving_conflict_file(&nb_path, &file, &contents);
+                }
+                None => self.set_status(format!("'{notebook}' no longer available")),
+            }
+            if !self.conflict_files.is_empty() || self.pending_finish_merge.is_some() {
+                self.conflict_viewing = None;
+                self.show_conflicts = true;
+            }
+            return;
+        }
         if let (Some(editor), Some(mut note)) = (editor, self.selected_note().cloned()) {
             note.body = editor.contents();
             // Pin relative due specs (`@due(+3d)`, `@due(mon)`) to real
@@ -5139,13 +5303,21 @@ impl App {
                     self.selected_notebook().cloned(),
                     self.selected_note().map(|n| n.path.clone()),
                 ) {
-                    match nb.rename_note_at(&path, &value) {
-                        Ok(_) => {
-                            self.refresh_notes_preserve_selection();
-                            self.note_changed(&nb.name);
-                            self.set_status(format!("renamed to '{value}'"));
-                        }
-                        Err(e) => self.set_status(format!("could not rename: {e}")),
+                    // Renaming breaks every inbound `[[wikilink]]` that
+                    // matched the old title/slug — count them first, and
+                    // when there are any, ask before rewriting (the "no"
+                    // answer renames anyway; aliases can rescue stragglers).
+                    let backlink_count = self.backlink_count_for(&path);
+                    if backlink_count > 0 {
+                        self.pending_rename_links = Some((nb.name.clone(), path, value.clone()));
+                        self.confirm = Some(confirm::ConfirmDialog::with_hint(
+                            format!("Rename to '{value}'?"),
+                            format!(
+                                "[y] rename + update {backlink_count} link(s)  [n] rename without updating links"
+                            ),
+                        ));
+                    } else {
+                        self.perform_rename_note(&nb.name, &path, &value);
                     }
                 }
             }
@@ -5396,6 +5568,10 @@ impl App {
                                 }
                                 "preview_image_scale"
                             }
+                            GeneralField::AttachmentsDir => {
+                                self.config.general.attachments_dir = value.clone();
+                                "attachments_dir"
+                            }
                             GeneralField::UseFavoriteEditor => "use_favorite_editor",
                             GeneralField::EnableCaptureDaemon => "enable_capture_daemon",
                             GeneralField::MouseDragSelection => "mouse_drag_selection",
@@ -5633,10 +5809,22 @@ impl App {
                             path.display()
                         )),
                     }
+                } else if let Some((nb_name, path, new_title)) = self.pending_rename_links.take() {
+                    self.perform_rename_with_link_update(&nb_name, &path, &new_title);
                 } else if let Some(notebook) = self.pending_finish_merge.take() {
                     self.finish_merge_notebook(&notebook);
                 } else if let Some(notebook) = self.pending_abort_merge.take() {
                     self.abort_merge_notebook(&notebook);
+                }
+            }
+            // The rename flow's third answer: rename, but leave every
+            // inbound `[[link]]` pointing at the old name (Esc is the real
+            // cancel — it lands in `_` below and stages nothing).
+            KeyCode::Char('n') | KeyCode::Char('N') => {
+                if let Some((nb_name, path, new_title)) = self.pending_rename_links.take() {
+                    self.perform_rename_note(&nb_name, &path, &new_title);
+                } else {
+                    self.set_status("cancelled".into());
                 }
             }
             _ => {
@@ -5646,6 +5834,7 @@ impl App {
                 self.pending_batch_delete = None;
                 self.pending_delete_snippet = None;
                 self.pending_notebook_adopt = None;
+                self.pending_rename_links = None;
                 self.pending_finish_merge = None;
                 self.pending_abort_merge = None;
             }
@@ -6735,11 +6924,26 @@ impl App {
             self.editor_redo_groups.clear();
         }
     }
-    /// Ctrl+V — tries the real OS clipboard first; if arboard can't reach
-    /// one (no display server), falls through to `ratatui-textarea`'s own
-    /// internal yank register (`paste()`), exactly what Ctrl+V already did
-    /// before `os_clipboard` existed, so nothing regresses in that case.
+    /// Ctrl+V — an *image* on the clipboard wins when `paste_images` is on
+    /// and a real note is being edited (not config.toml, a snippet body,
+    /// the scratchpad, or a conflict file): it's saved into the current
+    /// notebook's attachments folder and its markdown link inserted as one
+    /// undo step. Text still takes priority everywhere else, and if
+    /// arboard can't reach any clipboard (no display server), falls
+    /// through to `ratatui-textarea`'s own internal yank register
+    /// (`paste()`), exactly what Ctrl+V already did before `os_clipboard`
+    /// existed, so nothing regresses in that case.
     fn editor_paste_os(&mut self) {
+        let editing_a_note = !self.editing_config
+            && !self.editing_scratchpad
+            && self.editing_snippet.is_none()
+            && self.editing_conflict.is_none();
+        if self.config.editor.paste_images && editing_a_note {
+            if let Some(image) = crate::clipboard::paste_image() {
+                self.insert_pasted_image(&image);
+                return;
+            }
+        }
         match crate::clipboard::paste_os() {
             Some(text) => {
                 let edits = self.insert_pasted_text(&text);
@@ -6757,6 +6961,30 @@ impl App {
                     self.editor_redo_groups.clear();
                 }
             }
+        }
+    }
+    /// Saves a clipboard image into the current notebook's attachments
+    /// dir (`[general] attachments_dir`, resolved against the notebook
+    /// root so the written link resolves from any folder depth) and drops
+    /// the markdown link at the cursor.
+    fn insert_pasted_image(&mut self, image: &arboard::ImageData<'_>) {
+        let Some(nb) = self.selected_notebook().cloned() else {
+            self.set_status("no notebook selected — image not saved".into());
+            return;
+        };
+        match crate::attachments::save_image(&nb.path, &self.config.general.attachments_dir, image)
+        {
+            Ok((_path, link)) => {
+                let Some(editor) = &mut self.editor else {
+                    return;
+                };
+                if editor.textarea.insert_str(&link) {
+                    self.editor_undo_groups.push(1);
+                    self.editor_redo_groups.clear();
+                    self.set_status(format!("image saved: {link}"));
+                }
+            }
+            Err(e) => self.set_status(format!("could not save pasted image: {e}")),
         }
     }
     /// Shared by `editor_paste_os` (Ctrl+V) and `on_paste` (bracketed

@@ -6,6 +6,82 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- **Rename updates every inbound `[[wikilink]]`**: renaming a note (the `r`
+  prompt in NOTES) no longer silently breaks the links other notes hold to
+  it. When the note has backlinks, a confirm asks first — `y` renames *and*
+  rewrites every matching link across every notebook (`[[old title]]`,
+  `[[old-slug]]`, preserving `|display` aliases and `#heading`/`^block`
+  suffixes, skipping fenced code), `n` renames without touching anything,
+  `Esc` cancels. Rewrites go through raw-text surgery per file (frontmatter
+  skipped, never synthesized into plain notes) and respect encrypted
+  notebooks via their cached passphrase; locked ones are skipped rather
+  than half-touched.
+- **`aliases:` frontmatter support** — an optional list of alternate names
+  that resolve exactly like the title does (same case-insensitive +
+  slug fallback) in wikilink resolution, backlinks, and the graph, so a
+  renamed note's old name keeps working even where a rewrite missed (an
+  edit in flight on another machine). The key is the same one Obsidian
+  writes, so imported vaults carry theirs over untouched; empty is omitted
+  from serialization entirely, so existing notes round-trip byte-stable.
+- **`[[note#heading]]` / `[[note^block]]` compatibility** — Obsidian-style
+  sub-addresses now parse as links to `note` everywhere (resolution,
+  backlinks, graph edges, outgoing-links panel); the suffix is stripped
+  before matching instead of being treated as part of the target text.
+- **`![[embed]]` images render in PREVIEW** — an Obsidian-style embed line
+  draws as terminal art (chafa) just like `![alt](path)` does, resolving by
+  bare file name anywhere in the notebook's immediate subfolders (the usual
+  `attachments/` layout of imported vaults) after the ordinary relative-
+  path chain misses. Alias/sub-address parts don't change which file is meant.
+- **Image paste (`Ctrl+V`) saves attachments**: with an image (screenshot)
+  on the clipboard while editing a note, it's saved as a PNG under the
+  current notebook's `[general] attachments_dir` (default `attachments/`,
+  resolved against the notebook root so the inserted
+  `![pasted-…](attachments/…)` link renders from any folder depth) and the
+  markdown link lands at the cursor as one undo step. Text pastes are
+  unaffected; `[editor] paste_images` (on) gates it, and it only engages
+  for real note edits — not config.toml, snippet bodies, the scratchpad,
+  or conflict files. Both toggles live in Settings (GENERAL/EDITOR).
+- **`shiki import obsidian <vault>`** — adopts an existing Obsidian vault
+  as a notebook: in-place by default (registered under
+  `[notebooks.<name>] path`, files stay put, `--git-init` runs git init
+  when the vault isn't already a repo) or copied into the data dir with
+  `--copy`. `--tags` merges inline `#hashtags` into each note's
+  frontmatter tags through a raw-YAML edit that preserves foreign
+  frontmatter verbatim (Obsidian doesn't write shiki's `notebook:`/
+  `date:` keys, and parsing through the strict struct would have
+  synthesized replacements); plain notes without frontmatter are left
+  untouched.
+- **`shiki import notion <export.zip | folder>`** — converts a Notion
+  markdown export into a fresh notebook: the `<Page> <32-hex-uuid>` name
+  suffixes are stripped from pages and folders, internal page links
+  (URL-percent-encoded, relative or nested) become `[[wikilinks]]` with
+  display aliases preserved when they differ from the target's name, and
+  CSV databases plus non-markdown assets are counted and reported as
+  skipped. Accepts the raw `.zip` or an already-extracted directory.
+
+### Fixed
+
+- A notebook untracked via delete's "keep files, just untrack" answer came
+  back on every relaunch: startup (`App::new`) listed notebooks straight
+  from disk without applying the `hidden` filter only `reload_notebooks`
+  had. One shared filter (`visible_notebooks`) decides for both now.
+  `shiki notebook list` hides them too (with a new `--all` flag showing
+  them marked `(hidden)`), and the browser extension's notebook picker
+  applies the same rule so untracked notebooks stop being capturable.
+- Every CLI subcommand launched the TUI instead of running: the
+  pre-config extension check called `cli.command.take()` unconditionally,
+  consuming whatever command was parsed and leaving `None` behind — which
+  the dispatch reads as "no args, launch TUI". The take is now guarded so
+  only a genuine `Extension` command is consumed.
+- The merge-conflict resolver modal (auto-opened when a pull comes back
+  with conflicts, reopenable any time with `p` while mid-merge) gained
+  `i` — edit inline: loads the conflicted file's raw content into the
+  normal inline editor, and saving writes it back and stages it as that
+  file's resolution, the same bookkeeping `o`/`t`/`e` trigger. Removing
+  conflict markers no longer requires an external editor.
+
 ## [0.9.2] - 2026-08-20
 
 ### Added

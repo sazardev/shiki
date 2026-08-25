@@ -183,6 +183,13 @@ pub struct General {
     /// so a value outside that range can't blow up the chafa command.
     #[serde(default = "default_preview_image_scale")]
     pub preview_image_scale: f64,
+    /// Notebook-root folder pasted images are saved into (`Ctrl+V` with an
+    /// image on the clipboard). Resolved against the notebook's root, so a
+    /// link written from any nested note still resolves through the
+    /// preview's usual folder→notebook→data-dir chain. Defaults to
+    /// `"attachments"`; an empty value falls back to the same default.
+    #[serde(default = "default_attachments_dir")]
+    pub attachments_dir: String,
 }
 
 impl Default for General {
@@ -214,8 +221,13 @@ impl Default for General {
             preview_images: true,
             chafa_path: String::new(),
             preview_image_scale: default_preview_image_scale(),
+            attachments_dir: default_attachments_dir(),
         }
     }
+}
+
+pub fn default_attachments_dir() -> String {
+    "attachments".into()
 }
 
 fn default_status_message_timeout_secs() -> u64 {
@@ -1121,6 +1133,14 @@ pub struct EditorConfig {
     /// itself a URL, otherwise paste behaves exactly as before.
     #[serde(default = "default_true")]
     pub paste_url_as_link: bool,
+    /// Ctrl+V with an *image* on the clipboard saves it as a PNG under
+    /// `[general] attachments_dir` (inside the current notebook) and
+    /// inserts `![name](attachments/name.png)` at the cursor — screenshots
+    /// straight into notes, no intermediate file juggling. Text pastes are
+    /// unaffected either way; this only decides what happens when the
+    /// clipboard holds an image. Defaults to `true`.
+    #[serde(default = "default_true")]
+    pub paste_images: bool,
     /// Tab, when the text immediately before the cursor matches a
     /// configured snippet trigger, replaces that trigger text with the
     /// snippet's body instead of inserting a literal tab. Falls through to
@@ -1187,6 +1207,7 @@ impl Default for EditorConfig {
             format_shortcuts: true,
             auto_pair_brackets: true,
             paste_url_as_link: true,
+            paste_images: true,
             snippet_expand_tab: true,
             typewriter_scroll: false,
             move_line: true,

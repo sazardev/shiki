@@ -124,8 +124,15 @@ the [website](https://sazardev.github.io/shiki/#themes).
   flags duplicate/colliding keybindings, `/`-menu snippet triggers, unrecognized `config.toml` keys,
   and colliding notebook paths before they cause confusion.
 - **CLI commands** alongside the TUI (`new`, `capture`, `list`, `edit`, `show`, `search`,
-  `daily`, `sync`, `export`, `publish`, `tasks`, `graph`, `query`, `notebook`, `theme`,
+  `daily`, `sync`, `export`, `publish`, `tasks`, `graph`, `query`, `notebook`, `theme`, `import`,
   `config`, `doctor`) for quick one-off operations without opening the UI.
+- **One-command migration**: `shiki import obsidian <vault>` adopts an existing Obsidian vault as
+  a notebook in place (`--copy` to duplicate, `--tags` to merge inline #hashtags into frontmatter),
+  and `shiki import notion <export.zip>` converts a Notion export — UUID-stripped names, internal
+  links become `[[wikilinks]]`. Renaming notes updates every inbound `[[wikilink]]` (behind a
+  confirm), Obsidian's `aliases:` and `[[note#heading]]` syntax resolve natively, `![[embed]]`
+  images render in PREVIEW, and pasting a screenshot with `Ctrl+V` saves it into the notebook's
+  `attachments/` and inserts the link.
 
 ## Install
 

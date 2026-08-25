@@ -34,6 +34,16 @@ pub struct Frontmatter {
     pub date: NaiveDate,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Alternate names `[[wikilinks]]` resolve against, alongside the
+    /// title and the filename slug — the same `aliases:` key Obsidian
+    /// writes, so vaults coming from there carry theirs over untouched.
+    /// The main use here: renaming a note can rewrite every inbound
+    /// `[[link]]`, but anything that slips through (an edit in flight on
+    /// another machine, a link written later from memory) still resolves
+    /// if the old name is listed as an alias. Empty is omitted entirely on
+    /// serialize, so notes that never use aliases round-trip byte-stable.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
     pub notebook: String,
     #[serde(default)]
     pub links: Vec<String>,
@@ -49,6 +59,7 @@ impl Frontmatter {
             title: title.into(),
             date: chrono::Local::now().date_naive(),
             tags: Vec::new(),
+            aliases: Vec::new(),
             notebook: notebook.into(),
             links: Vec::new(),
             template: None,
@@ -241,6 +252,7 @@ impl Note {
             title,
             date,
             tags: Vec::new(),
+            aliases: Vec::new(),
             notebook,
             links: Vec::new(),
             template: None,

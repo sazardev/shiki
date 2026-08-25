@@ -52,6 +52,8 @@ serde_yaml = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 regex = "1"
+walkdir = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 pulldown-cmark = "0.13"
 anyhow = "1"
 thiserror = "2"
@@ -73,7 +75,8 @@ tempfile = "3"
 # `default-features = false` drops the default `image-data` feature (and its
 # `image`/`objc2-core-graphics`/etc. transitive deps) — shiki only ever
 # copies/pastes plain text through this, never images.
-arboard = { version = "3", default-features = false }
+arboard = { version = "3", default-features = false, features = ["image-data"] }
+png = "0.18"
 # age::scrypt — symmetric passphrase-based encryption for `[notebooks.<name>]
 # encrypt = true`. Pure-Rust, no system libsodium/openssl dependency. The
 # `armor` feature is required for ASCII-armored output (so ciphertext still

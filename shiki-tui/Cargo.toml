@@ -28,4 +28,8 @@ base64.workspace = true
 unicode-width.workspace = true
 directories.workspace = true
 arboard.workspace = true
+png.workspace = true
 serde_yaml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

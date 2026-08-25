@@ -479,6 +479,13 @@ config-hidden names (they're filtered out of `App.notebooks` itself) so Settings
 one. It's a one-way action, not a 3-state cycle like `auto_push`/`auto_sync` — a hidden notebook is
 already invisible to NOTEBOOKS, so there's no "hide from here" state to cycle into.
 
+**The hidden filter has exactly one implementation** — `sync.rs::visible_notebooks(store, config)` —
+and both consumers must go through it: `App::reload_notebooks` and `App::new`. Startup used to call
+`store.list()` raw (twice, even), so an untracked notebook silently reappeared on every relaunch;
+`shiki notebook list` hides them too (`--all` shows them marked `(hidden)`), and
+`shiki-native-host`'s `handle_list_notebooks` applies the same rule so the browser extension's
+picker never offers an untracked notebook.
+
 SNIPPETS level 1 additionally supports `a` (new snippet: prompts for a trigger via
 `PendingInput::SettingsSnippetTrigger`, creates it with an empty label/body, and drills straight
 into level 2 so it can be filled in) and `d` (delete: `App.pending_delete_snippet` mirrors
@@ -488,8 +495,9 @@ delete in this app uses). Level 2 shows `label` (a `PendingInput::SettingsSnippe
 prompt) and `body` — `body` is the one field in all of Settings that *doesn't* use a `PendingInput`
 prompt, since a snippet body is arbitrary multi-line text: `Enter` on it instead opens the same
 `Mode::Edit`/`InlineEditor` machinery a note's own body uses, tracked via `App.editing_snippet:
-Option<String>` (checked in `save_and_exit_edit` right alongside `editing_config`, a three-way
-dispatch: config file / snippet body / note body). THEME is the odd one out structurally: `name`
+Option<String>` (checked in `save_and_exit_edit` right alongside `editing_config`, a dispatch that
+also covers the scratchpad flag and `App.editing_conflict: Option<(String, PathBuf)>` — see the
+conflict resolver's `i` below). THEME is the odd one out structurally: `name`
 doesn't edit anything inline at all, it opens the *existing* theme picker (leader+`c`) via
 `open_theme_picker` rather than duplicating its live-preview/commit logic; `overrides` stays
 purely informational (pointed at leader+`c`/`shiki theme create --from` in a status message), since
@@ -838,6 +846,34 @@ successful link the modal rebuilds via `open_links`, so the row visibly migrates
 Backlinks; `Ok(false)` ("nothing linkable left") is a status message, not an error — it means the
 file changed since the mention was detected.
 
+**Renaming a note rewrites every inbound `[[wikilink]]` (`wikilinks::rewrite_links_to`), behind a
+confirm when backlinks exist.** The rename flow (`PendingInput::RenameNote` handling) counts
+backlinks first via `App::backlink_count_for` (cross-notebook — resolution falls back globally, so
+links from *other* notebooks would dangle too); with any found it stages
+`App.pending_rename_links: Option<(String, PathBuf, String)>` and shows a three-way confirm:
+`y` → rewrite + rename, `n` → rename only (a real arm in `handle_confirm_key`, not the catch-all,
+which is cancel), `Esc` → nothing. The rewrite matches old title *and* old filename slug
+case-insensitively on each link's base target (before `#heading`/`^block`), preserves `|display`
+and suffix parts verbatim, skips fenced code blocks and frontmatter, edits files as raw text (so a
+plain note never grows synthesized frontmatter), and decrypts/re-encrypts through each notebook's
+cached passphrase — a locked notebook's files are skipped outright. It runs **before**
+`rename_note_at` (old names must still be current to match) and returns `(links, notes, touched)`
+so every touched notebook registers with auto_sync. Frontmatter gained an Obsidian-compatible
+`aliases: Vec<String>` field (`skip_serializing_if` empty), included as resolution keys everywhere
+(`resolve_one`, `resolve_one_global`, `backlinks`, `edges`) — so even links a rewrite missed keep
+resolving after a rename. `[[note#heading]]`/`[[note^block]]` sub-addresses parse everywhere too:
+`extract`'s regex stops the target capture at `#`/`^`, and the resolvers strip the suffix before
+matching.
+
+**The merge-conflict resolver modal** (auto-opened when a pull returns `ConflictsPending`,
+reopenable with `p` while mid-merge since closing with `Esc` resolves nothing) resolves per file
+with `o` ours / `t` theirs / `e` stage-as-is / **`i` edit inline** — `i` loads the raw conflicted
+file into the normal inline editor tracked by `App.editing_conflict`; saving writes the buffer back
+verbatim and stages it through the same `finish_resolving_conflict_file` bookkeeping, then reopens
+the modal unless that was the last file (whose resolution stages the "commit this merge?" confirm).
+Note editing stays blocked during a merge otherwise (`merge_blocks_editing`) — the normal save path
+would commit markers as content.
+
 **The theme picker's `Enter` (and `shiki theme set`) only reset `config.theme.overrides` when the
 base theme name is actually *changing*, not on every confirm/set.** Both used to zero out
 `ThemeOverrides` unconditionally — even re-confirming the theme that was already active with no
@@ -902,6 +938,22 @@ OS favorite doesn't need hand-editing config.toml — the footer always shows wh
 the resolved editor's bare binary name (e.g. `nvim`) when on, `native` when off. Every note CRUD
 operation (create via `a`, edit via `i`, delete via `d`, rename via `r`) already works identically
 regardless of which mode is active — `native` isn't a reduced-functionality fallback.
+
+**`shiki import obsidian <vault>` / `shiki import notion <zip|dir>`
+(`shiki-cli/src/commands/import.rs`) are the migration paths.** Obsidian adopts *in-place* by
+default — it only registers `[notebooks.<name>] path = "<abs>"` in config.toml (`--git-init`
+initializes a repo when the vault lacks one; without either, sync just won't work there yet) — or
+duplicates into the data dir with `--copy`. Its `--tags` merge (`merge_tags_into_frontmatter`)
+edits each note's frontmatter as **raw YAML through a generic mapping**, never through shiki's
+strict `Frontmatter` struct: foreign vaults routinely omit shiki's required `notebook:`/`date:`
+keys, so a struct round-trip would fail to parse, synthesize replacements, and clobber the
+author's own dates/titles on save (hit this exact bug live during development — the first smoke
+test rewrote a vault note's `date:` to today). Plain notes without frontmatter are never touched.
+Notion converts an export into a fresh notebook under the data dir: `<Page> <32-hex>` name
+suffixes stripped from every path segment and link target, percent-encoded internal `.md` links
+rewritten to `[[wikilinks]]` (display alias kept when it differs from the target's cleaned name,
+unresolvable targets left untouched), CSV databases counted-and-skipped. The source may be the raw
+`.zip` (extracted via the `zip` crate into a throwaway tempdir) or a pre-extracted folder.
 
 **Note version history (PREVIEW-scope `H`) is real git history, not a separate versioning
 system.** `shiki_core::git::file_history(repo_path, file_relative)` walks the revwalk from `HEAD`
@@ -1024,7 +1076,19 @@ image's source line. The `ImageCtx` is threaded through `markdown_to_lines_index
 precomputed by `App::refresh_note_preview_cache` as `preview_image_scale × panel width` and the
 preview cache is width-keyed, so a resize re-runs chafa at the new width automatically. When
 `chafa` is missing or the file doesn't exist, the renderer falls through to the icon+alt form —
-never a broken frame. `shiki doctor` checks `chafa`/`hunspell` availability.
+never a broken frame. `shiki doctor` checks `chafa`/`hunspell` availability. Obsidian's embed
+syntax renders too: `whole_line_embed_path` parses a whole-line `![[file]]` (alias/`#`/`^` parts
+stripped), and `resolve_embed_path` adds an Obsidian-style bare-name lookup — after the ordinary
+relative chain misses, each base dir's immediate subdirectories are tried (one level, bounded), so
+an imported vault's `attachments/` layout just works.
+
+**Image paste (`Ctrl+V`, `[editor] paste_images` on by default) saves the clipboard image as an
+attachment** (`shiki-tui/src/attachments.rs::save_image`): RGBA straight from arboard (which
+needed its `image-data` feature enabled) → PNG via the `png` crate → written under
+`{notebook}/attachments_dir/pasted-YYYYMMDD-HHMMSS.png` (numeric `-2`/`-3` suffixes on collision,
+never overwrite) with the markdown link inserted as one undo step. It only engages for real note
+edits — the `editing_config`/`editing_snippet`/`editing_scratchpad`/`editing_conflict` flags all
+gate it off — and text on the clipboard always wins over an image.
 
 **`Ctrl+D` in the inline editor inserts a timestamp (`insert_timestamp`, on by default) — and it
 deliberately yields precedence to `multi_cursor`'s own Ctrl+D ("add next occurrence").** The two

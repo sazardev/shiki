@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use regex::Regex;
+use std::sync::OnceLock;
+
 use crate::note::Note;
 use crate::notebook::Notebook;
 
@@ -106,6 +109,41 @@ pub fn rename_tag(
     Ok((notes_updated, notebooks_touched))
 }
 
+/// Every inline `#hashtag` in a markdown body, deduplicated in order of
+/// first appearance — the Obsidian convention the import path converts
+/// into frontmatter tags (shiki itself only indexes frontmatter). Rules:
+/// the tag starts at a `#` immediately followed by a non-space character
+/// (which is exactly what keeps ATX headings like `# Heading` out), allows
+/// letters/digits/`_`/`-`/`/` (nested tags), must contain at least one
+/// letter so `#1`-style issue references don't count, and fenced code
+/// blocks are skipped entirely — a `# comment` inside a code example is
+/// text.
+pub fn inline_hashtags(body: &str) -> Vec<String> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"(?:^|[\s(\[{>])#([\w/\-]+)").unwrap());
+    let mut out: Vec<String> = Vec::new();
+    let mut in_fence = false;
+    for line in body.split('\n') {
+        if line.trim_start().starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+        for caps in re.captures_iter(line) {
+            let tag = caps[1].to_string();
+            if !tag.chars().any(char::is_alphabetic) {
+                continue;
+            }
+            if !out.contains(&tag) {
+                out.push(tag);
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,6 +214,26 @@ mod tests {
             all_tags(&pool),
             vec!["alpha".to_string(), "work".to_string(), "zeta".to_string()]
         );
+    }
+
+    #[test]
+    fn inline_hashtags_extracts_dedupes_and_skips_fences_and_headings() {
+        let body = "# Heading one\n\nnote with #work and #work again, nested #work/rust, \
+                    issue #123 stays out, code:\n```sh\n# not-a-tag here\n```\nend #ok_1\n";
+        assert_eq!(
+            inline_hashtags(body),
+            vec![
+                "work".to_string(),
+                "work/rust".to_string(),
+                "ok_1".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn inline_hashtags_empty_body_is_empty() {
+        assert!(inline_hashtags("").is_empty());
+        assert!(inline_hashtags("# \n## \n123 #456").is_empty());
     }
 
     #[test]

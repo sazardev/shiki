@@ -1,4 +1,26 @@
 use crate::app::App;
+use shiki_config::Config;
+use shiki_core::{Notebook, NotebookStore};
+
+/// Every notebook on disk except the ones untracked via "keep files, just
+/// untrack" ([`shiki_config::config::NotebookGitOverride::hidden`]) — the
+/// one filter both startup (`App::new`) and `App::reload_notebooks` must go
+/// through, so a notebook untracked mid-session stays untracked after a
+/// restart too (startup used to skip this filter entirely, which made an
+/// untracked notebook silently come back on every relaunch).
+pub(crate) fn visible_notebooks(store: &NotebookStore, config: &Config) -> Vec<Notebook> {
+    store
+        .list()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|nb| {
+            !config
+                .notebooks
+                .get(&nb.name)
+                .is_some_and(|over| over.hidden)
+        })
+        .collect()
+}
 
 /// One in-flight git operation's eventual result, sent back over
 /// `App::sync_rx` from the background thread `spawn_git_op` starts. `kind`
@@ -36,21 +58,13 @@ impl App {
     pub(crate) fn reload_notebooks(&mut self) {
         // A notebook "deleted" via the keep-files/just-untrack choice (see
         // `App::handle_delete_notebook_confirm_key`) still fully exists on
-        // disk and in `self.store` — it's excluded here, and only here, so
-        // it stops showing up anywhere the notebook list is used, without
-        // needing its own invalidation logic anywhere else.
-        self.notebooks = self
-            .store
-            .list()
-            .unwrap_or_default()
+        // disk and in `self.store` — it's excluded by `visible_notebooks`
+        // (the same filter startup uses), so it stops showing up anywhere
+        // the notebook list is used, without needing its own invalidation
+        // logic anywhere else.
+        let visible = visible_notebooks(&self.store, &self.config);
+        self.notebooks = visible
             .into_iter()
-            .filter(|nb| {
-                !self
-                    .config
-                    .notebooks
-                    .get(&nb.name)
-                    .is_some_and(|over| over.hidden)
-            })
             // Attaches whatever passphrase is cached for an encrypted
             // notebook (`resolved_notebook_crypto` — `None` if it isn't
             // encrypted, or if nothing's been typed in yet this session).
@@ -586,5 +600,64 @@ impl App {
         if self.show_drawer {
             self.refresh_drawer_statuses();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::visible_notebooks;
+    use shiki_config::config::NotebookGitOverride;
+    use shiki_config::Config;
+    use shiki_core::NotebookStore;
+
+    #[test]
+    fn visible_notebooks_excludes_hidden_but_keeps_the_rest() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = NotebookStore::new(tmp.path().to_path_buf());
+        store.create("personal").unwrap();
+        store.create("work").unwrap();
+
+        // No overrides at all — everything on disk shows up.
+        let config = Config::default();
+        let names: Vec<String> = visible_notebooks(&store, &config)
+            .into_iter()
+            .map(|n| n.name)
+            .collect();
+        assert_eq!(names, vec!["personal".to_string(), "work".to_string()]);
+
+        // Untracking "work" ("keep files, just untrack") hides exactly that
+        // one — the filter startup and reload_notebooks must agree on.
+        let mut config = Config::default();
+        config.notebooks.insert(
+            "work".to_string(),
+            NotebookGitOverride {
+                hidden: true,
+                ..Default::default()
+            },
+        );
+        let names: Vec<String> = visible_notebooks(&store, &config)
+            .into_iter()
+            .map(|n| n.name)
+            .collect();
+        assert_eq!(names, vec!["personal".to_string()]);
+    }
+
+    #[test]
+    fn visible_notebooks_treats_an_override_without_hidden_as_visible() {
+        // A per-notebook override that only tunes sync policy (the common
+        // [notebooks.<name>] table) must not hide the notebook.
+        let tmp = tempfile::tempdir().unwrap();
+        let store = NotebookStore::new(tmp.path().to_path_buf());
+        store.create("personal").unwrap();
+
+        let mut config = Config::default();
+        config.notebooks.insert(
+            "personal".to_string(),
+            NotebookGitOverride {
+                auto_push: Some(true),
+                ..Default::default()
+            },
+        );
+        assert_eq!(visible_notebooks(&store, &config).len(), 1);
     }
 }

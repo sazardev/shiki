@@ -333,7 +333,21 @@ fn handle_ping() -> anyhow::Result<serde_json::Value> {
 
 fn handle_list_notebooks() -> anyhow::Result<serde_json::Value> {
     let (config, store) = load_config_and_store()?;
-    let notebooks = store.list().unwrap_or_default();
+    // Same filter the TUI applies: notebooks untracked via "keep files,
+    // just untrack" ([notebooks.<name>] hidden = true) must not show up in
+    // the extension's notebook picker either — untracking from the TUI
+    // would otherwise leave them capturable from the browser.
+    let notebooks: Vec<_> = store
+        .list()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|nb| {
+            !config
+                .notebooks
+                .get(&nb.name)
+                .is_some_and(|over| over.hidden)
+        })
+        .collect();
     let infos: Vec<NotebookInfo> = notebooks
         .into_iter()
         .map(|nb| {

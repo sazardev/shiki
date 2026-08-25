@@ -242,13 +242,26 @@ falling back to the global `[git]` values for anything left unset. A failed push
 etc.) never blocks or loses anything — the commit already happened locally either way, and the next
 sync attempt (manual or automatic) just tries the push again.
 
+#### Merge conflicts (the resolver modal)
+
+A pull that can't fast-forward (both sides diverged) leaves the notebook mid-merge and **opens the
+conflict resolver automatically** — one file per row, real side-by-side OURS/THEIRS diffs loaded
+from libgit2 when you press `enter` on one. Per file: `o` keeps ours, `t` keeps theirs, `i` opens
+the conflicted file in the normal inline editor (markers and all — removing them and saving stages
+the result as that file's resolution), `e` stages the file as-is on disk (for edits made externally).
+`a` aborts the whole merge. Resolving the last file asks "all conflicts resolved — commit this
+merge?" (`y` commits with a `shiki: merge <branch>` message). Closing the modal with `Esc` resolves
+and aborts nothing — it stays mid-merge, note editing is blocked while so (saving through the normal
+path would happily commit markers as content), and pressing `p` again on that notebook reopens the
+resolver instead of attempting a second pull.
+
 #### `[keybindings.notes]` — active while NOTES is focused
 
 | Key | Action |
 |---|---|
 | `a` | New note (empty title stamps today's date). After the title, a template picker opens — every `.md` file in `~/.config/shiki/templates/` plus a "blank" option; `j`/`k` browse, `Enter` picks one and jumps straight to editing (`{{title}}`/`{{date}}`/`{{time}}`/`{{notebook}}` already substituted, and a `{{cursor}}` marker — never saved to disk — leaves the cursor exactly where it was in the template instead of at the top), `Esc`/`q` cancels the note entirely. Typing `@` anywhere in the title prompt (with or without a title before it) opens a quick dropdown instead — `today`/`yesterday`/`tomorrow` (a computed date, no template) plus every available template, fuzzy-filtered as you keep typing; `Enter` creates the note and jumps straight to editing, skipping the title→Enter→pick-a-template two-step entirely |
 | `f` | New folder — empty name cancels rather than creating something unnamed. Created at the current breadcrumb depth, so it can be nested arbitrarily by descending first |
-| `r` | Rename note |
+| `r` | Rename note. When other notes still link to this one, a confirm appears first: `y` renames **and** rewrites every inbound `[[wikilink]]` (across every notebook — old title and old filename slug both match case-insensitively; `|display` aliases and `#heading`/`^block` suffixes are preserved verbatim, fenced code is skipped), `n` renames without touching any link (frontmatter `aliases:` can rescue stragglers later — see the note-format section below), `Esc` cancels outright. With zero backlinks it renames directly, no dialog |
 | `d` | Delete the selected note *or* folder (with confirmation) — a folder deletes everything inside it too. In `v` select mode, deletes every selected item at once. Moved to the trash rather than permanently removed, so leader+`u` can undo it |
 | `i` | Edit inline (or the OS favorite editor if `general.use_favorite_editor`) |
 | `E` | Edit externally ($EDITOR) |
@@ -305,7 +318,11 @@ diagram it can't parse falls back to the previous flat styling rather than break
 
 A `![alt](path)` image that stands alone on its own source line renders as real terminal art in
 PREVIEW by shelling out to `chafa` (a terminal image renderer) — the same external-binary pattern
-as `pretty-pdf` and `hunspell`, so nothing is bundled. The art is drawn at `preview_image_scale` ×
+as `pretty-pdf` and `hunspell`, so nothing is bundled. Obsidian's embed syntax works too: a
+`![[file]]` line (alias `|text` and `#heading`/`^block` suffixes stripped) renders the same way,
+and its file reference resolves by bare name across the notebook's immediate subfolders after the
+ordinary relative chain (note's folder → notebook root → data_dir) misses — the usual
+`attachments/` layout of imported vaults. The art is drawn at `preview_image_scale` ×
 the preview panel's width, is ANSI-SGR-colored half-block art, and scrolls like any other row (a
 real terminal-graphics protocol — kitty/sixel — would anchor images to screen coordinates and
 break scrolling). The path resolves against the note's own folder, then the notebook root, then
@@ -391,6 +408,12 @@ The rest of the editor's mouse/keyboard UX is opt-in via `[editor]` (Settings' E
   typing two real `[` characters in a row.
 - `paste_url_as_link` (on by default): pasting a bare URL over an active selection wraps it as
   `[selected text](url)` instead of replacing the selection with the raw URL.
+- `paste_images` (on by default): `Ctrl+V` with an *image* on the clipboard saves it as a PNG under
+  `[general] attachments_dir` (default `attachments/`, created at the notebook root so the inserted
+  `![pasted-…](attachments/…)` link resolves from any note depth) and drops the markdown link at
+  the cursor as a single undo step — screenshots straight into notes. Only engages for real note
+  edits (not config.toml/snippet/scratchpad/conflict-file buffers), and only when the clipboard
+  actually holds an image; text pastes behave exactly as before either way.
 - `snippet_expand_tab` (on by default): `Tab`, when the text immediately before the cursor matches
   a configured snippet trigger, replaces that trigger text with the snippet's body instead of
   inserting a literal tab.
@@ -489,6 +512,10 @@ shiki query --saved due-soon                        # run a query saved under [q
 shiki theme list          # list built-in themes, marking the active one
 shiki theme set <name>    # switch theme (persisted to config.toml)
 shiki theme create [--from <name>]  # scaffold all 19 color overrides from a real palette
+shiki import obsidian ~/vaults/personal          # adopt a vault in-place as notebook "personal"
+shiki import obsidian ~/vaults/work --copy --tags --git-init  # copy in, merge inline #tags, git init
+shiki import notion ~/Downloads/Export-....zip   # UUID-stripped, links -> wikilinks
+shiki import notion ~/Downloads/export --name work
 shiki doctor              # environment check: config, data dir, git, editor, terminal, keybindings, snippets
 ```
 
@@ -725,6 +752,7 @@ could collide with one.
 title: My note
 date: 2026-07-22
 tags: [rust, tui, ideas]
+aliases: [My old title]
 notebook: personal
 links: [[another-note]], [[third-link]]
 template: default
@@ -740,9 +768,20 @@ Content in **markdown**.
 [[wikilink]] to another note — navigable from the TUI.
 ```
 
+`aliases` is optional and Obsidian-compatible: every entry resolves like the title does (same
+case-insensitive match plus slug fallback) wherever wikilinks are resolved, so links written against
+an old name keep working after a rename. The key is omitted entirely from serialization when empty,
+so notes that never use aliases round-trip byte-stable.
+
+Wikilinks also tolerate Obsidian's sub-address syntax — `[[note#heading]]` and `[[note^block-id]]`
+resolve to `note` everywhere (the suffix is stripped before matching, never treated as part of the
+target text).
+
 Notebooks also tolerate `.txt` and `.mdx` files alongside `.md` when listing/reading notes — a
 notebook pointed at an existing Obsidian vault or similar commonly has both. New notes are always
-created as `.md`; renaming a `.txt`/`.mdx` note preserves its original extension.
+created as `.md`; renaming a `.txt`/`.mdx` note preserves its original extension. Dot-directories
+are never listed or descended into — beyond shiki's own `.git`, that keeps an adopted vault's
+`.obsidian/` (settings), `.trash/`, and friends from showing up as notebook folders.
 
 ---
 
@@ -861,6 +900,9 @@ preview_images = true
 chafa_path = ""
 # Fraction of the preview panel's width the art is drawn at (0.0, 1.0].
 preview_image_scale = 0.5
+# Notebook-root folder pasted images (Ctrl+V with an image on the
+# clipboard) are saved into; the inserted link resolves from any note depth.
+attachments_dir = "attachments"
 
 [keybindings]
 leader = "space"
@@ -982,6 +1024,7 @@ auto_list_continue = true  # Enter continues a list/checkbox line; empty item ex
 format_shortcuts = true    # Ctrl+B / Ctrl+Alt+I wrap the selection in bold/italic
 auto_pair_brackets = true  # typing ( ` " wraps the selection or inserts an empty pair
 paste_url_as_link = true   # pasting a URL over a selection wraps it as a markdown link
+paste_images = true        # Ctrl+V with an image saves it to attachments/ and inserts the link
 snippet_expand_tab = true  # Tab expands a matching snippet trigger
 typewriter_scroll = false  # keeps the cursor's line vertically centered while typing
 move_line = true          # Alt+Up/Alt+Down move the current line past its neighbor

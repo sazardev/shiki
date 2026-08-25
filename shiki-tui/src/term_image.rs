@@ -88,6 +88,51 @@ pub fn whole_line_image_path(line: &str) -> Option<String> {
     }
 }
 
+/// Parses Obsidian's embed syntax `![[file]]` — returning the file
+/// reference only when the embed is the *whole* line (modulo surrounding
+/// whitespace), like `whole_line_image_path`. Alias (`|text`) and
+/// sub-address (`#heading`/`^block`) parts are stripped; empty or remote
+/// references yield `None`.
+pub fn whole_line_embed_path(line: &str) -> Option<String> {
+    let t = line.trim();
+    if !(t.starts_with("![[") && t.ends_with("]]")) {
+        return None;
+    }
+    let inner = &t[3..t.len() - 2];
+    let inner = inner.split('|').next().unwrap_or("");
+    let inner = inner.split(['#', '^']).next().unwrap_or("").trim();
+    if inner.is_empty() || inner.starts_with("http://") || inner.starts_with("https://") {
+        None
+    } else {
+        Some(inner.to_string())
+    }
+}
+
+/// Resolves an embed `spec` against the ctx's base directories — first the
+/// ordinary relative-path chain (`resolve_image_path`), then an
+/// Obsidian-style name lookup: vaults commonly keep images in some
+/// subfolder (`attachments/`, `_files/`, the note's own folder…) while the
+/// embed only carries the bare file name, so each base directory's
+/// immediate subdirectories are tried too. Depth stays bounded (one level),
+/// keeping this cheap enough to run during a preview refresh.
+pub fn resolve_embed_path(base_dirs: &[PathBuf], spec: &str) -> Option<PathBuf> {
+    if let Some(found) = resolve_image_path(base_dirs, spec) {
+        return Some(found);
+    }
+    for base in base_dirs {
+        let Ok(entries) = std::fs::read_dir(base) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let candidate = entry.path().join(spec);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
 /// Resolves an image `spec` against the ctx's base directories, returning
 /// the first existing absolute path. An absolute `spec` is checked as-is.
 pub fn resolve_image_path(base_dirs: &[PathBuf], spec: &str) -> Option<PathBuf> {
@@ -322,6 +367,56 @@ mod tests {
         assert_eq!(whole_line_image_path("# heading"), None);
         assert_eq!(whole_line_image_path("[link](url)"), None);
         assert_eq!(whole_line_image_path(""), None);
+    }
+
+    #[test]
+    fn embed_syntax_extracts_the_file_reference() {
+        assert_eq!(
+            whole_line_embed_path("![[screenshot.png]]").as_deref(),
+            Some("screenshot.png")
+        );
+        assert_eq!(
+            whole_line_embed_path("  ![[attachments/diagram.png]]  ").as_deref(),
+            Some("attachments/diagram.png")
+        );
+        // Alias and sub-address parts don't change which file is meant.
+        assert_eq!(
+            whole_line_embed_path("![[photo.png|the vault door]]").as_deref(),
+            Some("photo.png")
+        );
+        assert_eq!(
+            whole_line_embed_path("![[note#Section]]").as_deref(),
+            Some("note")
+        );
+    }
+
+    #[test]
+    fn embed_syntax_rejects_everything_that_is_not_a_local_embed() {
+        // Markdown form belongs to the other parser.
+        assert_eq!(whole_line_embed_path("![alt](img.png)"), None);
+        // Not the whole line / not an embed at all.
+        assert_eq!(whole_line_embed_path("text ![[a.png]] more"), None);
+        assert_eq!(whole_line_embed_path("[[a.png]]"), None);
+        // Empty, remote.
+        assert_eq!(whole_line_embed_path("![[ ]]"), None);
+        assert_eq!(whole_line_embed_path("![[https://x/y.png]]"), None);
+    }
+
+    #[test]
+    fn resolve_embed_finds_a_bare_name_inside_subfolders() {
+        let dir = std::env::temp_dir().join("shiki-embed-resolve-test");
+        let _ = std::fs::create_dir_all(&dir);
+        let attachments = dir.join("attachments");
+        let _ = std::fs::create_dir_all(&attachments);
+        std::fs::write(attachments.join("pic.png"), "fake png").unwrap();
+        let bases = vec![dir.clone()];
+        let resolved = resolve_embed_path(&bases, "pic.png").unwrap();
+        assert_eq!(resolved, attachments.join("pic.png"));
+        // And a spec that already carries its folder resolves directly,
+        // without the scan.
+        let direct = resolve_embed_path(&bases, "attachments/pic.png").unwrap();
+        assert_eq!(direct, attachments.join("pic.png"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -239,6 +239,48 @@ enum Commands {
         #[command(subcommand)]
         action: commands::extension::ExtensionAction,
     },
+    /// Imports notes from other apps (Obsidian vaults, Notion exports)
+    Import {
+        #[command(subcommand)]
+        action: ImportAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ImportAction {
+    /// Adopts an existing Obsidian vault as a shiki notebook — in-place by
+    /// default (registered under `[notebooks.<name>] path`, files stay
+    /// where they are), or copied into the data dir with `--copy`.
+    Obsidian {
+        /// Path to the vault's root folder (`~` expands).
+        path: String,
+        /// Notebook name (defaults to the folder's own name).
+        #[arg(long)]
+        name: Option<String>,
+        /// Copy everything into a fresh notebook under the data dir
+        /// instead of adopting the folder in place.
+        #[arg(long)]
+        copy: bool,
+        /// Merge inline #hashtags into each note's frontmatter tags
+        /// (notes without frontmatter are left untouched).
+        #[arg(long)]
+        tags: bool,
+        /// With adoption: run `git init` when the vault isn't already a
+        /// repo, so sync works from day one.
+        #[arg(long)]
+        git_init: bool,
+    },
+    /// Converts a Notion markdown export (the `.zip`, or an already-
+    /// extracted folder) into a fresh notebook: UUID suffixes are stripped
+    /// from page/folder names, internal page links become `[[wikilinks]]`,
+    /// CSV databases are reported but skipped.
+    Notion {
+        /// Path to the export's `.zip` or extracted folder (`~` expands).
+        path: String,
+        /// Notebook name (defaults to the zip/folder name, cleaned).
+        #[arg(long)]
+        name: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -250,6 +292,10 @@ enum NotebookAction {
         /// Emits a JSON array instead of plain text — for scripting.
         #[arg(long)]
         json: bool,
+        /// Also lists notebooks untracked via "keep files, just untrack"
+        /// (marked `(hidden)`), which are excluded by default.
+        #[arg(long)]
+        all: bool,
     },
     Rename {
         old: String,
@@ -356,8 +402,13 @@ fn main() -> Result<()> {
 
     // Handled before `Context::load()` — doctor and extension need to work
     // even when the config is broken.
-    if let Some(Commands::Extension { action }) = cli.command.take() {
-        return commands::extension::run(action);
+    // `matches!` guards the `take()`: a bare `take()` would consume *any*
+    // command into this check and leave `cli.command` as None, silently
+    // routing every other subcommand (list, sync, import…) into the TUI.
+    if matches!(cli.command, Some(Commands::Extension { .. })) {
+        if let Some(Commands::Extension { action }) = cli.command.take() {
+            return commands::extension::run(action);
+        }
     }
     if matches!(cli.command, Some(Commands::Doctor)) {
         return commands::doctor::run();
@@ -541,7 +592,9 @@ fn main() -> Result<()> {
         Some(Commands::Doctor) => unreachable!("handled before Context::load() above"),
         Some(Commands::Notebook { action }) => match action {
             NotebookAction::Create { name } => commands::notebook::create(&ctx.store, &name),
-            NotebookAction::List { json } => commands::notebook::list(&ctx.store, json),
+            NotebookAction::List { json, all } => {
+                commands::notebook::list(&ctx.store, &ctx.config, json, all)
+            }
             NotebookAction::Rename { old, new } => {
                 commands::notebook::rename(&ctx.store, &old, &new)
             }
@@ -568,5 +621,25 @@ fn main() -> Result<()> {
             }
         },
         Some(Commands::Extension { .. }) => unreachable!("handled before Context::load"),
+        Some(Commands::Import { action }) => match action {
+            ImportAction::Obsidian {
+                path,
+                name,
+                copy,
+                tags,
+                git_init,
+            } => commands::import::obsidian(
+                &mut ctx.config,
+                &ctx.store,
+                &path,
+                name.as_deref(),
+                copy,
+                tags,
+                git_init,
+            ),
+            ImportAction::Notion { path, name } => {
+                commands::import::notion(&ctx.store, &path, name.as_deref())
+            }
+        },
     }
 }

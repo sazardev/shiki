@@ -89,10 +89,11 @@ pub enum GeneralField {
     PreviewImages,
     ChafaPath,
     PreviewImageScale,
+    AttachmentsDir,
 }
 
 impl GeneralField {
-    pub const ALL: [GeneralField; 25] = [
+    pub const ALL: [GeneralField; 26] = [
         GeneralField::DefaultNotebook,
         GeneralField::Editor,
         GeneralField::DailyTemplate,
@@ -118,6 +119,7 @@ impl GeneralField {
         GeneralField::PreviewImages,
         GeneralField::ChafaPath,
         GeneralField::PreviewImageScale,
+        GeneralField::AttachmentsDir,
     ];
 }
 
@@ -181,6 +183,7 @@ pub enum EditorField {
     FormatShortcuts,
     AutoPairBrackets,
     PasteUrlAsLink,
+    PasteImages,
     SnippetExpandTab,
     TypewriterScroll,
     MoveLine,
@@ -193,7 +196,7 @@ pub enum EditorField {
 }
 
 impl EditorField {
-    pub const ALL: [EditorField; 19] = [
+    pub const ALL: [EditorField; 20] = [
         EditorField::MouseSelection,
         EditorField::FindReplace,
         EditorField::OsClipboard,
@@ -204,6 +207,7 @@ impl EditorField {
         EditorField::FormatShortcuts,
         EditorField::AutoPairBrackets,
         EditorField::PasteUrlAsLink,
+        EditorField::PasteImages,
         EditorField::SnippetExpandTab,
         EditorField::TypewriterScroll,
         EditorField::MoveLine,
@@ -455,6 +459,7 @@ fn general_rows(app: &App) -> Vec<Line<'static>> {
             "preview_image_scale",
             cfg.general.preview_image_scale.to_string(),
         ),
+        row_line(app, "attachments_dir", cfg.general.attachments_dir.clone()),
     ]
 }
 
@@ -550,6 +555,7 @@ fn editor_rows(app: &App) -> Vec<Line<'static>> {
             "paste_url_as_link",
             cfg.editor.paste_url_as_link.to_string(),
         ),
+        row_line(app, "paste_images", cfg.editor.paste_images.to_string()),
         row_line(
             app,
             "snippet_expand_tab",

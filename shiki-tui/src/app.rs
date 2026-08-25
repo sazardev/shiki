@@ -761,6 +761,14 @@ pub struct App {
     /// True while the editor contains the session-only scratchpad buffer.
     /// It has no path and is discarded unless explicitly saved as a note.
     pub(crate) editing_scratchpad: bool,
+    /// `Some((notebook, relative file))` while the editor holds a merge-
+    /// conflicted file's raw content (the resolver modal's `i` — "edit
+    /// inline", the in-app version of what previously required an external
+    /// editor before `e` could stage it). Saving writes the raw text back
+    /// to disk *and* stages it as that file's resolution via
+    /// `git::resolve_conflict`, reusing the same post-resolution bookkeeping
+    /// (`finish_resolving_conflict_file`) the `o`/`t`/`e` keys go through.
+    pub(crate) editing_conflict: Option<(String, std::path::PathBuf)>,
     /// True from the moment THEME's `name` row opens the theme picker from
     /// inside Settings until the picker closes — `show_settings` is hidden
     /// first (its render call in `draw()` comes after the theme picker's,
@@ -1015,6 +1023,12 @@ pub struct App {
     /// `Some` while drilled into one conflicted file's side-by-side ours/
     /// theirs diff view; `None` while browsing the flat file list.
     pub(crate) conflict_viewing: Option<ConflictView>,
+    /// `Some((notebook, path, new title))` staged between the rename
+    /// prompt and the "linked from N notes — update [[links]]?" confirm —
+    /// the rename itself only runs once that's answered, since the answer
+    /// decides whether `wikilinks::rewrite_links_to` fires first. Same
+    /// one-shot staging pattern as `pending_revert`.
+    pub(crate) pending_rename_links: Option<(String, std::path::PathBuf, String)>,
     /// Notebook name staged while the `confirm` dialog asks "commit this
     /// merge?" — mirrors `pending_revert`'s pattern.
     pub(crate) pending_finish_merge: Option<String>,
@@ -1220,7 +1234,13 @@ fn load_log_history(path: &std::path::Path, limit: usize) -> Vec<LogEntry> {
 
 impl App {
     pub fn new(config: Config, store: NotebookStore) -> shiki_core::Result<Self> {
-        let notebooks = store.list()?;
+        // One filtered list for everything below (theme resolution included)
+        // — this used to call `store.list()` twice and, worse, never applied
+        // the "keep files, just untrack" hidden filter at all, so a notebook
+        // untracked mid-session reappeared on every relaunch. The same
+        // `visible_notebooks` filter `reload_notebooks` uses decides here
+        // too.
+        let notebooks = crate::sync::visible_notebooks(&store, &config);
         // Resolve for the initially selected notebook so a per-notebook
         // override on it applies from the very first frame.
         let theme = config
@@ -1229,7 +1249,6 @@ impl App {
         let show_dates = config.general.show_dates;
         let note_sort = NoteSort::from_config_str(&config.general.default_note_sort);
         let keymaps = KeyMaps::from_config(&config.keybindings);
-        let notebooks = store.list()?;
         // Deliberately tolerant, not `?` — an encrypted-and-locked default
         // notebook (no passphrase can possibly be cached yet, this is
         // startup) must not crash the whole app before it even has a
@@ -1344,6 +1363,7 @@ impl App {
             editing_config: false,
             editing_snippet: None,
             editing_scratchpad: false,
+            editing_conflict: None,
             reopen_settings_after_theme_picker: false,
             pending_delete_snippet: None,
             log_history,
@@ -1425,6 +1445,7 @@ impl App {
             conflict_branch: String::new(),
             conflict_viewing: None,
             pending_finish_merge: None,
+            pending_rename_links: None,
             pending_abort_merge: None,
             notebook_passphrases: std::collections::HashMap::new(),
             passphrase_prompt_notebook: None,

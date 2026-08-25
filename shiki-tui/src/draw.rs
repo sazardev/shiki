@@ -869,8 +869,7 @@ fn render_conflicts(frame: &mut Frame, frame_area: Rect, app: &App) {
                 })
                 .collect()
         };
-        let hint =
-            "o keep ours \u{B7} t keep theirs \u{B7} e mark resolved (edited) \u{B7} esc back";
+        let hint = "o keep ours \u{B7} t keep theirs \u{B7} i edit inline \u{B7} e mark resolved (edited) \u{B7} esc back";
         let ours_title = format!(" {}OURS  \u{2014}  {hint} ", icons::GIT);
         let theirs_title = format!(" {}THEIRS  \u{2014}  {hint} ", icons::GIT);
         let ours_paragraph = ratatui::widgets::Paragraph::new(to_lines(&view.ours))
@@ -893,7 +892,7 @@ fn render_conflicts(frame: &mut Frame, frame_area: Rect, app: &App) {
         .collect();
     let highlight_symbol = format!("{}", icons::ARROW);
     let title = format!(
-        " {}Merge conflicts on '{}' [{} file{}]  \u{2014}  enter resolve \u{B7} o ours \u{B7} t theirs \u{B7} a abort \u{B7} esc close ",
+        " {}Merge conflicts on '{}' [{} file{}]  \u{2014}  enter resolve \u{B7} o ours \u{B7} t theirs \u{B7} i edit inline \u{B7} a abort \u{B7} esc close ",
         icons::WARNING,
         app.conflict_branch,
         app.conflict_files.len(),

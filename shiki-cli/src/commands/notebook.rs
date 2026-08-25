@@ -9,8 +9,33 @@ pub fn create(store: &NotebookStore, name: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn list(store: &NotebookStore, json: bool) -> Result<()> {
-    let notebooks = store.list()?;
+pub fn list(store: &NotebookStore, config: &Config, json: bool, all: bool) -> Result<()> {
+    // Notebooks untracked via "keep files, just untrack" ([notebooks.<name>]
+    // hidden = true) stay hidden here too, matching what the TUI lists —
+    // `--all` is the explicit way to see them (marked), e.g. to find
+    // something you untracked and want back.
+    let notebooks: Vec<_> = store
+        .list()?
+        .into_iter()
+        .filter(|nb| {
+            all || !config
+                .notebooks
+                .get(&nb.name)
+                .is_some_and(|over| over.hidden)
+        })
+        .collect();
+    let label = |nb: &shiki_core::Notebook| -> String {
+        if all
+            && config
+                .notebooks
+                .get(&nb.name)
+                .is_some_and(|over| over.hidden)
+        {
+            format!("{} (hidden)", nb.name)
+        } else {
+            nb.name.clone()
+        }
+    };
 
     if json {
         let items: Vec<serde_json::Value> = notebooks
@@ -19,12 +44,14 @@ pub fn list(store: &NotebookStore, json: bool) -> Result<()> {
                 Ok(notes) => serde_json::json!({
                     "name": nb.name,
                     "path": nb.path,
+                    "hidden": config.notebooks.get(&nb.name).is_some_and(|over| over.hidden),
                     "note_count": notes.len(),
                     "error": null,
                 }),
                 Err(e) => serde_json::json!({
                     "name": nb.name,
                     "path": nb.path,
+                    "hidden": config.notebooks.get(&nb.name).is_some_and(|over| over.hidden),
                     "note_count": null,
                     "error": e.to_string(),
                 }),
@@ -38,13 +65,13 @@ pub fn list(store: &NotebookStore, json: bool) -> Result<()> {
         println!("(no notebooks)");
         return Ok(());
     }
-    for nb in notebooks {
+    for nb in &notebooks {
         match nb.all_notes_recursive() {
-            Ok(notes) => println!("{}  ({} notes)", nb.name, notes.len()),
+            Ok(notes) => println!("{}  ({} notes)", label(nb), notes.len()),
             // A failed walk (permissions, I/O) is not the same thing as a
             // genuinely empty notebook — `unwrap_or(0)` used to make the two
             // indistinguishable in this output.
-            Err(e) => println!("{}  (error reading notes: {e})", nb.name),
+            Err(e) => println!("{}  (error reading notes: {e})", label(nb)),
         }
     }
     Ok(())

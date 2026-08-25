@@ -154,7 +154,15 @@ impl Notebook {
         let mut notes = Vec::new();
         for path in entries {
             if path.is_dir() {
-                if path.file_name().is_some_and(|n| n == ".git") {
+                // Every dot-directory is invisible: `.git` is the original
+                // case, but an adopted Obsidian vault also brings
+                // `.obsidian/`, `.trash/`, `.smart-env/`… — none of those
+                // are folders a user wants showing up (or being recursed
+                // into) as notebook folders.
+                if path
+                    .file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with('.'))
+                {
                     continue;
                 }
                 if let Some(name) = path.file_name() {
@@ -752,6 +760,29 @@ mod tests {
             3,
             "non-note extensions must be excluded: {stems:?}"
         );
+    }
+
+    #[test]
+    fn list_dir_skips_every_dot_directory_not_just_git() {
+        // An adopted Obsidian vault carries `.obsidian/` (settings),
+        // `.trash/` (its own soft deletes), `.smart-env/` — none of those
+        // are notebook folders and none of their contents are notes.
+        let tmp = tempfile::tempdir().unwrap();
+        let nb = test_notebook(tmp.path(), "vault");
+        nb.create_note("Real note", "body").unwrap();
+        for dot in [".git", ".obsidian", ".trash", ".smart-env"] {
+            let dir = nb.path.join(dot);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("hidden-note.md"), "# hidden").unwrap();
+        }
+
+        let (folders, notes) = nb.list_dir(Path::new("")).unwrap();
+
+        assert!(folders.is_empty(), "dot-dirs must not list: {folders:?}");
+        assert_eq!(notes.len(), 1, "only the real note shows up");
+        assert_eq!(notes[0].frontmatter.title, "Real note");
+        // And the recursive walk doesn't descend into them either.
+        assert_eq!(nb.all_notes_recursive().unwrap().len(), 1);
     }
 
     #[test]

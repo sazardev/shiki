@@ -30,3 +30,7 @@ toml.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 rpassword.workspace = true
+regex.workspace = true
+walkdir = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tempfile.workspace = true

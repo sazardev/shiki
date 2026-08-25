@@ -53,3 +53,20 @@ pub fn copy_os(text: &str) -> bool {
 pub fn paste_os() -> Option<String> {
     os_clipboard()?.lock().ok()?.get_text().ok()
 }
+
+/// Reads an *image* from the real OS clipboard, if one is there — the
+/// entry point for pasting screenshots straight into a note. `None` means
+/// no display server, or the clipboard holds text rather than an image
+/// (callers try `paste_os` first, so text keeps winning).
+pub fn paste_image() -> Option<arboard::ImageData<'static>> {
+    let cb = os_clipboard()?;
+    let mut cb = cb.lock().ok()?;
+    let img = cb.get_image().ok()?;
+    // arboard's own buffer is borrowed-lifetime; detach it so the image
+    // outlives the clipboard lock.
+    Some(arboard::ImageData {
+        width: img.width,
+        height: img.height,
+        bytes: std::borrow::Cow::Owned(img.bytes.into_owned()),
+    })
+}

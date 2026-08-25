@@ -6,6 +6,7 @@ pub mod edit;
 pub mod export;
 pub mod extension;
 pub mod graph;
+pub mod import;
 pub mod list;
 pub mod new;
 pub mod notebook;
