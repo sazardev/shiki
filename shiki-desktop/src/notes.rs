@@ -340,7 +340,12 @@ mod tests {
             "![pic](attachments/x.png)\n\n![web](https://ex.com/a.png)",
             Path::new("/tmp/nb"),
         );
-        assert!(html.contains(r#"src="/tmp/nb/attachments/x.png""#));
+        // Path separators differ per platform (Windows: backslashes).
+        let expected = Path::new("/tmp/nb").join("attachments").join("x.png");
+        assert!(
+            html.contains(&format!(r##"src="{}""##, expected.to_string_lossy())),
+            "expected {expected:?} in: {html}"
+        );
         assert!(html.contains(r#"src="https://ex.com/a.png""#));
     }
 }
