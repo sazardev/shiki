@@ -16,7 +16,6 @@ shiki-config.workspace = true
 ratatui.workspace = true
 crossterm.workspace = true
 ratatui-textarea.workspace = true
-tokio.workspace = true
 comrak.workspace = true
 syntect.workspace = true
 two-face.workspace = true

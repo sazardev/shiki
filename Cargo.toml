@@ -26,7 +26,6 @@ shiki-tui = { path = "shiki-tui", version = "0.9.4" }
 
 ratatui = "0.30"
 crossterm = "0.29"
-tokio = { version = "1", features = ["full"] }
 git2 = { version = "0.21", features = ["ssh", "https", "vendored-libgit2", "vendored-openssl"] }
 comrak = "0.54"
 syntect = "5"

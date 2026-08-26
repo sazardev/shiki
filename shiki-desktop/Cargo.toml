@@ -11,6 +11,7 @@ description = "shiki (私記) - Windows/Linux/macOS desktop GUI for shiki, built
 tauri-build = { workspace = true }
 
 [dependencies]
+tokio = { version = "1", features = ["full"] }
 tauri = { workspace = true, features = ["protocol-asset"] }
 tauri-plugin-updater = { workspace = true }
 serde = { workspace = true }

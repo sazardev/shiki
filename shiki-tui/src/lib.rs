@@ -5,6 +5,7 @@ pub mod clipboard;
 pub mod confirm;
 pub mod draw;
 pub mod editor;
+pub(crate) mod handlers;
 pub mod icons;
 pub mod input;
 pub(crate) mod key_handlers;
