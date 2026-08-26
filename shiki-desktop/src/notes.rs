@@ -340,8 +340,10 @@ mod tests {
             "![pic](attachments/x.png)\n\n![web](https://ex.com/a.png)",
             Path::new("/tmp/nb"),
         );
-        // Path separators differ per platform (Windows: backslashes).
-        let expected = Path::new("/tmp/nb").join("attachments").join("x.png");
+        // Path separators: the render joins the relative path as one string
+        // (forward slashes preserved on every platform), so assert against
+        // the same join.
+        let expected = Path::new("/tmp/nb").join("attachments/x.png");
         assert!(
             html.contains(&format!(r##"src="{}""##, expected.to_string_lossy())),
             "expected {expected:?} in: {html}"
