@@ -1,0 +1,19 @@
+[package]
+name = "shiki-desktop"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "shiki (私記) - Windows/Linux/macOS desktop GUI for shiki, built on Tauri 2 + Svelte"
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+tauri = { workspace = true, features = [] }
+tauri-plugin-updater = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+shiki-core = { workspace = true }
+shiki-config = { workspace = true }

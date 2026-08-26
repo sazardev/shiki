@@ -1,0 +1,190 @@
+/* Palette comes entirely from the --vars that Rust's get_theme_css injects
+   at runtime (shiki-config hex strings verbatim). Every var() here carries a
+   fallback only for the brief moment before IPC answers — after that the
+   active theme wins, same as the TUI's live preview picker. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg, #1e1e2e);
+  color: var(--fg, #cdd6f4);
+  user-select: none;
+}
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border, #45475a);
+}
+
+.logo b {
+  color: var(--accent, #89b4fa);
+}
+
+.theme,
+footer span {
+  font-size: 0.8rem;
+  color: var(--muted, #a6adc8);
+}
+
+.banner {
+  padding: 0.5rem 1rem;
+  background: var(--error, #f38ba8);
+  color: var(--bg, #1e1e2e);
+  font-size: 0.85rem;
+}
+
+.banner-error {
+  background: var(--error, #f38ba8);
+}
+
+.banner-update {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: var(--highlight, #313244);
+  color: var(--fg, #cdd6f4);
+  border-bottom: 1px solid var(--accent, #89b4fa);
+}
+
+.banner-update b {
+  color: var(--accent, #89b4fa);
+}
+
+.upd-btn {
+  background: var(--accent, #89b4fa);
+  color: var(--bg, #1e1e2e);
+  border: none;
+  border-radius: 4px;
+  padding: 0.25rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.upd-btn:hover {
+  filter: brightness(1.1);
+}
+
+.upd-progress {
+  flex: 1;
+  height: 8px;
+  background: var(--inactive, #45475a);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.upd-bar {
+  display: block;
+  height: 100%;
+  background: var(--accent, #89b4fa);
+  transition: width 0.2s ease;
+}
+
+.upd-error {
+  color: var(--error, #f38ba8);
+}
+
+.columns {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+aside {
+  width: 220px;
+  border-right: 1px solid var(--border, #45475a);
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+
+aside h2,
+main h1 {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--panel-title, var(--muted, #a6adc8));
+  margin: 0.4rem 0.9rem;
+}
+
+aside ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+aside li button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.4rem 0.9rem;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+aside li button:hover {
+  background: var(--highlight, #313244);
+}
+
+aside li.selected button {
+  background: var(--selection, #45475a);
+  border-left-color: var(--accent, #89b4fa);
+}
+
+aside li.empty {
+  padding: 0.6rem 0.9rem;
+  font-size: 0.8rem;
+  color: var(--muted, #a6adc8);
+}
+
+.lock {
+  font-size: 0.75rem;
+}
+
+main {
+  flex: 1;
+  padding: 1.2rem;
+  overflow-y: auto;
+}
+
+.hint {
+  color: var(--muted, #a6adc8);
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.35rem 1rem;
+  border-top: 1px solid var(--border, #45475a);
+  background: var(--statusbar, var(--bg, #181825));
+  font-size: 0.78rem;
+}
+
+code {
+  background: var(--highlight, #313244);
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+}

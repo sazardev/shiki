@@ -6,6 +6,7 @@ members = [
     "shiki-tui",
     "shiki-cli",
     "shiki-native-host",
+    "shiki-desktop",
 ]
 
 [workspace.package]
@@ -57,6 +58,7 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 pulldown-cmark = "0.13"
 anyhow = "1"
 thiserror = "2"
+libc = "0.2"
 directories = "6"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.23"
@@ -85,6 +87,16 @@ age = { version = "0.12", features = ["armor"] }
 # Hidden passphrase input for `shiki notebook encrypt/decrypt` — the CLI
 # equivalent of the TUI's masked passphrase prompt.
 rpassword = "7"
+# Desktop GUI (shiki-desktop): Tauri 2 wraps shiki-core in a native window
+# (WebView2/WebKitGTK). Only this crate touches it — the TUI/CLI stay
+# terminal-only, and the workspace-wide tokio invariant is untouched (our
+# commands are synchronous; Tauri brings its own runtime internally).
+tauri = { version = "2", features = [] }
+tauri-build = { version = "2" }
+# In-app auto-update for shiki-desktop: checks a remote endpoint, downloads
+# the signed installer and applies it (passive on Windows) — the GUI twin of
+# the TUI's leader+`U` self-update.
+tauri-plugin-updater = { version = "2", features = [] }
 
 [profile.release]
 lto = true

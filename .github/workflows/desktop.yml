@@ -1,0 +1,58 @@
+name: Desktop build
+
+# Builds the Windows desktop app (MSI + NSIS installers) and keeps the
+# artifacts downloadable from the Actions run — the same steps release.yml's
+# desktop-build job runs on every tag, minus the GitHub Release upload. This
+# is what validates the desktop pipeline on every push (and on demand via
+# workflow_dispatch) without cutting a release.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'shiki-desktop/**'
+      - '.github/workflows/desktop.yml'
+      - '.github/workflows/release.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+jobs:
+  build:
+    name: Build desktop installers (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: desktop-windows
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: shiki-desktop/ui/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: shiki-desktop/ui
+        run: npm ci
+
+      - name: Build signed desktop installers
+        shell: bash
+        working-directory: shiki-desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          export PATH="$PWD/ui/node_modules/.bin:$PATH"
+          tauri build
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: shiki-desktop-windows
+          path: shiki-desktop/target/release/bundle/
+          if-no-files-found: error

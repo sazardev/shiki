@@ -11,3 +11,8 @@
 /.serena/
 /skills-lock.json
 browser-extension/*.zip
+
+# shiki-desktop: Svelte UI deps/build output and Tauri generated schemas
+shiki-desktop/ui/node_modules/
+shiki-desktop/ui/dist/
+shiki-desktop/gen/

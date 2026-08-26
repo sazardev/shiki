@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Default permissions for the main shiki window: IPC commands + in-app auto-update",
+  "windows": ["main"],
+  "permissions": ["core:default", "updater:default"]
+}

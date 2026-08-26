@@ -105,9 +105,92 @@ jobs:
           path: dist/shiki-${{ needs.resolve-tag.outputs.tag }}-${{ matrix.target }}.${{ matrix.ext }}
           if-no-files-found: error
 
+  desktop-build:
+    name: Build desktop app (Windows MSI/NSIS)
+    needs: resolve-tag
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: desktop-windows
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: shiki-desktop/ui/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: shiki-desktop/ui
+        run: npm ci
+
+      # `tauri build` runs `beforeBuildCommand` (npm run build) itself and
+      # bundles MSI (WiX) + NSIS installers, downloading the bundler tools
+      # on first use. The CLI binary comes from the local devDependency
+      # (ui/node_modules/.bin) — running it from shiki-desktop/ is the
+      # invocation layout tauri's project detection actually accepts.
+      - name: Build signed desktop installers
+        shell: bash
+        working-directory: shiki-desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          export PATH="$PWD/ui/node_modules/.bin:$PATH"
+          tauri build
+
+      # createUpdaterArtifacts makes tauri emit `<bundle>.sig` next to each
+      # installer, but not the `latest.json` manifest the updater endpoint
+      # (tauri.conf.json's plugins.updater.endpoints) is pointed at. Assemble
+      # it from the NSIS setup bundle — the Windows update payload — and let
+      # the `release` job upload it to the GitHub Release, which makes
+      # https://github.com/sazardev/shiki/releases/latest/download/latest.json
+      # resolve to it for the in-app check.
+      - name: Generate updater manifest (latest.json)
+        shell: bash
+        working-directory: shiki-desktop
+        run: |
+          set -euo pipefail
+          tag="${{ needs.resolve-tag.outputs.tag }}"
+          version="${tag#v}"
+          pub_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          setup_path="$(ls target/release/bundle/nsis/*-setup.exe | head -1)"
+          setup_name="$(basename "$setup_path")"
+          setup_sig="$(cat "${setup_path}.sig")"
+          python3 - "$version" "$tag" "$pub_date" "$setup_sig" "$setup_name" <<'EOF'
+          import json, sys
+          version, tag, pub_date, sig, name = sys.argv[1:]
+          manifest = {
+              "version": version,
+              "notes": f"https://github.com/sazardev/shiki/releases/tag/{tag}",
+              "pub_date": pub_date,
+              "platforms": {
+                  "windows-x86_64": {
+                      "signature": sig,
+                      "url": f"https://github.com/sazardev/shiki/releases/download/{tag}/{name}",
+                  }
+              },
+          }
+          with open("latest.json", "w") as f:
+              json.dump(manifest, f, indent=2)
+          EOF
+          cp latest.json target/release/bundle/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: shiki-desktop-windows
+          path: shiki-desktop/target/release/bundle/
+          if-no-files-found: error
+
   release:
     name: Create GitHub Release
-    needs: [build, resolve-tag]
+    needs: [build, desktop-build, resolve-tag]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # The only job that needs write access to repo contents — creating a
