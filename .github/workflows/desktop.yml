@@ -61,5 +61,8 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: shiki-desktop-windows
-          path: shiki-desktop/target/release/bundle/
+          # The workspace shares one target dir at the repo root, so tauri's
+          # bundle output lands in target/release/bundle/ (repo-root-relative),
+          # not under shiki-desktop/.
+          path: target/release/bundle/
           if-no-files-found: error

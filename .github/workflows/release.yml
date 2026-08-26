@@ -160,7 +160,9 @@ jobs:
           tag="${{ needs.resolve-tag.outputs.tag }}"
           version="${tag#v}"
           pub_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          setup_path="$(ls target/release/bundle/nsis/*-setup.exe | head -1)"
+          # The workspace shares one target dir at the repo root, so bundles
+          # land in ../target/release/bundle/ from here.
+          setup_path="$(ls ../target/release/bundle/nsis/*-setup.exe | head -1)"
           setup_name="$(basename "$setup_path")"
           setup_sig="$(cat "${setup_path}.sig")"
           python3 - "$version" "$tag" "$pub_date" "$setup_sig" "$setup_name" <<'EOF'
@@ -180,12 +182,12 @@ jobs:
           with open("latest.json", "w") as f:
               json.dump(manifest, f, indent=2)
           EOF
-          cp latest.json target/release/bundle/
+          cp latest.json ../target/release/bundle/
 
       - uses: actions/upload-artifact@v7
         with:
           name: shiki-desktop-windows
-          path: shiki-desktop/target/release/bundle/
+          path: target/release/bundle/
           if-no-files-found: error
 
   release:
