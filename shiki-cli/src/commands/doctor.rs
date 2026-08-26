@@ -266,6 +266,12 @@ pub fn run() -> Result<()> {
     // Capture-daemon reachability, the same probe `shiki capture --check`
     // uses — a running TUI or `shiki daemon` makes captures land live;
     // otherwise they still work, just as a direct disk write.
+    // Stale-file detection (pid no longer alive) is surfaced distinctly so
+    // a crash doesn't look like a normal "not running" — the file will be
+    // auto-cleaned on the next `shiki capture` attempt. Check staleness
+    // *before* `try_daemon`, since `try_daemon` itself removes a stale file
+    // as soon as it sees it, which would make a post-try check miss it.
+    let stale_before = super::capture::is_port_file_stale().unwrap_or(false);
     match super::capture::try_daemon("PING\n\n") {
         Some(super::capture::DaemonResponse::Ok(status)) if status == "enabled" => {
             r.pass("capture daemon", "reachable and enabled");
@@ -273,11 +279,22 @@ pub fn run() -> Result<()> {
         Some(super::capture::DaemonResponse::Ok(_)) => {
             r.warn("capture daemon", "reachable but disabled");
         }
-        _ => r.warn(
-            "capture daemon",
-            "not running \u{2014} `shiki capture` falls back to a direct disk write; run the TUI \
-             or `shiki daemon` to get live capture",
-        ),
+        _ => {
+            if stale_before {
+                r.warn(
+                    "capture daemon",
+                    "stale port file — daemon process no longer running (crashed or killed); \
+                     will be cleaned automatically on next `shiki capture`, or remove \
+                     `capture.port` manually",
+                );
+            } else {
+                r.warn(
+                    "capture daemon",
+                    "not running \u{2014} `shiki capture` falls back to a direct disk write; run the TUI \
+                     or `shiki daemon` to get live capture",
+                );
+            }
+        }
     }
 
     let colorterm = std::env::var("COLORTERM").unwrap_or_default();

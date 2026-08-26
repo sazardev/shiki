@@ -23,6 +23,7 @@ anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 chrono.workspace = true
+libc.workspace = true
 base64.workspace = true
 unicode-width.workspace = true
 directories.workspace = true
