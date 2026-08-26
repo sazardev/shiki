@@ -8,7 +8,6 @@ name: Desktop build
 on:
   workflow_dispatch:
   push:
-    branches: [main]
     paths:
       - 'shiki-desktop/**'
       - '.github/workflows/desktop.yml'
