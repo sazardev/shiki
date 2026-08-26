@@ -15,6 +15,14 @@ on:
       - '.github/workflows/release.yml'
       - 'Cargo.toml'
       - 'Cargo.lock'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'shiki-desktop/**'
+      - '.github/workflows/desktop.yml'
+      - '.github/workflows/release.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
 
 jobs:
   build:
