@@ -1,3 +1,4 @@
+pub mod drawer;
 pub mod theme;
 
 // Future splits will live here:
@@ -9,4 +10,3 @@ pub mod theme;
 // pub mod settings;
 // pub mod git;
 // pub mod search;
-// pub mod drawer;
