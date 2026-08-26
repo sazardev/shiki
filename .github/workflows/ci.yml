@@ -27,6 +27,12 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # shiki-desktop (tauri) is a workspace member, so ubuntu needs the
+      # webkit2gtk/GTK dev headers tauri's wry/webkit2gtk-rs crates link
+      # against — the default runner doesn't ship them.
+      - if: matrix.os == 'ubuntu-latest'
+        name: Install Linux Tauri system deps
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev
       # fmt is platform-independent — only worth running once, and clippy's
       # own output would otherwise get needlessly duplicated 3x in the logs.
       - if: matrix.os == 'ubuntu-latest'
@@ -74,5 +80,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - if: matrix.os == 'ubuntu-latest'
+        name: Install Linux Tauri system deps
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev
       - run: cargo check --workspace
       - run: cargo test --workspace
