@@ -92,6 +92,7 @@ pub const CLIPBOARD: Icon = Icon('\u{f0ea}', "", true); // clipboard, copy-logs 
 pub const TREE: Icon = Icon('\u{f1bb}', "", true); // tree, notebook tree view
 pub const DOWNLOAD: Icon = Icon('\u{f019}', "", false); // download, "needs pull" indicator (behind), tight against the count
 pub const UPLOAD: Icon = Icon('\u{f093}', "", false); // upload, "needs push" indicator (ahead), tight against the count
+pub const DIRTY: Icon = Icon('\u{f111}', "●", false); // filled circle, pending-changes marker tight after a note's title — carries meaning (this note is uncommitted), so unlike decorative glyphs its fallback is a real bullet, not ""
 pub const HISTORY: Icon = Icon('\u{f1da}', "", true); // history, note version history / date toggle
 pub const COFFEE: Icon = Icon('\u{f0f4}', "", true); // coffee, buy-me-a-coffee footer link
 pub const LINK: Icon = Icon('\u{f0c1}', "", true); // link (chain), wikilinks/backlinks modal

@@ -524,6 +524,14 @@ pub struct NotebookKeybindings {
     /// written before this key existed still deserializes.
     #[serde(default = "default_push_key")]
     pub push: String,
+    /// Opens the git dashboard — every notebook's sync state in plain
+    /// language (what's uncommitted, what's on the remote, what needs a
+    /// push) plus each notebook's latest commits, with the key that fixes
+    /// each state. Field-level default so an existing
+    /// `[keybindings.notebooks]` table written before this key existed
+    /// still deserializes.
+    #[serde(default = "default_git_dash_key")]
+    pub git_dash: String,
 }
 
 impl Default for NotebookKeybindings {
@@ -537,6 +545,7 @@ impl Default for NotebookKeybindings {
             pull_all: default_pull_all_key(),
             set_remote: default_set_remote_key(),
             push: default_push_key(),
+            git_dash: default_git_dash_key(),
         }
     }
 }
@@ -571,6 +580,10 @@ fn default_set_remote_key() -> String {
 
 fn default_push_key() -> String {
     "u".into()
+}
+
+fn default_git_dash_key() -> String {
+    "G".into()
 }
 
 /// Active only while the NOTES panel has focus.
@@ -730,6 +743,13 @@ pub struct PreviewKeybindings {
     /// deserializes.
     #[serde(default = "default_history_key")]
     pub history: String,
+    /// Shows the selected note's pending changes (working tree vs last
+    /// commit) when the note is dirty; opens the version history when it
+    /// isn't — `d` always answers "what changed here," one way or the
+    /// other. Field-level default so an existing `[keybindings.preview]`
+    /// table written before this key existed still deserializes.
+    #[serde(default = "default_diff_key")]
+    pub diff: String,
     /// Opens the links modal — the selected note's outgoing `[[wikilinks]]`
     /// plus every other note that links back to it. Same field-level-default
     /// backward-compatibility reasoning as `history`.
@@ -753,6 +773,7 @@ impl Default for PreviewKeybindings {
             edit_inline: default_preview_edit_inline_key(),
             edit_external: default_preview_edit_external_key(),
             history: default_history_key(),
+            diff: default_diff_key(),
             links: default_links_key(),
             outline: default_outline_key(),
             metadata: default_metadata_key(),
@@ -774,6 +795,10 @@ fn default_preview_edit_external_key() -> String {
 
 fn default_history_key() -> String {
     "H".into()
+}
+
+fn default_diff_key() -> String {
+    "d".into()
 }
 
 fn default_links_key() -> String {

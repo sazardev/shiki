@@ -326,12 +326,16 @@ pub fn run() -> Result<()> {
 
     let custom_paths = config.notebook_custom_paths();
     let store = NotebookStore::new_with_custom_paths(data_dir.clone(), custom_paths);
+    // Set inside the `Ok` arm below — the git-identity check only matters
+    // once there's something to commit into.
+    let mut notebook_count = 0usize;
     match store.list() {
         Ok(notebooks) if notebooks.is_empty() => r.warn(
             "notebooks",
             "none yet — `shiki notebook create <name>`, or `a` in the TUI",
         ),
         Ok(notebooks) => {
+            notebook_count = notebooks.len();
             let with_remote = notebooks
                 .iter()
                 .filter(|nb| shiki_core::git::remote_url(&nb.path).is_some())
@@ -344,6 +348,7 @@ pub fn run() -> Result<()> {
                 ),
             );
             check_notebook_path_collisions(&notebooks, &mut r);
+            check_notebook_git_health(&notebooks, &mut r);
             let default_name = &config.general.default_notebook;
             if notebooks.iter().any(|nb| &nb.name == default_name) {
                 r.pass("default_notebook", format!("\"{default_name}\" exists"));
@@ -369,7 +374,7 @@ pub fn run() -> Result<()> {
     if let Some(raw) = &raw_contents {
         check_unknown_config_keys(raw, &mut r);
     }
-    check_git_config_health(&config, &mut r);
+    check_git_config_health(&config, notebook_count > 0, &mut r);
 
     println!("\n{} ok, {} warning(s), {} failed", r.ok, r.warn, r.fail);
     if r.fail > 0 {
@@ -432,6 +437,7 @@ fn check_keybinding_health(config: &Config, r: &mut Report) {
                 ("pull_all", kb.notebooks.pull_all.as_str()),
                 ("set_remote", kb.notebooks.set_remote.as_str()),
                 ("push", kb.notebooks.push.as_str()),
+                ("git_dash", kb.notebooks.git_dash.as_str()),
             ],
         ),
         (
@@ -460,6 +466,7 @@ fn check_keybinding_health(config: &Config, r: &mut Report) {
                 ("edit_inline", kb.preview.edit_inline.as_str()),
                 ("edit_external", kb.preview.edit_external.as_str()),
                 ("history", kb.preview.history.as_str()),
+                ("diff", kb.preview.diff.as_str()),
                 ("links", kb.preview.links.as_str()),
                 ("outline", kb.preview.outline.as_str()),
                 ("metadata", kb.preview.metadata.as_str()),
@@ -849,7 +856,16 @@ fn check_notebook_path_collisions(notebooks: &[shiki_core::Notebook], r: &mut Re
 ///    signing key configured (`user.signingkey`, or `gpg.format = ssh`'s
 ///    `user.signingkey` pointing at an SSH key) — `commit_all`'s signing
 ///    would otherwise fail on every single commit.
-fn check_git_config_health(config: &Config, r: &mut Report) {
+///
+/// Plus, when the user actually has notebooks (`has_notebooks` — identity
+/// is irrelevant to someone still deciding whether to try shiki at all):
+///
+/// 3. git's commit identity (`user.name`/`user.email`) resolves to
+///    something. Without it, every sync's `commit_all` fails with libgit2's
+///    "author field empty" — the single most common first-sync failure, and
+///    one whose fix (`git config --global …`) lives entirely outside shiki,
+///    so nothing else would ever surface it.
+fn check_git_config_health(config: &Config, has_notebooks: bool, r: &mut Report) {
     let template = &config.git.remote_template;
     if !template.is_empty() && !template.contains("{notebook}") {
         r.warn(
@@ -877,6 +893,98 @@ fn check_git_config_health(config: &Config, r: &mut Report) {
             );
         }
     }
+
+    if has_notebooks && on_path("git") {
+        let missing = ["user.name", "user.email"]
+            .into_iter()
+            .filter(|key| {
+                !std::process::Command::new("git")
+                    .args(["config", "--get", key])
+                    .output()
+                    .map(|out| out.status.success() && !out.stdout.is_empty())
+                    .unwrap_or(false)
+            })
+            .collect::<Vec<_>>();
+        match missing.as_slice() {
+            [] => r.pass(
+                "git identity",
+                "user.name and user.email are configured \u{2014} commits can be created",
+            ),
+            keys => r.warn(
+                "git identity",
+                format!(
+                    "{} not set \u{2014} sync can't create commits until it is (fix once with \
+                     `git config --global {} \"Your Name\"` / `{} you@example.com`)",
+                    keys.join(" and "),
+                    keys[0],
+                    *keys.last().unwrap(),
+                ),
+            ),
+        }
+    }
+}
+
+/// Per-notebook git states that make sync silently do the wrong thing or
+/// visibly break, checked locally only (no network): an unresolved merge
+/// left behind by a conflicted pull (every later `s` would commit the
+/// conflict markers), a notebook directory without a repo (adopted folders;
+/// sync/history are no-ops there), and a configured remote URL in a form
+/// libgit2 can't possibly treat as a remote.
+fn check_notebook_git_health(notebooks: &[shiki_core::Notebook], r: &mut Report) {
+    for nb in notebooks {
+        if shiki_core::git::merge_in_progress(&nb.path) {
+            r.warn(
+                "notebook git state",
+                format!(
+                    "'{}' has an unresolved merge in progress \u{2014} open the TUI and resolve \
+                     its conflicts before syncing again",
+                    nb.name
+                ),
+            );
+        }
+        if !shiki_core::git::status(&nb.path, "").is_repo {
+            r.warn(
+                "notebook git state",
+                format!(
+                    "'{}' has no git repository \u{2014} sync/history won't work there until \
+                     one is initialized",
+                    nb.name
+                ),
+            );
+        }
+        if let Some(url) = shiki_core::git::remote_url(&nb.path) {
+            if url.trim().is_empty() || !looks_like_remote_url(&url) {
+                r.warn(
+                    "notebook git state",
+                    format!(
+                        "'{}' has a malformed remote URL ('{}') \u{2014} push/pull will fail; \
+                         fix it with R in the TUI",
+                        nb.name,
+                        shiki_core::git::redact_credentials(url.trim())
+                    ),
+                );
+            }
+        }
+    }
+}
+
+/// The three shapes of remote URL shiki itself accepts in `R` prompts:
+/// scheme URLs (`https://`, `ssh://`, `file://`), scp-style
+/// (`git@host:path`), and local paths (absolute, `~/`, `./`, `../`).
+/// Deliberately shallow — this exists to catch paste accidents (a notebook
+/// name, a whole `git clone …` command line), not to validate hosts.
+/// Spaces are allowed only in path-like forms, where they're legal; a
+/// "URL" containing a space is a copied command line or prose, never a
+/// remote.
+fn looks_like_remote_url(url: &str) -> bool {
+    let path_like = url.starts_with('/')
+        || url.starts_with("~/")
+        || url.starts_with("./")
+        || url.starts_with("../");
+    if path_like {
+        return true;
+    }
+    !url.contains(' ') && (url.contains("://") || (url.contains('@') && url.contains(':')))
 }
 
 fn check_snippet_health(config: &Config, r: &mut Report) {
@@ -917,6 +1025,33 @@ fn check_snippet_health(config: &Config, r: &mut Report) {
                 triggers.join("] / [snippets.")
             ),
         );
+    }
+}
+
+#[cfg(test)]
+mod remote_url_tests {
+    use super::looks_like_remote_url;
+
+    #[test]
+    fn accepts_the_three_shapes_shiki_itself_produces() {
+        assert!(looks_like_remote_url("https://github.com/user/repo.git"));
+        assert!(looks_like_remote_url("ssh://git@example.com/notes.git"));
+        assert!(looks_like_remote_url("git@github.com:user/repo.git"));
+        assert!(looks_like_remote_url("/home/omar/bare-repos/notes.git"));
+        assert!(looks_like_remote_url("~/repos/notes.git"));
+        assert!(looks_like_remote_url("../shared/notes.git"));
+    }
+
+    #[test]
+    fn rejects_paste_accidents() {
+        // The failure modes the check exists for: a notebook name pasted
+        // into the URL prompt, a whole `git clone` command line, prose.
+        assert!(!looks_like_remote_url("personal"));
+        assert!(!looks_like_remote_url(
+            "git clone https://github.com/u/r.git"
+        ));
+        assert!(!looks_like_remote_url("my notes backup"));
+        assert!(!looks_like_remote_url(""));
     }
 }
 

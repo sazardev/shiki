@@ -55,6 +55,17 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                     format!("{}{}", icons::NOTE, note.frontmatter.title),
                     Style::default().fg(title_color),
                 )];
+                // The explicit marker beside the color: the selected row's
+                // `highlight_style` repaints every span in the accent color,
+                // which would otherwise erase the only dirty cue on exactly
+                // the row the user is looking at. The glyph survives that
+                // repaint (same reason `ARROW`'s fallback is real).
+                if app.note_statuses.contains_key(&note.path) {
+                    spans.push(ratatui::text::Span::styled(
+                        format!(" {}", icons::DIRTY),
+                        Style::default().fg(title_color),
+                    ));
+                }
                 if app.show_dates {
                     spans.push(ratatui::text::Span::styled(
                         format!("  ({})", note.frontmatter.date.format("%Y-%m-%d")),

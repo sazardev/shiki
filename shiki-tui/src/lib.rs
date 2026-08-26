@@ -15,6 +15,7 @@ pub(crate) mod mathfmt;
 pub(crate) mod mermaid;
 pub(crate) mod multicursor;
 pub mod panel_drawer;
+pub mod panel_git;
 pub mod panel_metadata;
 pub mod panel_notebooks;
 pub mod panel_notes;

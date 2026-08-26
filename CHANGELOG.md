@@ -8,6 +8,42 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ### Added
 
+- **Git onboarding**: creating a plain notebook in the TUI (when
+  `git.remote_template` isn't configured) now asks once — "Git remote
+  (URL or local path, empty = skip)" — so backup/sync gets set up on day
+  one instead of never. `shiki notebook create <name> --remote <url>`
+  does the same from the CLI, credentials redacted in all output.
+- **`shiki doctor` git health checks**: warns when `user.name`/
+  `user.email` aren't set anywhere (every sync would fail at commit time)
+  — but only once notebooks exist; flags notebooks left with an
+  unresolved merge, notebook directories without a git repo, and
+  configured remote URLs in a form that can't be one (paste accidents
+  like `git clone https://…`); and registers the new `git_dash`/`diff`
+  bindings in the keybinding-collision scan.
+- **Pending-changes marker on note titles**: a note with uncommitted
+  changes now shows a `●` after its title in NOTES, colored by change type
+  (same scheme as before — new/modified/deleted). The glyph survives the
+  selected row's highlight repaint, so the dirty cue no longer vanishes
+  exactly where you're looking; falls back to a plain bullet when Nerd
+  Font icons are off.
+- **Git dashboard (`G` in NOTEBOOKS)**: every notebook's sync state in one
+  read-only modal, phrased in plain language instead of git jargon —
+  "all synced", "2 uncommitted · 3 on remote — s saves, p pulls", "merge
+  in progress — resolve conflicts first" — with each notebook's latest
+  commits listed underneath and `j`/`k` navigation between notebooks.
+  Configurable via `[keybindings.notebooks] git_dash` (default `"G"`).
+- **Pending-changes diff (`d` in PREVIEW)**: pressing `d` on a note with
+  uncommitted edits now shows them in a "Working changes" popup — working
+  tree vs last commit, same +/- pane as the history modal's diff view
+  (without `r revert`, since there's nothing to revert to yet). On a clean
+  note `d` opens the version history instead, so the key always answers
+  "what changed here". Configurable via `[keybindings.preview] diff`
+  (default `"d"`). Encrypted notebooks are refused (both sides would be
+  ciphertext).
+- **`shiki diff [note]` and `shiki log [note]`**: the same git visibility
+  on the command line. `diff` without a note prints every pending change
+  in the notebook with per-file +/− stats; `log` lists recent commits, or
+  every commit that touched one specific note.
 - **Rename updates every inbound `[[wikilink]]`**: renaming a note (the `r`
   prompt in NOTES) no longer silently breaks the links other notes hold to
   it. When the note has backlinks, a confirm asks first — `y` renames *and*
@@ -86,6 +122,10 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ### Fixed
 
+- **CLI no longer panics when piped into `head`/`less`**: closing stdout
+  mid-output (`shiki diff | head`) used to print a raw `failed printing
+  to stdout: Broken pipe` panic. The process now exits silently on
+  SIGPIPE like every other Unix tool (no effect on Windows).
 - A notebook untracked via delete's "keep files, just untrack" answer came
   back on every relaunch: startup (`App::new`) listed notebooks straight
   from disk without applying the `hidden` filter only `reload_notebooks`

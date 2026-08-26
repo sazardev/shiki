@@ -856,6 +856,93 @@ pub fn diff_file_at(
     Ok(lines)
 }
 
+/// The notebook-wide commit log, newest first — `file_history` without the
+/// per-file filter, i.e. what `git log --oneline` shows for the whole
+/// notebook. At most `limit` entries.
+pub fn recent_commits(repo_path: &Path, limit: usize) -> Result<Vec<FileRevision>> {
+    let repo = Repository::open(repo_path)?;
+    if repo.head().is_err() {
+        return Ok(Vec::new());
+    }
+
+    let mut revwalk = repo.revwalk()?;
+    revwalk.push_head()?;
+    revwalk.set_sorting(git2::Sort::TIME)?;
+
+    let mut revisions = Vec::new();
+    for oid in revwalk.take(limit) {
+        let oid = oid?;
+        let commit = repo.find_commit(oid)?;
+        let time = commit.time();
+        let date = chrono::DateTime::from_timestamp(time.seconds(), 0)
+            .unwrap_or_default()
+            .with_timezone(&chrono::Local);
+        revisions.push(FileRevision {
+            commit_id: oid.to_string(),
+            date,
+            message: commit.summary().ok().flatten().unwrap_or("").to_string(),
+        });
+    }
+    Ok(revisions)
+}
+
+/// A unified diff of `file_relative` between the last commit (HEAD) and
+/// the current working copy — "what would sync actually save," the same
+/// thing `git diff HEAD -- <path>` would show, staged and unstaged edits
+/// alike. Untracked files (a brand-new note that has never been committed)
+/// come back as all-added lines, matching what the next commit will record.
+/// Empty (not an error) when the file matches HEAD or the repo has no
+/// commits yet *and* the file doesn't exist on disk.
+pub fn working_tree_diff(repo_path: &Path, file_relative: &Path) -> Result<Vec<DiffLine>> {
+    let repo = Repository::open(repo_path)?;
+    let head_tree = repo
+        .head()
+        .ok()
+        .and_then(|head| head.peel_to_commit().ok())
+        .and_then(|commit| commit.tree().ok());
+
+    let mut opts = git2::DiffOptions::new();
+    opts.pathspec(file_relative);
+    // A never-committed note must read as "everything added" — without
+    // these flags libgit2 skips untracked paths entirely and the caller
+    // would show an empty diff for a note the next sync would fully record.
+    opts.include_untracked(true);
+    opts.show_untracked_content(true);
+
+    let diff = repo.diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts))?;
+
+    let mut lines = Vec::new();
+    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+        if matches!(line.origin(), '+' | '-' | ' ') {
+            lines.push(DiffLine {
+                origin: line.origin(),
+                content: String::from_utf8_lossy(line.content())
+                    .trim_end_matches('\n')
+                    .to_string(),
+            });
+        }
+        true
+    })?;
+    Ok(lines)
+}
+
+/// Relative paths (forward slashes, repo-relative — the same shape
+/// `statuses` reports) of every file with pending changes: modified,
+/// staged, deleted, renamed, or untracked. The "what's dirty" set behind
+/// the note-list markers, the contextual diff key, and CLI-wide
+/// `shiki diff` summaries.
+pub fn dirty_files(repo_path: &Path) -> Result<Vec<String>> {
+    let repo = Repository::open(repo_path)?;
+    let statuses = repo.statuses(None)?;
+    let mut files: Vec<String> = statuses
+        .iter()
+        .filter_map(|entry| entry.path().ok().map(str::to_string))
+        .collect();
+    files.sort();
+    files.dedup();
+    Ok(files)
+}
+
 /// Overwrites the current working copy of `file_relative` with its content
 /// from `commit_id` — a full-file revert (frontmatter included, since
 /// that's what's actually stored in the blob), not just the body text.
@@ -1011,6 +1098,103 @@ mod tests {
         assert_eq!(diff.len(), 1);
         assert_eq!(diff[0].origin, '+');
         assert_eq!(diff[0].content, "brand new");
+    }
+
+    #[test]
+    fn recent_commits_lists_the_notebook_log_newest_first_with_limit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path();
+        std::fs::write(path.join("a.md"), "one\n").unwrap();
+        commit_all(path, "first commit").unwrap();
+        std::fs::write(path.join("b.md"), "two\n").unwrap();
+        commit_all(path, "second commit").unwrap();
+
+        let all = recent_commits(path, 10).unwrap();
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].message, "second commit");
+        assert_eq!(all[1].message, "first commit");
+
+        assert_eq!(recent_commits(path, 1).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn recent_commits_is_empty_for_a_repo_without_commits() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path();
+        Repository::init(path).unwrap();
+        assert!(recent_commits(path, 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn working_tree_diff_reports_uncommitted_edits() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path();
+        let file = path.join("note.md");
+        std::fs::write(&file, "line one\nline two\nline three\n").unwrap();
+        commit_all(path, "first").unwrap();
+
+        std::fs::write(&file, "line one\nline TWO edited\nline three\n").unwrap();
+
+        let diff = working_tree_diff(path, Path::new("note.md")).unwrap();
+        let removed: Vec<&str> = diff
+            .iter()
+            .filter(|l| l.origin == '-')
+            .map(|l| l.content.as_str())
+            .collect();
+        let added: Vec<&str> = diff
+            .iter()
+            .filter(|l| l.origin == '+')
+            .map(|l| l.content.as_str())
+            .collect();
+        assert_eq!(removed, vec!["line two"]);
+        assert_eq!(added, vec!["line TWO edited"]);
+    }
+
+    #[test]
+    fn working_tree_diff_is_empty_when_the_file_matches_head() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path();
+        let file = path.join("note.md");
+        std::fs::write(&file, "saved\n").unwrap();
+        commit_all(path, "first").unwrap();
+
+        let diff = working_tree_diff(path, Path::new("note.md")).unwrap();
+        assert!(diff.is_empty(), "no pending changes, no diff lines");
+    }
+
+    #[test]
+    fn working_tree_diff_treats_a_never_committed_note_as_all_added() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path();
+        std::fs::write(path.join("committed.md"), "already saved\n").unwrap();
+        commit_all(path, "first").unwrap();
+        std::fs::write(path.join("fresh note.md"), "not saved yet\nsecond line\n").unwrap();
+
+        let diff = working_tree_diff(path, Path::new("fresh note.md")).unwrap();
+        let added: Vec<&str> = diff
+            .iter()
+            .filter(|l| l.origin == '+')
+            .map(|l| l.content.as_str())
+            .collect();
+        assert_eq!(added, vec!["not saved yet", "second line"]);
+        assert!(!diff.iter().any(|l| l.origin != '+'), "nothing to remove");
+    }
+
+    #[test]
+    fn dirty_files_lists_edited_new_and_untouched_repos_accurately() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path();
+        std::fs::write(path.join("a.md"), "one\n").unwrap();
+        std::fs::write(path.join("b.md"), "two\n").unwrap();
+        commit_all(path, "first").unwrap();
+        assert_eq!(dirty_files(path).unwrap(), Vec::<String>::new());
+
+        std::fs::write(path.join("b.md"), "two edited\n").unwrap();
+        std::fs::write(path.join("c.md"), "three\n").unwrap();
+        assert_eq!(
+            dirty_files(path).unwrap(),
+            vec!["b.md".to_string(), "c.md".to_string()]
+        );
     }
 
     /// `Repository::init` alone leaves the initial branch name up to

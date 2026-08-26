@@ -3,9 +3,30 @@ use shiki_config::Config;
 use shiki_core::crypto::{canary_blob, verify_canary, NotebookCrypto, CANARY_FILE};
 use shiki_core::NotebookStore;
 
-pub fn create(store: &NotebookStore, name: &str) -> Result<()> {
+/// Creates a notebook, optionally pointing its `origin` at `--remote` —
+/// one command from "nothing" to "ready to sync", mirroring the TUI's
+/// post-creation remote prompt. A failed `set_remote` doesn't undo the
+/// creation (the notebook exists and works locally); it's reported so the
+/// user can fix the URL with `R` in the TUI instead of silently ending up
+/// with no remote at all.
+pub fn create(store: &NotebookStore, name: &str, remote: Option<&str>) -> Result<()> {
     let nb = store.create(name)?;
     println!("notebook created: {}", nb.path.display());
+    let Some(url) = remote.map(str::trim).filter(|u| !u.is_empty()) else {
+        return Ok(());
+    };
+    match shiki_core::git::set_remote(&nb.path, url) {
+        Ok(()) => println!(
+            "remote set to '{}'",
+            shiki_core::git::redact_credentials(url)
+        ),
+        // Redacted even on failure — a bad URL with an embedded token is
+        // still a URL with an embedded token.
+        Err(e) => println!(
+            "warning: could not set remote '{}': {e}",
+            shiki_core::git::redact_credentials(url)
+        ),
+    }
     Ok(())
 }
 

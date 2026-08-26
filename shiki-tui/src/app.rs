@@ -128,6 +128,14 @@ impl NoteSort {
 pub(crate) enum PendingInput {
     NewNote,
     NewNotebook,
+    /// Staged follow-up to `NewNotebook`'s plain-name path: one optional
+    /// "sync this notebook to Git?" prompt, shown only when
+    /// `git.remote_template` didn't already configure a remote (users who
+    /// set up a template never get asked). The input takes the URL; the
+    /// just-created notebook's *name* lives in
+    /// `App.pending_new_notebook_remote`, same "one variant, the real
+    /// state lives alongside it" shape as `RenameTag`.
+    NewNotebookRemote,
     NewFolder,
     RenameNote,
     RenameNotebook,
@@ -300,6 +308,7 @@ impl PendingInput {
         match self {
             PendingInput::NewNote => " New note (@ for quick date/template) ",
             PendingInput::NewNotebook => " New notebook ",
+            PendingInput::NewNotebookRemote => " Git remote (URL or local path, empty = skip) ",
             PendingInput::NewFolder => " New folder ",
             PendingInput::RenameNote | PendingInput::RenameNotebook => " Rename ",
             PendingInput::RenameTag => " Rename/merge tag ",
@@ -328,6 +337,10 @@ impl PendingInput {
     /// branch), which nothing else in the modal hints at.
     pub(crate) fn hint(self) -> Option<&'static str> {
         match self {
+            PendingInput::NewNotebookRemote => Some(
+                "Empty Enter skips — the notebook works locally either way. You can always \
+                 add a remote later with R, or set git.remote_template to stop being asked.",
+            ),
             PendingInput::NewNotebook => Some(
                 "A name creates a new local notebook. Paste a repo URL (https://, git@, ssh://) \
                  to clone it instead — make sure you're logged in first if it's private. A path \
@@ -933,6 +946,11 @@ pub struct App {
     /// Overrides `PendingInput::title()`'s static text when set — only
     /// `PendingInput::MoveOrCopy` ever needs this (see its doc comment).
     pub(crate) pending_input_title: Option<String>,
+    /// The just-created notebook's name staged between the NewNotebook
+    /// prompt and its optional follow-up remote-URL one — see
+    /// `PendingInput::NewNotebookRemote`. `None` except while that second
+    /// prompt is up (or after Esc, which clears both together).
+    pub(crate) pending_new_notebook_remote: Option<String>,
     pub(crate) pending_delete: Option<(DeleteTarget, std::path::PathBuf)>,
     /// The items a move/copy is about to apply to, captured up front —
     /// populated whether it's a single note/folder or a whole Visual-mode
@@ -1000,6 +1018,14 @@ pub struct App {
     /// independently; only one is ever `Some` at a time in practice, since
     /// opening either one is only reachable while browsing the plain list.
     pub(crate) history_diff_viewing: Option<(String, Vec<shiki_core::git::DiffLine>)>,
+    /// `Some(lines)` while the standalone working-changes diff popup is
+    /// open — the selected note's uncommitted edits (working tree vs HEAD),
+    /// reachable via `Action::ShowWorkingDiff` (`d` in preview focus).
+    /// Deliberately separate from `history_diff_viewing`: that one only
+    /// exists inside the history modal and describes a *past* revision,
+    /// this one is top-level (no modal behind it) and describes the
+    /// *pending* state. Cleared on Esc/q.
+    pub(crate) working_diff: Option<Vec<shiki_core::git::DiffLine>>,
     /// `(note path, commit id)` to revert to, staged while the `confirm`
     /// dialog is up — mirrors `pending_delete`'s pattern so `y`/`n` in
     /// `handle_confirm_key` can handle either kind of pending action.
@@ -1012,6 +1038,16 @@ pub struct App {
     /// pull comes back `ConflictsPending`, see `apply_git_op_result`) —
     /// same list-then-drill-in shape as the history modal above.
     pub show_conflicts: bool,
+    /// The git dashboard modal (`Action::ShowGitDash`, `G` in NOTEBOOKS
+    /// focus) — every notebook's sync state in plain language plus its
+    /// latest commits. Read-only: rows are rebuilt from scratch on every
+    /// open, nothing here survives a close.
+    pub show_git_dash: bool,
+    pub(crate) git_dash_rows: Vec<crate::panel_git::DashRow>,
+    /// Index into the dashboard's *notebook* rows (commits are display
+    /// only and skipped by navigation) — mapped to a visual row position
+    /// at draw time via `panel_git::selected_row`.
+    pub(crate) git_dash_selected: usize,
     pub(crate) conflict_notebook: String,
     /// Relative paths still conflicted — shrinks as `o`/`t`/`e` resolve
     /// each one; once empty, the "commit merge?" confirm fires automatically.
@@ -1413,6 +1449,7 @@ impl App {
             note_sort,
             pending_input: None,
             pending_input_title: None,
+            pending_new_notebook_remote: None,
             pending_delete: None,
             pending_batch: None,
             pending_batch_delete: None,
@@ -1436,9 +1473,13 @@ impl App {
             history_selected: 0,
             history_viewing: None,
             history_diff_viewing: None,
+            working_diff: None,
             pending_revert: None,
             pending_notebook_adopt: None,
             show_conflicts: false,
+            show_git_dash: false,
+            git_dash_rows: Vec::new(),
+            git_dash_selected: 0,
             conflict_notebook: String::new(),
             conflict_files: Vec::new(),
             conflict_selected: 0,

@@ -1940,6 +1940,42 @@ impl App {
             self.editor_redo_groups.clear();
         }
     }
+    /// `d` in preview focus — "what changed here." A dirty note (pending
+    /// edits vs HEAD) shows them in a standalone working-changes diff
+    /// popup; a clean note has nothing to diff, so it opens the version
+    /// history instead. One key, a useful answer either way.
+    fn open_working_diff(&mut self) {
+        let Some((nb, relative)) = self.selected_note_relative_path() else {
+            self.set_status("no note selected".into());
+            return;
+        };
+        // Same reasoning as the history modal's `d`: on encrypted
+        // notebooks both sides of the diff are ciphertext blobs, so any
+        // +/- output would be meaningless noise rather than an answer.
+        if nb.crypto.is_some() {
+            self.set_status("diff isn't available for encrypted notebooks".into());
+            return;
+        }
+        // `statuses` reports forward-slash repo-relative paths on every
+        // platform; normalize the note's path the same way so membership
+        // holds on Windows too.
+        let rel = relative.to_string_lossy().replace('\\', "/");
+        let dirty = shiki_core::git::dirty_files(&nb.path)
+            .map(|files| files.contains(&rel))
+            .unwrap_or(false);
+        if !dirty {
+            self.open_history();
+            return;
+        }
+        match shiki_core::git::working_tree_diff(&nb.path, &relative) {
+            Ok(lines) if lines.is_empty() => {
+                self.set_status("no pending changes — press H for history".into())
+            }
+            Ok(lines) => self.working_diff = Some(lines),
+            Err(e) => self.set_status(format!("could not load diff: {e}")),
+        }
+    }
+
     /// Loads the selected note's real version history (every commit that
     /// changed it) and opens the history modal.
     fn open_history(&mut self) {
@@ -1955,6 +1991,56 @@ impl App {
         self.show_history = true;
         if self.history_entries.is_empty() {
             self.set_status("no history yet — sync (`s`) to commit this note first".into());
+        }
+    }
+    /// The working-changes popup is read-only: Esc/q is the only way out.
+    fn handle_working_diff_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => self.working_diff = None,
+            _ => {}
+        }
+    }
+    /// Gathers every notebook's git state in one local-only pass (status,
+    /// merge-in-progress flag, latest commits — no network) and opens the
+    /// dashboard. Rows are rebuilt from scratch each time so the modal
+    /// never shows a stale snapshot after a sync/push/pull.
+    fn open_git_dash(&mut self) {
+        let remote = self.config.git.remote.clone();
+        let states: Vec<crate::panel_git::NotebookGitState> = self
+            .notebooks
+            .iter()
+            .map(|nb| crate::panel_git::NotebookGitState {
+                name: nb.name.clone(),
+                status: shiki_core::git::status(&nb.path, &remote),
+                merging: shiki_core::git::merge_in_progress(&nb.path),
+                commits: shiki_core::git::recent_commits(&nb.path, 3).unwrap_or_default(),
+            })
+            .collect();
+        self.git_dash_rows = crate::panel_git::build_rows(&states);
+        let notebooks = crate::panel_git::selectable_count(&self.git_dash_rows);
+        self.git_dash_selected = self.git_dash_selected.min(notebooks.saturating_sub(1));
+        self.show_git_dash = true;
+    }
+    /// Dashboard navigation walks *notebook* rows only — commit rows under
+    /// them are display-only, same rule as headers in the links modal.
+    fn handle_git_dash_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => self.show_git_dash = false,
+            KeyCode::Char('j') | KeyCode::Down => {
+                let count = crate::panel_git::selectable_count(&self.git_dash_rows);
+                if count > 0 && self.git_dash_selected + 1 < count {
+                    self.git_dash_selected += 1;
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.git_dash_selected = self.git_dash_selected.saturating_sub(1);
+            }
+            KeyCode::Home => self.git_dash_selected = 0,
+            KeyCode::End => {
+                self.git_dash_selected =
+                    crate::panel_git::selectable_count(&self.git_dash_rows).saturating_sub(1);
+            }
+            _ => {}
         }
     }
     fn handle_history_key(&mut self, key: KeyEvent) {
@@ -5116,6 +5202,7 @@ impl App {
             Action::PullNotebook => self.pull_notebook(),
             Action::PullAllNotebooks => self.pull_all_notebooks(),
             Action::SetRemote => self.start_set_remote(),
+            Action::ShowGitDash => self.open_git_dash(),
 
             Action::NewNote => {
                 self.pending_new_note_body = None;
@@ -5139,6 +5226,7 @@ impl App {
                 ));
             }
             Action::ShowHistory => self.open_history(),
+            Action::ShowWorkingDiff => self.open_working_diff(),
             Action::ShowLinks => self.open_links(),
             Action::ShowOutline => self.open_outline(),
             Action::ToggleFavoriteEditor => self.toggle_favorite_editor(),
@@ -5289,11 +5377,44 @@ impl App {
                                         status = format!("{status}, but could not set remote: {e}")
                                     }
                                 }
+                                self.set_status(status);
+                            } else {
+                                self.set_status(status);
+                                // No template covers this notebook — the one
+                                // onboarding question: want it synced to a Git
+                                // remote? Empty Enter skips and never asks
+                                // about *this* notebook again; `R` always works.
+                                self.pending_new_notebook_remote = Some(name.clone());
+                                self.start_input(PendingInput::NewNotebookRemote, String::new());
                             }
-                            self.set_status(status);
                         }
                         Err(e) => self.set_status(format!("could not create: {e}")),
                     }
+                }
+            }
+            Some(PendingInput::NewNotebookRemote) => {
+                let Some(name) = self.pending_new_notebook_remote.take() else {
+                    return;
+                };
+                if value.is_empty() {
+                    self.set_status(format!("notebook '{name}' created without a git remote"));
+                    return;
+                }
+                match self.store.get(&name) {
+                    Ok(nb) => match shiki_core::git::set_remote(&nb.path, &value) {
+                        Ok(()) => {
+                            let redacted = shiki_core::git::redact_credentials(&value);
+                            self.set_status(format!(
+                                "notebook '{name}' created, remote set to '{redacted}'"
+                            ));
+                        }
+                        Err(e) => self.set_status(format!(
+                            "notebook '{name}' created, but could not set remote: {e}"
+                        )),
+                    },
+                    Err(e) => self.set_status(format!(
+                        "notebook '{name}' vanished right after creation: {e}"
+                    )),
                 }
             }
             Some(PendingInput::RenameNote) => {
@@ -6058,6 +6179,12 @@ impl App {
                 self.pending_batch = None;
                 if kind == Some(PendingInput::NewNote) {
                     self.pending_new_note_body = None;
+                }
+                // Abandoning the follow-up remote prompt just means "not
+                // now" for that notebook — clear the staged name so a later
+                // unrelated flow can't trip over it.
+                if kind == Some(PendingInput::NewNotebookRemote) {
+                    self.pending_new_notebook_remote = None;
                 }
                 self.mode = Mode::Normal;
                 // Every `Settings*` prompt is only ever started from inside
@@ -7888,6 +8015,14 @@ impl App {
         }
         if self.show_query {
             self.handle_query_key(key);
+            return;
+        }
+        if self.working_diff.is_some() {
+            self.handle_working_diff_key(key);
+            return;
+        }
+        if self.show_git_dash {
+            self.handle_git_dash_key(key);
             return;
         }
         if self.show_history {

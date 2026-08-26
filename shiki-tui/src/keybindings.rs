@@ -47,6 +47,10 @@ pub enum Action {
     PullAllNotebooks,
     SetRemote,
     PushNotebook,
+    /// Opens the git dashboard — every notebook's sync state in plain
+    /// language ("2 uncommitted — s saves, p pulls") plus its latest
+    /// commits. Read-only.
+    ShowGitDash,
     // Notes-focus
     NewNote,
     NewFolder,
@@ -71,6 +75,11 @@ pub enum Action {
     EditExternal,
     // Preview-focus
     ShowHistory,
+    /// Shows the selected note's pending changes (working tree vs last
+    /// commit) in a diff popup; when the note has nothing uncommitted it
+    /// opens the version history instead, so `d` always answers "what
+    /// changed here" either way.
+    ShowWorkingDiff,
     /// Opens the links modal — the selected note's outgoing `[[wikilinks]]`
     /// plus every other note that links back to it.
     ShowLinks,
@@ -187,6 +196,7 @@ impl KeyMaps {
         );
         bind(&mut notebooks, &cfg.notebooks.set_remote, Action::SetRemote);
         bind(&mut notebooks, &cfg.notebooks.push, Action::PushNotebook);
+        bind(&mut notebooks, &cfg.notebooks.git_dash, Action::ShowGitDash);
 
         let mut notes = HashMap::new();
         bind(&mut notes, &cfg.notes.new, Action::NewNote);
@@ -213,6 +223,7 @@ impl KeyMaps {
             Action::EditExternal,
         );
         bind(&mut preview, &cfg.preview.history, Action::ShowHistory);
+        bind(&mut preview, &cfg.preview.diff, Action::ShowWorkingDiff);
         bind(&mut preview, &cfg.preview.links, Action::ShowLinks);
         bind(&mut preview, &cfg.preview.outline, Action::ShowOutline);
         bind(&mut preview, &cfg.preview.metadata, Action::EditMetadata);
@@ -396,6 +407,7 @@ pub fn action_label(action: Action) -> &'static str {
         Action::PullAllNotebooks => "git pull (all notebooks)",
         Action::SetRemote => "set git remote",
         Action::PushNotebook => "sync + push now (ignores auto_push)",
+        Action::ShowGitDash => "git dashboard (all notebooks)",
         Action::NewNote => "new note",
         Action::NewFolder => "new folder",
         Action::RenameNote => "rename note",
@@ -411,6 +423,7 @@ pub fn action_label(action: Action) -> &'static str {
         Action::EditInline => "edit (insert mode)",
         Action::EditExternal => "edit externally ($EDITOR)",
         Action::ShowHistory => "note history (view/revert)",
+        Action::ShowWorkingDiff => "pending changes diff (falls back to history)",
         Action::ShowLinks => "links (outgoing / backlinks / mentions)",
         Action::ToggleTasks => "tasks (all notebooks)",
         Action::ToggleQuery => "query notes (frontmatter filter/sort)",
@@ -439,7 +452,9 @@ pub fn action_icon(action: Action) -> crate::icons::Icon {
         | Action::PullNotebook
         | Action::PullAllNotebooks
         | Action::SetRemote
-        | Action::PushNotebook => crate::icons::GIT,
+        | Action::PushNotebook
+        | Action::ShowGitDash
+        | Action::ShowWorkingDiff => crate::icons::GIT,
         Action::EditInline | Action::EditExternal => crate::icons::PENCIL,
         Action::DailyNote => crate::icons::CALENDAR,
         Action::MoveNote => crate::icons::ARROW,

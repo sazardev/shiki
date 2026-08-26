@@ -164,6 +164,23 @@ enum Commands {
         #[arg(short = 'n', long)]
         notebook: Option<String>,
     },
+    /// Shows pending changes (working tree vs last commit) — what the next
+    /// sync would commit. Without a note: every pending change in the
+    /// notebook.
+    Diff {
+        /// A specific note; omit to show all pending changes.
+        note: Option<String>,
+        #[arg(short = 'n', long)]
+        notebook: Option<String>,
+    },
+    /// Lists recent commits in a notebook, or every commit that touched one
+    /// note (the TUI history modal's list, scriptable)
+    Log {
+        /// A specific note; omit for the notebook-wide log.
+        note: Option<String>,
+        #[arg(short = 'n', long)]
+        notebook: Option<String>,
+    },
     /// Exports every note in a notebook to a single HTML or Markdown file
     Export {
         #[arg(short = 'n', long)]
@@ -327,6 +344,12 @@ enum ImportAction {
 enum NotebookAction {
     Create {
         name: String,
+        /// Optional git remote URL (or local bare-repo path) to configure as
+        /// the new notebook's `origin` right away — the CLI counterpart of
+        /// the TUI's "sync with Git?" follow-up prompt. Credentials in the
+        /// URL are redacted in all output.
+        #[arg(long)]
+        remote: Option<String>,
     },
     List {
         /// Emits a JSON array instead of plain text — for scripting.
@@ -434,6 +457,17 @@ impl Context {
 }
 
 fn main() -> Result<()> {
+    // Piping output into `head`/`less` closes our stdout mid-write. Rust
+    // starts with SIGPIPE ignored, so that shows up as a `failed printing
+    // to stdout: Broken pipe` panic instead of the silent exit every other
+    // Unix tool (`git`, `cat`) produces. Restoring the default disposition
+    // makes the process die by SIGPIPE like they do — Windows has no
+    // SIGPIPE and doesn't need this.
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
@@ -576,6 +610,14 @@ fn main() -> Result<()> {
             let notebook = ctx.notebook_name(notebook);
             commands::sync::run(&ctx.store, &notebook, &ctx.config)
         }
+        Some(Commands::Diff { note, notebook }) => {
+            let notebook = ctx.notebook_name(notebook);
+            commands::diff::run(&ctx.store, &notebook, note.as_deref())
+        }
+        Some(Commands::Log { note, notebook }) => {
+            let notebook = ctx.notebook_name(notebook);
+            commands::log::run(&ctx.store, &notebook, note.as_deref())
+        }
         Some(Commands::Export {
             notebook,
             out,
@@ -648,7 +690,9 @@ fn main() -> Result<()> {
         Some(Commands::Doctor) => unreachable!("handled before Context::load() above"),
         Some(Commands::Daemon) => commands::daemon::run(&ctx.store, &ctx.config),
         Some(Commands::Notebook { action }) => match action {
-            NotebookAction::Create { name } => commands::notebook::create(&ctx.store, &name),
+            NotebookAction::Create { name, remote } => {
+                commands::notebook::create(&ctx.store, &name, remote.as_deref())
+            }
             NotebookAction::List { json, all } => {
                 commands::notebook::list(&ctx.store, &ctx.config, json, all)
             }

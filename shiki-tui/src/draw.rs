@@ -321,8 +321,16 @@ pub fn draw(frame: &mut Frame, app: &App) {
         render_history(frame, frame.area(), app);
     }
 
+    if let Some(lines) = &app.working_diff {
+        render_working_diff(frame, frame.area(), app, lines);
+    }
+
     if app.show_conflicts {
         render_conflicts(frame, frame.area(), app);
+    }
+
+    if app.show_git_dash {
+        crate::panel_git::render(frame, frame.area(), app);
     }
 
     if app.show_update {
@@ -752,6 +760,47 @@ fn render_links(frame: &mut Frame, frame_area: Rect, app: &App) {
         app.link_selected,
     ));
     frame.render_stateful_widget(list, popup_area, &mut state);
+}
+
+/// The standalone working-changes diff (`d` on a dirty note): what sync
+/// would commit, working tree vs last commit. Same visual language as
+/// `render_history`'s diff pane (one +/-/context pane), but top-level —
+/// no revision list behind it — and without `r revert`, since there's no
+/// revision to revert to yet.
+fn render_working_diff(
+    frame: &mut Frame,
+    frame_area: Rect,
+    app: &App,
+    lines: &[shiki_core::git::DiffLine],
+) {
+    let height = (frame_area.height * 3 / 4).max(8);
+    let popup_area = centered_rect(frame_area, (frame_area.width * 3 / 4).max(50), height);
+    frame.render_widget(Clear, popup_area);
+
+    let muted = hex_to_color(&app.theme.muted);
+    let success = hex_to_color(&app.theme.success);
+    let error = hex_to_color(&app.theme.error);
+    let added = lines.iter().filter(|l| l.origin == '+').count();
+    let removed = lines.iter().filter(|l| l.origin == '-').count();
+    let title = format!(
+        " {}Working changes  \u{2014}  +{added} \u{2212}{removed} vs last commit \u{B7} esc back ",
+        icons::GIT
+    );
+    let diff_lines: Vec<Line> = lines
+        .iter()
+        .map(|l| {
+            let color = match l.origin {
+                '+' => success,
+                '-' => error,
+                _ => muted,
+            };
+            Line::from(Span::styled(format!("{} {}", l.origin, l.content), color))
+        })
+        .collect();
+    let paragraph = ratatui::widgets::Paragraph::new(diff_lines)
+        .block(panel_block(Line::from(title), true, &app.theme))
+        .wrap(ratatui::widgets::Wrap { trim: false });
+    frame.render_widget(paragraph, popup_area);
 }
 
 fn render_history(frame: &mut Frame, frame_area: Rect, app: &App) {
