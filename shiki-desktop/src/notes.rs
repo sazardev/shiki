@@ -320,12 +320,16 @@ pub fn create_notebook_from_url(
 #[derive(Debug, Serialize)]
 #[serde(tag = "status")]
 pub enum AdoptFolderResult {
-    Adopted { name: String },
+    Adopted {
+        name: String,
+    },
     /// The folder has no `.git` yet — the frontend should confirm with the
     /// user before calling this command again with `init_git_if_missing:
     /// true`, mirroring shiki-tui's confirm dialog for the same case
     /// (`App::adopt_notebook_from_path`).
-    NeedsGitInitConfirm { name: String },
+    NeedsGitInitConfirm {
+        name: String,
+    },
 }
 
 /// New-notebook fast path for pointing at an existing directory on disk —
@@ -533,7 +537,8 @@ pub fn pull_notebook(
 ) -> Result<String, String> {
     let nb = get_notebook(&state, &notebook)?;
     let cfg = state.config();
-    let outcome = git::pull(&nb.path, &cfg.git.remote, &cfg.git.branch).map_err(|e| e.to_string())?;
+    let outcome =
+        git::pull(&nb.path, &cfg.git.remote, &cfg.git.branch).map_err(|e| e.to_string())?;
     match outcome {
         git::PullOutcome::FastForwarded { branch } => Ok(format!("pulled — {branch} fast-forwarded")),
         git::PullOutcome::UpToDate { branch } => Ok(format!("{branch} already up to date")),
@@ -794,8 +799,7 @@ pub fn working_diff(
     path: String,
 ) -> Result<Vec<DiffLineInfo>, String> {
     let nb = get_notebook(&state, &notebook)?;
-    let lines =
-        git::working_tree_diff(&nb.path, Path::new(&path)).map_err(|e| e.to_string())?;
+    let lines = git::working_tree_diff(&nb.path, Path::new(&path)).map_err(|e| e.to_string())?;
     Ok(lines
         .into_iter()
         .map(|l| DiffLineInfo {
@@ -880,7 +884,10 @@ pub fn run_note_query(
                     let key = k.as_str()?.to_string();
                     let value = match v {
                         serde_yaml::Value::String(s) => s.clone(),
-                        other => serde_yaml::to_string(other).unwrap_or_default().trim().to_string(),
+                        other => serde_yaml::to_string(other)
+                            .unwrap_or_default()
+                            .trim()
+                            .to_string(),
                     };
                     Some((key, value))
                 })
@@ -943,7 +950,10 @@ pub fn export_notebook(
 /// cache) — the caller should show it as in-flight, not assume it returns
 /// instantly the way `export_notebook` does.
 #[tauri::command]
-pub fn publish_notebook(state: tauri::State<'_, AppState>, notebook: String) -> Result<String, String> {
+pub fn publish_notebook(
+    state: tauri::State<'_, AppState>,
+    notebook: String,
+) -> Result<String, String> {
     let nb = get_notebook(&state, &notebook)?;
     let mut notes = nb.all_notes_recursive().map_err(|e| e.to_string())?;
     notes.sort_by(|a, b| {
@@ -959,7 +969,8 @@ pub fn publish_notebook(state: tauri::State<'_, AppState>, notebook: String) -> 
     let out_path = out_dir.join(format!("{notebook}.pdf"));
     let cache_dir = state.store().root.join("bin");
 
-    shiki_core::publish::publish(&notes, &theme, &cache_dir, &out_path).map_err(|e| e.to_string())?;
+    shiki_core::publish::publish(&notes, &theme, &cache_dir, &out_path)
+        .map_err(|e| e.to_string())?;
     let _ = shiki_core::browser::open_url(&out_path.to_string_lossy());
     Ok(out_path.to_string_lossy().into_owned())
 }

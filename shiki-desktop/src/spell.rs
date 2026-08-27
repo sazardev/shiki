@@ -30,8 +30,8 @@ pub fn spell_check(
     state: tauri::State<'_, AppState>,
     text: String,
 ) -> Result<Vec<MisspellDto>, String> {
-    let misspells = shiki_core::spell::check_text(&text, lang(&state).as_deref())
-        .map_err(|e| e.to_string())?;
+    let misspells =
+        shiki_core::spell::check_text(&text, lang(&state).as_deref()).map_err(|e| e.to_string())?;
     Ok(misspells
         .into_iter()
         .map(|m| MisspellDto {

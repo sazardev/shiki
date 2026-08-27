@@ -53,7 +53,9 @@ impl AppState {
             },
             Err(e) => Self {
                 config: Mutex::new(Config::default()),
-                store: Mutex::new(NotebookStore::new(std::env::temp_dir().join("shiki-unavailable"))),
+                store: Mutex::new(NotebookStore::new(
+                    std::env::temp_dir().join("shiki-unavailable"),
+                )),
                 load_error: Some(e),
             },
         }
@@ -101,7 +103,11 @@ impl AppState {
     /// restart) and in `config.toml`'s `[notebooks.<name>] path = "..."` (so
     /// it's still there next launch). Mirrors shiki-tui's
     /// `App::finish_notebook_adopt`.
-    pub fn register_custom_path(&self, name: String, path: std::path::PathBuf) -> Result<(), String> {
+    pub fn register_custom_path(
+        &self,
+        name: String,
+        path: std::path::PathBuf,
+    ) -> Result<(), String> {
         self.store
             .lock()
             .unwrap()
