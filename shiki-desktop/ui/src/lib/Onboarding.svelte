@@ -69,9 +69,8 @@
   .card {
     max-width: 460px;
     width: 100%;
-    background: var(--highlight);
+    background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 10px;
     padding: 2rem 2.2rem;
   }
   .logo {

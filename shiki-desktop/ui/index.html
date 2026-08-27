@@ -3,7 +3,70 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>shiki</title>
+    <title>shiki (私記) — personal notes, private log</title>
+    <meta name="description" content="shiki desktop — a fast, keyboard-first notes app. Notebooks are plain Markdown git repos, fully synced, themeable, and yours." />
+    <meta name="keywords" content="shiki, notes app, note-taking, Markdown, git, Tauri, desktop app, keyboard-first, themeable, self-hosted notes, plain text notes" />
+    <meta name="author" content="sazardev" />
+    <meta name="application-name" content="shiki" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#282828" />
+    <meta name="color-scheme" content="dark light" />
+
+    <!-- App-shell chrome hints — this window is never a browser tab, but
+         these still apply during `npm run dev`/`preview` and to anything
+         that inspects the bundled dist/index.html directly. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="shiki" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <!-- Open Graph / Twitter Card — only matters if dist/index.html is ever
+         served/shared standalone (e.g. a hosted preview build); the images
+         point at the project's real public site since the app itself has
+         no hosted URL of its own to serve one from. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://sazardev.github.io/shiki/" />
+    <meta property="og:site_name" content="shiki" />
+    <meta property="og:title" content="shiki (私記) — personal notes, private log" />
+    <meta property="og:description" content="A fast, keyboard-first notes app. Notebooks are plain Markdown git repos, fully synced, themeable, and yours." />
+    <meta property="og:image" content="https://sazardev.github.io/shiki/assets/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="shiki (私記) — a notes app, shown running in its three-pane layout" />
+    <meta property="og:locale" content="en_US" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="shiki (私記) — personal notes, private log" />
+    <meta name="twitter:description" content="A fast, keyboard-first notes app. Notebooks are plain Markdown git repos, fully synced, themeable, and yours." />
+    <meta name="twitter:image" content="https://sazardev.github.io/shiki/assets/og-image.png" />
+    <meta name="twitter:image:alt" content="shiki (私記) — a notes app, shown running in its three-pane layout" />
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "shiki",
+      "alternateName": "私記",
+      "description": "A fast, keyboard-first notes app. Notebooks are plain Markdown git repos, fully synced, themeable, and yours.",
+      "url": "https://sazardev.github.io/shiki/",
+      "downloadUrl": "https://github.com/sazardev/shiki/releases/latest",
+      "applicationCategory": "Utility",
+      "operatingSystem": "Windows, macOS, Linux",
+      "programmingLanguage": ["Rust", "TypeScript"],
+      "license": "https://github.com/sazardev/shiki/blob/main/LICENSE",
+      "codeRepository": "https://github.com/sazardev/shiki",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    }
+    </script>
   </head>
   <body>
     <div id="app"></div>

@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "description": "Default permissions for the main shiki window: IPC commands + in-app auto-update",
+  "description": "Default permissions for the main shiki window: IPC commands + in-app auto-update + the native folder picker (notebook import)",
   "windows": ["main"],
-  "permissions": ["core:default", "updater:default"]
+  "permissions": ["core:default", "updater:default", "dialog:allow-open"]
 }

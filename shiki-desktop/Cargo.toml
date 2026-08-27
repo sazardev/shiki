@@ -13,6 +13,7 @@ tauri-build = { workspace = true }
 [dependencies]
 tauri = { workspace = true, features = ["protocol-asset"] }
 tauri-plugin-updater = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 shiki-core = { workspace = true }
@@ -21,3 +22,4 @@ comrak = { workspace = true }
 regex = { workspace = true }
 chrono = { workspace = true }
 git2 = { workspace = true }
+serde_yaml = { workspace = true }

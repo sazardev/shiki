@@ -1,0 +1,14 @@
+{
+  "name": "shiki — personal notes, private log",
+  "short_name": "shiki",
+  "description": "A fast, keyboard-first notes app. Notebooks are plain Markdown git repos, fully synced, themeable, and yours.",
+  "icons": [
+    { "src": "/favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/favicon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "theme_color": "#282828",
+  "background_color": "#282828",
+  "display": "standalone",
+  "lang": "en"
+}

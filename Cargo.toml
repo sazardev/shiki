@@ -97,6 +97,12 @@ tauri-build = { version = "2" }
 # the signed installer and applies it (passive on Windows) — the GUI twin of
 # the TUI's leader+`U` self-update.
 tauri-plugin-updater = { version = "2", features = [] }
+# Native "choose a folder" dialog for shiki-desktop's notebook import flow —
+# a webview has no filesystem access of its own, so picking an existing
+# local directory to adopt as a notebook has to go through the OS's real
+# file picker via this plugin rather than a browser-side `<input type=file>`
+# (which can't select a directory, and can't return an absolute path anyway).
+tauri-plugin-dialog = { version = "2", features = [] }
 
 [profile.release]
 lto = true

@@ -13,8 +13,14 @@ body {
   height: 100%;
 }
 
+/* The TUI is a terminal app end to end — every label, list row, and button
+   is drawn in a monospace grid, not a sans-serif desktop UI font. Using a
+   sans-serif font here was the single biggest reason the desktop app read
+   as "a generic web app that happens to use shiki's colors" rather than
+   the TUI's own look; this is the one shared stack every element in the
+   app inherits unless it opts out. */
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
   background: var(--bg, #1e1e2e);
   color: var(--fg, #cdd6f4);
   user-select: none;
@@ -25,6 +31,34 @@ code,
 pre,
 .cm-content {
   user-select: text;
+}
+
+/* The TUI never rounds a corner — `panel_block` renders every border with
+   `BorderType::Plain`/`Thick`, deliberately square (see CLAUDE.md's Theme
+   section on the gruvbox accent change). Native browser controls default to
+   rounded corners and OS-drawn chrome; reset every element to the TUI's
+   flat, square, hand-drawn look instead of trusting per-component defaults. */
+* {
+  border-radius: 0 !important;
+}
+
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+  font-size: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
 }
 
 /* ---- rendered markdown (PREVIEW pane) ---- */
@@ -95,6 +129,7 @@ pre,
 }
 
 .preview pre {
+  position: relative;
   background: var(--highlight);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -106,6 +141,50 @@ pre,
 .preview pre code {
   background: none;
   padding: 0;
+}
+
+/* Hidden until hover — GitHub/VS Code's own "quick copy" affordance for a
+   fenced code block, rather than making the user enter edit mode just to
+   grab a snippet. */
+.copy-code-btn {
+  position: absolute;
+  top: 0.5em;
+  right: 0.5em;
+  background: var(--statusbar);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px !important;
+  padding: 0.15em 0.6em;
+  font-size: 0.72em;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.preview pre:hover .copy-code-btn {
+  opacity: 1;
+}
+
+.copy-code-btn:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
+.copy-code-btn.copied {
+  opacity: 1;
+  color: var(--success);
+  border-color: var(--success);
+}
+
+/* Inline `code` copies on click instead — a persistent button next to
+   every inline span would be noisy, so the cue is just a pointer cursor +
+   title tooltip, with a brief flash confirming the copy actually fired. */
+.copyable-inline-code {
+  cursor: pointer;
+}
+
+.copyable-inline-code.copied-flash {
+  background: color-mix(in srgb, var(--success) 30%, var(--highlight)) !important;
 }
 
 .preview table {
@@ -154,9 +233,34 @@ pre,
   font-weight: 600;
 }
 
+/* A native OS checkbox square doesn't read as "terminal" at any accent
+   color — hand-draw the TUI's own `[ ]`/`[x]` glyph instead. */
 .preview .task-list-item input[type="checkbox"] {
-  accent-color: var(--accent);
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1em;
+  height: 1em;
   margin-right: 0.5em;
+  border: 1px solid var(--muted);
+  position: relative;
+  vertical-align: -0.15em;
+}
+
+.preview .task-list-item input[type="checkbox"]:checked {
+  border-color: var(--success);
+  background: var(--success);
+}
+
+.preview .task-list-item input[type="checkbox"]:checked::after {
+  content: "x";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bg);
+  font-size: 0.85em;
+  font-weight: 700;
 }
 
 /* ---- highlight.js over the active palette ---- */
