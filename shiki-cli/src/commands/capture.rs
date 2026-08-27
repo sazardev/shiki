@@ -18,7 +18,38 @@ pub(crate) enum DaemonResponse {
 }
 
 fn parse_port_file(contents: &str) -> Option<u16> {
-    contents.trim().parse().ok()
+    contents.split_whitespace().next()?.parse().ok()
+}
+
+fn parse_pid(contents: &str) -> Option<u32> {
+    contents.split_whitespace().nth(1)?.parse().ok()
+}
+
+#[allow(dead_code)]
+fn is_pid_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        if pid == 0 || pid > i32::MAX as u32 {
+            return false;
+        }
+        let ret = unsafe { libc::kill(pid as i32, 0) };
+        if ret == 0 {
+            return true;
+        }
+        let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+        // ESRCH = 3 on Linux/macOS — no such process
+        errno != 3
+    }
+    #[cfg(windows)]
+    {
+        let _ = pid;
+        true
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = pid;
+        true
+    }
 }
 
 fn parse_response_line(line: &str) -> Option<DaemonResponse> {
@@ -590,8 +621,18 @@ fn format_check_result(reachable: bool, enabled: bool, json: bool) -> String {
 /// doctor` can report daemon reachability the same way `--check` does.
 pub(crate) fn try_daemon(request: &str) -> Option<DaemonResponse> {
     let port_path = Config::default_capture_port_path().ok()?;
-    let contents = std::fs::read_to_string(port_path).ok()?;
+    let contents = std::fs::read_to_string(&port_path).ok()?;
     let port = parse_port_file(&contents)?;
+    // Stale-file detection: if the port file also records a pid and that
+    // pid is no longer alive, the daemon crashed without cleaning up.
+    // Remove the stale file so the next `shiki capture` falls through to
+    // the direct-write path immediately instead of hanging on a dead port.
+    if let Some(pid) = parse_pid(&contents) {
+        if !is_pid_alive(pid) {
+            let _ = std::fs::remove_file(&port_path);
+            return None;
+        }
+    }
 
     let mut stream =
         TcpStream::connect_timeout(&([127, 0, 0, 1], port).into(), Duration::from_millis(300))
@@ -606,6 +647,17 @@ pub(crate) fn try_daemon(request: &str) -> Option<DaemonResponse> {
     parse_response_line(&response)
 }
 
+/// Returns `Some(true)` if the port file exists but its pid is stale,
+/// `Some(false)` if it exists and is not stale (or has no pid), `None`
+/// if the file doesn't exist or is unreadable. Used by `shiki doctor`
+/// to distinguish "stale" from "not running".
+pub(crate) fn is_port_file_stale() -> Option<bool> {
+    let port_path = Config::default_capture_port_path().ok()?;
+    let contents = std::fs::read_to_string(&port_path).ok()?;
+    let pid = parse_pid(&contents)?;
+    Some(!is_pid_alive(pid))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -615,6 +667,9 @@ mod tests {
         assert_eq!(parse_port_file("54321"), Some(54321));
         assert_eq!(parse_port_file("54321\n"), Some(54321));
         assert_eq!(parse_port_file("  54321  "), Some(54321));
+        // New format with pid
+        assert_eq!(parse_port_file("54321 12345\n"), Some(54321));
+        assert_eq!(parse_port_file("54321 99999"), Some(54321));
     }
 
     #[test]
@@ -622,6 +677,27 @@ mod tests {
         assert_eq!(parse_port_file(""), None);
         assert_eq!(parse_port_file("not-a-port"), None);
         assert_eq!(parse_port_file("-1"), None);
+    }
+
+    #[test]
+    fn parse_pid_extracts_second_token() {
+        assert_eq!(parse_pid("54321 12345"), Some(12345));
+        assert_eq!(parse_pid("54321 12345\n"), Some(12345));
+        assert_eq!(parse_pid("54321"), None);
+        assert_eq!(parse_pid(""), None);
+        assert_eq!(parse_pid("54321 not-a-pid"), None);
+    }
+
+    #[test]
+    fn is_pid_alive_current_process_is_alive() {
+        assert!(is_pid_alive(std::process::id()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn is_pid_alive_nonexistent_is_not_alive() {
+        // u32::MAX is not a valid pid on any real system
+        assert!(!is_pid_alive(u32::MAX));
     }
 
     #[test]

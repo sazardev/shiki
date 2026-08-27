@@ -42,6 +42,14 @@ jobs:
       # that an ubuntu-only clippy run would never actually lint.
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
+  theme-drift:
+    name: theme drift (Rust vs docs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: python scripts/gen-themes.py --check
+
   audit:
     name: cargo audit (dependency vulnerabilities)
     runs-on: ubuntu-latest

@@ -195,7 +195,8 @@ pub fn spawn_capture_daemon(
 
 fn write_port_file(port: u16) -> anyhow::Result<()> {
     let path = Config::default_capture_port_path()?;
-    std::fs::write(&path, port.to_string())?;
+    let pid = std::process::id();
+    std::fs::write(&path, format!("{port} {pid}\n"))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -205,6 +206,67 @@ fn write_port_file(port: u16) -> anyhow::Result<()> {
         let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
     }
     Ok(())
+}
+
+/// Whether `pid` is still a live process.
+///
+/// On Unix, `kill(pid,0)` with signal 0 does not send a signal but
+/// performs the usual permission checks — 0 means the process exists
+/// (or we lack permission to signal it, which still means it exists),
+/// `ESRCH` means no such process. On Windows, where `libc::kill` is not
+/// available and `kill -0` semantics differ, we conservatively return
+/// `true` (treat the port file as not stale) — stale detection there
+/// falls back to the TCP connect timeout, which already cleans up the
+/// user-visible symptom, just not the file itself immediately.
+#[allow(dead_code)]
+fn is_pid_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        if pid == 0 || pid > i32::MAX as u32 {
+            return false;
+        }
+        // SAFETY: `kill` is async-signal-safe and we pass a valid pid + 0.
+        let ret = unsafe { libc::kill(pid as i32, 0) };
+        if ret == 0 {
+            return true;
+        }
+        // `kill` failed — check errno. ESRCH = no such process → stale.
+        // EPERM = process exists but we can't signal it → alive.
+        let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+        // libc::ESRCH is 3 on Linux, 3 on macOS — use raw value to avoid
+        // needing `errno` crate, but prefer `libc::ESRCH` when available.
+        #[allow(unused_variables)]
+        let esrch = {
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            {
+                3
+            }
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            {
+                3
+            }
+            #[cfg(not(any(
+                target_os = "linux",
+                target_os = "android",
+                target_os = "macos",
+                target_os = "ios"
+            )))]
+            {
+                3
+            }
+        };
+        errno != esrch
+    }
+    #[cfg(windows)]
+    {
+        let _ = pid;
+        true
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = pid;
+        true
+    }
 }
 
 fn accept_loop(
