@@ -807,13 +807,20 @@ fn render_sequence(seq: &Sequence, styles: &Styles) -> Vec<Line<'static>> {
         // pipes themselves intact).
         let lo = col_starts[from_idx.min(to_idx)];
         let hi = col_starts[from_idx.max(to_idx)];
-        for cell in row[lo + 1..hi].iter_mut() {
-            if *cell == ' ' {
-                *cell = fill;
+        if from_idx == to_idx {
+            // A self-message (`A->>A: text`): there is no span to fill and
+            // slicing `lo + 1..hi` would panic, so mark the participant's
+            // own pipe with a loop glyph instead.
+            row[lo] = '↺';
+        } else {
+            for cell in row[lo + 1..hi].iter_mut() {
+                if *cell == ' ' {
+                    *cell = fill;
+                }
             }
+            // Arrowhead on the target's pipe: `▶` when moving right, `◀` left.
+            row[col_starts[to_idx]] = if from_idx < to_idx { '▶' } else { '◀' };
         }
-        // Arrowhead on the target's pipe: `▶` when moving right, `◀` left.
-        row[col_starts[to_idx]] = if from_idx < to_idx { '▶' } else { '◀' };
         let mut spans = vec![Span::styled(
             row.iter().collect::<String>(),
             Style::default().fg(styles.accent),
@@ -934,5 +941,14 @@ mod tests {
         let (_, lines) = render("graph TD\n%% a comment\nA --> B", FG, ACCENT, MUTED).unwrap();
         let t = text(&lines);
         assert_eq!(t, vec!["A", "└─ ───▶", "   B"]);
+    }
+    #[test]
+    fn sequence_self_message_does_not_panic() {
+        let src = "sequenceDiagram\nCron->>DB: read\nCron->>Cron: skip if empty\nCron->>DB: write";
+        let (_, lines) = render(src, FG, ACCENT, MUTED).unwrap();
+        let t = text(&lines);
+        assert!(t[2].contains('↺'), "self-message loop glyph: {t:?}");
+        assert!(t[2].contains("skip if empty"), "{t:?}");
+        assert!(t[3].contains('▶'), "later messages still render: {t:?}");
     }
 }
