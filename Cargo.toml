@@ -27,7 +27,7 @@ shiki-tui = { path = "shiki-tui", version = "0.9.5" }
 ratatui = "0.30"
 crossterm = "0.29"
 git2 = { version = "0.21", features = ["ssh", "https", "vendored-libgit2", "vendored-openssl"] }
-comrak = "0.54"
+comrak = "0.55"
 syntect = "5"
 # Bundles ~150 extra syntect syntax definitions (from bat's asset collection)
 # on top of syntect's own bundled defaults — notably TypeScript/TSX, which
@@ -85,7 +85,7 @@ png = "0.18"
 age = { version = "0.12", features = ["armor"] }
 # SHA-256 for `voice::ensure_model`'s download-integrity check against the
 # hash Hugging Face publishes for each whisper model (its git-lfs pointer).
-sha2 = "0.10"
+sha2 = "0.11"
 # Hidden passphrase input for `shiki notebook encrypt/decrypt` — the CLI
 # equivalent of the TUI's masked passphrase prompt.
 rpassword = "7"
