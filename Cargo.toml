@@ -83,6 +83,9 @@ png = "0.18"
 # `armor` feature is required for ASCII-armored output (so ciphertext still
 # reads as text to git, not a binary blob).
 age = { version = "0.12", features = ["armor"] }
+# SHA-256 for `voice::ensure_model`'s download-integrity check against the
+# hash Hugging Face publishes for each whisper model (its git-lfs pointer).
+sha2 = "0.10"
 # Hidden passphrase input for `shiki notebook encrypt/decrypt` — the CLI
 # equivalent of the TUI's masked passphrase prompt.
 rpassword = "7"

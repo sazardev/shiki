@@ -6,6 +6,55 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+### Changed
+
+- **The capture pipeline now lives once in `shiki-core::capture`** — the CLI, the in-TUI daemon and
+  the browser-extension native host each carried near-identical private copies of
+  `with_source`/`build_capture_request`/`capture_into_new_note`/`capture_into_templated`/
+  `capture_into_daily` (88–97% identical bodies). `LastCapture` moved to `shiki-core` alongside it
+  (`Config::default_last_capture_path` stays in `shiki-config`), and tilde expansion
+  (`process::expand_home`), YAML scalar rendering (`query::yaml_value_to_string`) and pid/port-file
+  parsing each have a single implementation now.
+- **Preview images render off the UI thread**: `chafa` runs on background threads with a
+  width-keyed cache, showing the icon+alt fallback until the art arrives instead of blocking the
+  next frame.
+- **The footer's revision count walks git history on a background thread** (same `std::thread` +
+  `mpsc` shape as sync/self-update), instead of a full revwalk per selected note on the UI thread.
+
+### Fixed
+
+- **`shiki capture` from the browser extension now actually finds the running TUI daemon**: the
+  native host parsed the port file (`"{port} {pid}"`) as a bare number, so the parse always failed
+  and every capture silently fell back to a direct write. Parsing is shared and tested against the
+  real two-token format now.
+- **Editing `config.toml` can no longer truncate it**: a failed read used to open an empty editor
+  buffer, and saving then overwrote the real file — an unreadable config now aborts the edit with a
+  status message instead.
+- **A failed notebook listing no longer looks like "no notebooks configured"**: `store.list()` and
+  per-folder listing errors are surfaced as status messages, and a failed per-note git status folds
+  into the existing `status_error` the footer/git panel render.
+- **Commits/merges no longer panic on an invalid system clock** — the `Signature::now` fallback
+  propagates as a normal error.
+- **The native host's `list_tags`/`search`/`recent` return `{"ok": false, "error": …}` instead of a
+  successful empty list** when the notebook walk fails (e.g. a locked encrypted notebook).
+- **Whisper model downloads are verified fail-closed**: the model's sha256/size are read from
+  Hugging Face's git-lfs pointer and checked before install; `--model` values are restricted to a
+  bare `ggml-*.bin` filename (no path traversal).
+- **Release page for v0.9.3 added** (it had been skipped by the release-automation fallback), plus
+  the regenerated `sitemap.xml`/`feed.xml`.
+
+### Security
+
+- Verified whisper model downloads (sha256) instead of renaming an unchecked 148 MB download into
+  place.
+
+### CI
+
+- `--locked` on `check`/`test`/`clippy` (the lockfile is committed on purpose), explicit
+  `contents: read` permissions on the desktop/nix workflows, and desktop builds fall back to an
+  unsigned build when the Tauri signing secrets aren't available (which made every Dependabot PR
+  red).
+
 ## [0.9.5] - 2026-08-27
 
 ### Added

@@ -590,10 +590,17 @@ pub struct App {
     /// theme_picker` already established for the theme picker.
     pub(crate) reopen_settings_after_passphrase: bool,
     /// Cache for the footer's "{n} changes" indicator: `(note path, revision
-    /// count)` for whichever note was last checked, so `run()` calling this
-    /// every draw tick only actually re-walks history when the selected
-    /// note has changed, not on every idle redraw.
+    /// count)` for whichever note was last checked. Filled by the background
+    /// `file_history` walk `refresh_history_cache` starts (never computed on
+    /// the UI thread anymore — a full revwalk per selected note stalled the
+    /// next frame in long-lived repos).
     pub(crate) history_count_cache: Option<(std::path::PathBuf, usize)>,
+    /// Note path whose history walk is currently in flight, and the channel
+    /// its `(path, count)` result arrives on — the same `std::thread` + `mpsc`
+    /// shape `sync_rx`/`update_rx` use, polled by
+    /// `poll_history_count_channel` from `run()`.
+    pub(crate) history_count_inflight: Option<std::path::PathBuf>,
+    pub(crate) history_count_rx: Option<std::sync::mpsc::Receiver<(std::path::PathBuf, usize)>>,
     /// Cache for the PREVIEW panel's folder peek: `(folder's absolute path,
     /// subfolder names, note titles)` for whichever folder was last read, so
     /// `run()` calling this every draw tick only actually re-lists the
@@ -630,6 +637,25 @@ pub struct App {
     /// already use. `None` whenever the modal is closed, so it doesn't hold
     /// a stale index in memory for no reason.
     pub(crate) tag_index_cache: Option<shiki_core::TagIndex>,
+    /// Rendered terminal art per `(resolved image path, cols)`, filled by
+    /// `prefetch_note_images`'s background `chafa` runs and read by the
+    /// preview renderer through `ImageCtx::art` (`None` records a failed
+    /// render so it isn't retried on every refresh). Cleared whenever the
+    /// preview's image width changes, since every key is width-specific.
+    pub(crate) image_art:
+        std::collections::HashMap<(std::path::PathBuf, usize), Option<Vec<Line<'static>>>>,
+    /// The width the current `image_art` entries are keyed for.
+    pub(crate) image_art_cols: Option<usize>,
+    /// `(path, cols)` currently being rendered by a background thread — the
+    /// guard that keeps a preview refresh from spawning duplicate `chafa`
+    /// runs for the same image.
+    pub(crate) image_art_inflight: std::collections::HashSet<(std::path::PathBuf, usize)>,
+    /// Result channel for those background renders (one sender clone per
+    /// thread), polled by `poll_image_art_channel` in `run()`.
+    pub(crate) image_art_tx:
+        std::sync::mpsc::Sender<(std::path::PathBuf, usize, Option<Vec<Line<'static>>>)>,
+    pub(crate) image_art_rx:
+        std::sync::mpsc::Receiver<(std::path::PathBuf, usize, Option<Vec<Line<'static>>>)>,
     pub show_update: bool,
     pub update_state: Option<UpdateState>,
     /// Set while a background thread is checking/installing, so `run()`'s
@@ -772,7 +798,7 @@ impl App {
         // untracked mid-session reappeared on every relaunch. The same
         // `visible_notebooks` filter `reload_notebooks` uses decides here
         // too.
-        let notebooks = crate::sync::visible_notebooks(&store, &config);
+        let notebooks = crate::sync::visible_notebooks(&store, &config)?;
         // Resolve for the initially selected notebook so a per-notebook
         // override on it applies from the very first frame.
         let theme = config
@@ -825,6 +851,7 @@ impl App {
             .position(|t| t.name == theme.name)
             .unwrap_or(0);
         let (capture_tx, capture_rx) = std::sync::mpsc::channel();
+        let (image_art_tx, image_art_rx) = std::sync::mpsc::channel();
 
         let mut app = Self {
             config,
@@ -990,10 +1017,17 @@ impl App {
             passphrase_pending_first: None,
             reopen_settings_after_passphrase: false,
             history_count_cache: None,
+            history_count_inflight: None,
+            history_count_rx: None,
             folder_preview_cache: None,
             note_preview_cache: None,
             details_folded: std::collections::HashMap::new(),
             tag_index_cache: None,
+            image_art: std::collections::HashMap::new(),
+            image_art_cols: None,
+            image_art_inflight: std::collections::HashSet::new(),
+            image_art_tx,
+            image_art_rx,
             show_update: false,
             update_state: None,
             update_rx: None,
@@ -1458,7 +1492,7 @@ impl App {
     /// creation, and letting one in without a repo would break sync/push/
     /// pull the moment something tried to act on it.
     pub(crate) fn adopt_notebook_from_path(&mut self, raw: &str) {
-        let path = expand_home(raw);
+        let path = shiki_core::process::expand_home(raw);
         if !path.is_dir() {
             self.set_status(format!("'{}' is not a directory", path.display()));
             return;
@@ -1736,21 +1770,71 @@ impl App {
     /// re-walking the note's git history on every draw tick — only when the
     /// selected note has actually changed since the last check. Called once
     /// per `run()` loop iteration, right before drawing.
+    /// Kicks off (if needed) the background walk behind the footer's
+    /// "{n} changes" indicator. `file_history` used to run right here, on
+    /// the UI thread, the instant the selected note changed — a full revwalk
+    /// before the next frame, which is a visible stall on a repo with a long
+    /// history. Same "expensive work on a `std::thread`, result over an mpsc
+    /// channel" shape as `spawn_git_op`/`open_update_check`;
+    /// `poll_history_count_channel` is where the result actually lands.
     fn refresh_history_cache(&mut self) {
         let current_path = self.selected_note().map(|n| n.path.clone());
         let Some(current_path) = current_path else {
-            self.history_count_cache = None;
+            self.invalidate_history_count();
             return;
         };
         if self.history_count_cache.as_ref().map(|(p, _)| p) == Some(&current_path) {
             return;
         }
-        let count = self
-            .selected_note_relative_path()
-            .and_then(|(nb, relative)| shiki_core::git::file_history(&nb.path, &relative).ok())
-            .map(|revisions| revisions.len())
-            .unwrap_or(0);
-        self.history_count_cache = Some((current_path, count));
+        if self.history_count_inflight.as_ref() == Some(&current_path) {
+            return;
+        }
+        let Some((nb, relative)) = self.selected_note_relative_path() else {
+            self.history_count_cache = Some((current_path, 0));
+            return;
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let repo_path = nb.path.clone();
+        let requested = current_path.clone();
+        std::thread::spawn(move || {
+            let count = shiki_core::git::file_history(&repo_path, &relative)
+                .map(|revisions| revisions.len())
+                .unwrap_or(0);
+            let _ = tx.send((requested, count));
+        });
+        self.history_count_inflight = Some(current_path);
+        self.history_count_rx = Some(rx);
+    }
+
+    /// Drops the cached count and any in-flight walk. Called after anything
+    /// that can change a file's revision count *for the same selected path*
+    /// (commit, revert): path-based invalidation alone would miss those, and
+    /// now that the walk is asynchronous a pre-commit result must not land
+    /// after the invalidation as if it were current.
+    pub(crate) fn invalidate_history_count(&mut self) {
+        self.history_count_cache = None;
+        self.history_count_inflight = None;
+        self.history_count_rx = None;
+    }
+
+    fn poll_history_count_channel(&mut self) {
+        let Some(rx) = &self.history_count_rx else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok((path, count)) => {
+                if self.history_count_inflight.as_ref() == Some(&path) {
+                    self.history_count_inflight = None;
+                    self.history_count_cache = Some((path, count));
+                }
+                self.history_count_rx = None;
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.history_count_rx = None;
+                self.history_count_inflight = None;
+            }
+        }
     }
 
     /// Keeps the PREVIEW panel's folder peek up to date without re-listing
@@ -1826,7 +1910,7 @@ impl App {
     /// `preview_scroll`/mouse hit-testing operate on exact row boundaries
     /// instead of `Paragraph`'s own internal (and unexposed) wrapping.
     fn refresh_note_preview_cache(&mut self) {
-        let Some(note) = self.selected_note() else {
+        let Some(note) = self.selected_note().cloned() else {
             self.note_preview_cache = None;
             return;
         };
@@ -1868,35 +1952,45 @@ impl App {
             warning: colors[7],
             dark,
         };
-        let image_ctx = {
-            let g = &self.config.general;
-            if g.preview_images {
-                let scale = g.preview_image_scale.clamp(0.05, 1.0);
-                let cols = ((width as f64) * scale).round().max(1.0) as usize;
-                let mut base_dirs = Vec::new();
-                if let Some(parent) = note.path.parent() {
-                    base_dirs.push(parent.to_path_buf());
-                }
-                if let Some(nb) = self.selected_notebook() {
-                    base_dirs.push(nb.path.clone());
-                }
-                base_dirs.push(self.store.root.clone());
-                Some(crate::term_image::ImageCtx {
-                    enabled: true,
-                    chafa: crate::term_image::ImageCtx::chafa_binary(&g.chafa_path),
-                    cols,
-                    base_dirs,
-                })
-            } else {
-                None
+        let preview_images = self.config.general.preview_images;
+        let image_scale = self.config.general.preview_image_scale.clamp(0.05, 1.0);
+        let chafa_path = self.config.general.chafa_path.clone();
+        let image_ctx = if preview_images {
+            let cols = ((width as f64) * image_scale).round().max(1.0) as usize;
+            let mut base_dirs = Vec::new();
+            if let Some(parent) = note.path.parent() {
+                base_dirs.push(parent.to_path_buf());
             }
+            if let Some(nb) = self.selected_notebook() {
+                base_dirs.push(nb.path.clone());
+            }
+            base_dirs.push(self.store.root.clone());
+            // Every `image_art` key carries `cols`, so a width change
+            // invalidates the lot. Clear before prefetching — doing it after
+            // would wipe the in-flight registrations the prefetch just made.
+            if self.image_art_cols != Some(cols) {
+                self.image_art.clear();
+                self.image_art_inflight.clear();
+                self.image_art_cols = Some(cols);
+            }
+            if let Some(chafa) = crate::term_image::ImageCtx::chafa_binary(&chafa_path) {
+                self.prefetch_note_images(&body, &base_dirs, cols, &chafa);
+            }
+            Some(crate::term_image::ImageCtx {
+                enabled: true,
+                cols,
+                base_dirs,
+                art: &self.image_art,
+            })
+        } else {
+            None
         };
         let (indexed, summary_blocks) =
             crate::render::markdown_to_lines_indexed(&body, &palette, &folded, image_ctx.as_ref());
         let (source_indices, plain_lines): (Vec<usize>, Vec<Line<'static>>) =
             indexed.into_iter().unzip();
         let grouped = crate::wrap::wrap_lines_grouped(&plain_lines, width);
-        let meta_lines = panel_preview::metadata_lines(note, colors[2], colors[5]);
+        let meta_lines = panel_preview::metadata_lines(&note, colors[2], colors[5]);
         let mut lines = Vec::with_capacity(meta_lines.len() + plain_lines.len());
         let mut sources = Vec::with_capacity(meta_lines.len() + plain_lines.len());
         let meta_len = meta_lines.len();
@@ -1915,6 +2009,52 @@ impl App {
             sources,
             summary_blocks,
         ));
+    }
+
+    /// Spawns a background `chafa` render for whichever of `body`'s images
+    /// aren't already in `image_art` at `cols` (and aren't already being
+    /// rendered) — the whole reason `markdown_to_lines_indexed` no longer
+    /// shells out: a multi-second image decode can't stall the UI thread,
+    /// and a duplicate refresh can't spawn the same render twice.
+    /// `poll_image_art_channel` picks the results up.
+    fn prefetch_note_images(
+        &mut self,
+        body: &str,
+        base_dirs: &[std::path::PathBuf],
+        cols: usize,
+        chafa: &std::path::Path,
+    ) {
+        for path in crate::term_image::body_image_paths(body, base_dirs) {
+            let key = (path, cols);
+            if self.image_art.contains_key(&key) || !self.image_art_inflight.insert(key.clone()) {
+                continue;
+            }
+            let tx = self.image_art_tx.clone();
+            let chafa = chafa.to_path_buf();
+            let (path, cols) = key;
+            std::thread::spawn(move || {
+                let art = crate::term_image::render_rows(&chafa, &path, cols);
+                let _ = tx.send((path, cols, art));
+            });
+        }
+    }
+
+    /// Drains finished background image renders. Each result replaces the
+    /// icon+alt fallback with real art (or records a failure, so the same
+    /// undecodable file isn't retried every refresh), and the preview cache
+    /// is dropped so the next tick re-renders with it.
+    fn poll_image_art_channel(&mut self) {
+        loop {
+            match self.image_art_rx.try_recv() {
+                Ok((path, cols, art)) => {
+                    self.image_art_inflight.remove(&(path.clone(), cols));
+                    self.image_art.insert((path, cols), art);
+                    self.note_preview_cache = None;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
+            }
+        }
     }
 
     /// The set of `<details>` block ids currently folded for `path` — the
@@ -2163,23 +2303,6 @@ pub(crate) fn looks_like_path(s: &str) -> bool {
     s.starts_with('/') || s.starts_with('~') || s.starts_with("./")
 }
 
-/// Expands a leading `~` (or `~/...`) to the user's home directory; anything
-/// else — including a plain `/absolute` or `./relative` path — is returned
-/// unchanged for the caller to resolve against the current directory itself.
-pub(crate) fn expand_home(path: &str) -> std::path::PathBuf {
-    if let Some(rest) = path.strip_prefix('~') {
-        if let Some(home) = directories::BaseDirs::new().map(|d| d.home_dir().to_path_buf()) {
-            let rest = rest.strip_prefix('/').unwrap_or(rest);
-            return if rest.is_empty() {
-                home
-            } else {
-                home.join(rest)
-            };
-        }
-    }
-    std::path::PathBuf::from(path)
-}
-
 /// Notebook name derived from a git URL's repo name — the last path
 /// segment, minus a trailing `.git`. Handles both `.../owner/repo` (split on
 /// `/`) and `git@host:owner/repo.git` (split on `:` for the host separator,
@@ -2281,6 +2404,8 @@ pub fn run<B: Backend<Error = io::Error>>(
         app.expire_spell_flash();
         app.poll_update_channel();
         app.poll_sync_channel();
+        app.poll_history_count_channel();
+        app.poll_image_art_channel();
         app.poll_capture_channel();
         if app.sync_in_flight.is_some() {
             app.spinner_frame = app.spinner_frame.wrapping_add(1);

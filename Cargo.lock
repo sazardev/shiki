@@ -5434,15 +5434,19 @@ version = "0.9.5"
 dependencies = [
  "age",
  "chrono",
+ "directories",
  "git2",
+ "libc",
  "nucleo-matcher",
  "pulldown-cmark",
  "regex",
  "self_update",
  "serde",
  "serde_yaml",
+ "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.20",
+ "toml 1.1.4+spec-1.1.0",
  "tracing",
 ]
 

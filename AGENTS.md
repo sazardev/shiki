@@ -3,7 +3,7 @@
 ## Read this first
 
 - **`CLAUDE.md` is the exhaustive source of truth** (layout, keybindings, config schema, git sync, release automation, per-file design rationale). Read the relevant section before any architectural change. `IDEA.md` is the design spec. `AGENTS.md` only covers what you'd otherwise guess wrong.
-- This is a Rust Cargo workspace (`shiki-core` → `shiki-config` → `shiki-tui` → `shiki-cli`, strict one-way deps). Binary name is **`shiki`** (in `shiki-cli/src/main.rs`), launched with no args = TUI, `-- <args>` = CLI subcommands.
+- This is a Rust Cargo workspace (`shiki-core` → `shiki-config` → `shiki-tui` → `shiki-cli`, strict one-way deps; plus `shiki-native-host` and the Tauri-based `shiki-desktop`, neither of which the terminal crates depend on). Binary name is **`shiki`** (in `shiki-cli/src/main.rs`), launched with no args = TUI, `-- <args>` = CLI subcommands.
 
 ## Commands
 
@@ -21,7 +21,7 @@ cargo run -p shiki-cli -- --help                 # CLI; no args launches the TUI
 
 ## Testing
 
-- There are **~293 `#[test]`s** (134 in `shiki-core`, 17 `shiki-config`, 129 `shiki-tui`, 13 `shiki-cli`) — CLAUDE.md's "almost no tests yet" paragraph is stale. They are all inline `#[cfg(test)]` modules inside source files (no `tests/` dirs, no `#[ignore]`, no fixture setup). `cargo test --workspace` is green.
+- There are **398 `#[test]`s** (180 in `shiki-core`, 20 `shiki-config`, 176 `shiki-tui`, 16 `shiki-cli`, plus 1 in `shiki-native-host` and 5 in `shiki-desktop`). They are all inline `#[cfg(test)]` modules inside source files (no `tests/` dirs, no `#[ignore]`, no fixture setup). `cargo test --workspace` is green.
 - To exercise the CLI/TUI without touching real user data, override XDG dirs (used via `directories::ProjectDirs::from("", "", "shiki")`):
 
 ```sh
@@ -32,10 +32,10 @@ XDG_CONFIG_HOME=/tmp/shiki-test-config XDG_DATA_HOME=/tmp/shiki-test-data cargo 
 
 ## Invariants that are easy to break
 
-- **`KeyMaps` matches `KeyCode` only, never the full `KeyEvent`/modifiers.** Shift bindings (`A`, `E`, `T`, `P`, `R`) are plain uppercase chars in `config.toml`; making matching modifier-aware silently breaks them.
+- **`KeyMaps` matches `KeyCode` only, never the full `KeyEvent`/modifiers.** Shift bindings are plain uppercase chars in `config.toml` — the shipped defaults include `B` (links), `D` (toggle dates), `E` (external edit), `G` (git dash), `H` (history), `M` (metadata), `P` (pull all/publish), `R` (set remote), `T` (tags/tree view) and `U` (check update); making matching modifier-aware silently breaks them.
 - **`shiki-config` must stay ratatui-free.** Theme colors are hex strings (`#rrggbb`/ANSI names/`"reset"`); conversion lives only in `shiki-tui/src/render.rs::hex_to_color`.
 - **`git2` needs `ssh`, `https`, `vendored-libgit2`, `vendored-openssl`** (root `Cargo.toml`). Dropping the vendored features breaks Windows/aarch64 cross-builds; dropping `ssh`/`https` post-git2-0.21 silently kills remote support and the credential-helper fallback.
-- **`tokio` is a workspace dependency but is not used anywhere** — everything is synchronous + `std::thread`/`mpsc`. Don't introduce async for new features.
+- **The terminal crates (`shiki-core`/`shiki-config`/`shiki-tui`/`shiki-cli`) are synchronous + `std::thread`/`mpsc`** — don't introduce async there for new features. (`shiki-desktop` brings its own `tokio` through Tauri; it's the only member that may be async.)
 - **`shiki doctor` is dispatched *before* `Context::load()`** in `main.rs` (it must work when `config.toml` is broken). A new subcommand that shouldn't require a working config follows the same pattern.
 - **`Cargo.lock` is committed deliberately** (binary crate, reproducible builds). Don't gitignore it.
 
@@ -49,7 +49,7 @@ XDG_CONFIG_HOME=/tmp/shiki-test-config XDG_DATA_HOME=/tmp/shiki-test-data cargo 
 
 - Theme colors in `docs/css/styles.css` and the `THEMES` array in `docs/js/main.js` are copied from `shiki-config/src/themes/*.rs` — update all three together if a palette changes or a theme is added.
 - `/screenshots` (repo root) is gitignored; `docs/assets/screenshots/` is not (and is what README.md's `<img>` tags and the site reference).
-- `docs/documentation.html` is copied verbatim from `IDEA.md` — don't let them drift.
+- `docs/documentation.html` mirrors `IDEA.md` (manually synced — they have drifted before, so check both when editing either).
 - `nix/` derivations are drafts validated only by the manual-trigger `nix-package-check.yml` — not a real packaging path.
 
 ## Packaging

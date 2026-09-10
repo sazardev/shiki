@@ -504,6 +504,8 @@ shiki publish -n work                     # render "work" to a themed PDF via pr
 shiki publish -n work --out report.pdf --theme dark   # custom path/theme; theme defaults to export.pdf_theme
 shiki sync                # git commit+push default notebook
 shiki sync -n work        # git sync in "work"
+shiki diff                # pending working-tree changes (also `shiki diff <note>` / `-n work`)
+shiki log                 # recent commits (also `shiki log <note>` / `-n work`)
 shiki config              # show config path
 shiki notebook create <name>
 shiki notebook list --json
@@ -522,6 +524,7 @@ shiki import obsidian ~/vaults/personal          # adopt a vault in-place as not
 shiki import obsidian ~/vaults/work --copy --tags --git-init  # copy in, merge inline #tags, git init
 shiki import notion ~/Downloads/Export-....zip   # UUID-stripped, links -> wikilinks
 shiki import notion ~/Downloads/export --name work
+shiki extension install   # install the browser-extension native host (also status/uninstall/pack)
 shiki doctor              # environment check: config, data dir, git, editor, terminal, keybindings, snippets
 ```
 
@@ -971,6 +974,8 @@ pull = "p"
 pull_all = "P"
 set_remote = "R"
 push = "u"
+# Git dashboard — branches, log and diff of the selected notebook.
+git_dash = "G"
 
 [keybindings.notes]
 new = "a"
@@ -994,6 +999,8 @@ metadata = "M"
 edit_inline = "i"
 edit_external = "E"
 history = "H"
+# Working-tree diff of the selected note.
+diff = "d"
 links = "L"
 outline = "o"
 # Same metadata editor as NOTES scope, bound here too.
@@ -1086,9 +1093,6 @@ pdf_theme = "default"
 # data directory. Useful for linking Obsidian vault subfolders or other
 # existing markdown collections as notebooks without moving files.
 [notebooks.alcateia]
-path = "/Users/me/obsidian-vaults/alcateia"
-# Standard git overrides work alongside path:
-auto_sync = trubooks.alcateia]
 path = "/Users/me/obsidian-vaults/alcateia"
 # Standard git overrides work alongside path:
 auto_sync = true

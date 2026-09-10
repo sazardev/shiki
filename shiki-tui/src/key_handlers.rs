@@ -1969,7 +1969,7 @@ impl App {
                 self.show_history = false;
                 self.history_viewing = None;
                 self.history_diff_viewing = None;
-                self.history_count_cache = None;
+                self.invalidate_history_count();
             }
             Err(e) => self.set_status(format!("revert error: {e}")),
         }
@@ -4838,7 +4838,20 @@ impl App {
                 return;
             }
         };
-        let contents = std::fs::read_to_string(&path).unwrap_or_default();
+        // A failed read must abort the edit, not open an empty buffer:
+        // `save_config_from_editor` writes whatever's in the editor back to
+        // this same path, so treating "unreadable" as "empty" would silently
+        // truncate a real `config.toml` on save. Only a genuinely missing
+        // file (which `load_or_init` normally creates at startup anyway)
+        // legitimately starts empty.
+        let contents = match std::fs::read_to_string(&path) {
+            Ok(contents) => contents,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(e) => {
+                self.set_status(format!("could not read config.toml: {e}"));
+                return;
+            }
+        };
         let mut editor = InlineEditor::from_contents(&contents);
         let title = format!(" {}Editing: config.toml ", icons::GEAR);
         self.style_inline_editor(&mut editor, title);

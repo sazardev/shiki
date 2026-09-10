@@ -510,6 +510,7 @@ shiki capture --check                 # is a capture daemon reachable right now?
 shiki capture "meeting notes" --folder work/meetings -n work   # into a subfolder, not the notebook root
 shiki capture "work: call Ana"        # no -n given -> routed into the "work" notebook automatically
 shiki capture --undo                  # reverses the single most recent capture (any kind)
+shiki daemon                          # headless capture daemon (no TUI) — for systemd user services
 shiki tasks               # every pending checkbox task across notebooks, urgency-sorted
 shiki tasks --overdue --count  # just the number — made for waybar/polybar/tmux status modules
 shiki tasks --today --json     # machine-readable, with due/overdue/location per task
@@ -522,6 +523,8 @@ shiki publish -n work                     # render "work" to a themed PDF via pr
 shiki publish -n work --out report.pdf --theme dark   # custom path/theme; theme defaults to export.pdf_theme
 shiki sync                # git commit+push default notebook
 shiki sync -n work        # git sync in "work"
+shiki diff                # pending working-tree changes (also `shiki diff &lt;note&gt;` / `-n work`)
+shiki log                 # recent commits (also `shiki log &lt;note&gt;` / `-n work`)
 shiki config              # show config path
 shiki notebook create &lt;name&gt;
 shiki notebook list --json
@@ -530,6 +533,7 @@ shiki notebook delete &lt;name&gt; --yes  # permanently deletes the notebook and
 shiki notebook encrypt &lt;name&gt;       # enable encryption at rest (prompts for a passphrase, twice)
 shiki notebook decrypt &lt;name&gt;       # reverse it — decrypts every note back to plain text
 shiki notebook rekey &lt;name&gt;         # change the passphrase (verifies the old one, re-encrypts in place)
+shiki extension install             # install the browser-extension native host (also status/uninstall/pack)
 shiki query 'where status = pending sort due asc'   # Dataview-style filter/sort over frontmatter
 shiki query 'where due &lt; today' --count             # for status bars, like `shiki tasks --count`
 shiki query --saved due-soon                        # run a query saved under [queries] in config.toml
@@ -1058,6 +1062,7 @@ Content in **markdown**.
           <tr><td><code>preview_images</code></td><td><code>true</code></td><td>Renders a <code>![alt](path)</code> image on its own line as terminal art in PREVIEW by shelling out to <code>chafa</code> — falls back to the icon+alt form when chafa is missing or the file can't be decoded</td></tr>
           <tr><td><code>chafa_path</code></td><td><code>""</code></td><td>Absolute path to a <code>chafa</code> binary that isn't on <code>$PATH</code>; empty means look it up on <code>$PATH</code></td></tr>
           <tr><td><code>preview_image_scale</code></td><td><code>0.5</code></td><td>Fraction of the preview panel's width the rendered image art is drawn at (<code>(0.0, 1.0]</code>)</td></tr>
+          <tr><td><code>attachments_dir</code></td><td><code>"attachments"</code></td><td>Folder (relative to the notebook root) where pasted clipboard images are saved; the inserted <code>![pasted-…](attachments/…)</code> link resolves from any note depth. An empty value falls back to <code>attachments</code></td></tr>
         </tbody>
       </table>
       <div class="doc-callout">
@@ -1158,6 +1163,7 @@ bg = "#1e1e2e"</pre>
           <tr><td><code>format_shortcuts</code></td><td><code>true</code></td><td><code>Ctrl+B</code> wraps the selection in <code>**bold**</code>, <code>Ctrl+Alt+I</code> in <code>_italic_</code></td></tr>
           <tr><td><code>auto_pair_brackets</code></td><td><code>true</code></td><td>Typing <code>(</code>, <code>`</code>, or <code>"</code> wraps the current selection in the matching pair (deliberately excludes <code>[</code> so it doesn't interfere with <code>[[wikilink]]</code> autocomplete)</td></tr>
           <tr><td><code>paste_url_as_link</code></td><td><code>true</code></td><td>Pasting a bare URL over a selection wraps it as <code>[selected text](url)</code></td></tr>
+          <tr><td><code>paste_images</code></td><td><code>true</code></td><td><code>Ctrl+V</code> with an <em>image</em> on the clipboard saves it as a PNG under <code>[general] attachments_dir</code> (inside the current notebook) and inserts <code>![name](attachments/name.png)</code> at the cursor. Text on the clipboard always wins over an image</td></tr>
           <tr><td><code>snippet_expand_tab</code></td><td><code>true</code></td><td><code>Tab</code> expands a matching snippet trigger into its body instead of inserting a literal tab</td></tr>
           <tr><td><code>typewriter_scroll</code></td><td><code>false</code></td><td>Keeps the cursor's line vertically centered in the editor viewport while typing</td></tr>
           <tr><td><code>move_line</code></td><td><code>true</code></td><td><code>Alt+↑</code>/<code>Alt+↓</code> move the current line past its neighbor</td></tr>
@@ -1180,6 +1186,7 @@ bg = "#1e1e2e"</pre>
  format_shortcuts = true
  auto_pair_brackets = true
  paste_url_as_link = true
+ paste_images = true
  snippet_expand_tab = true
  typewriter_scroll = false
  move_line = true

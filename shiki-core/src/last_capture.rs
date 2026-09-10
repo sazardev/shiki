@@ -2,18 +2,23 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::Result;
+use crate::Result;
 
 /// Persisted record of the most recent `shiki capture` (either kind — a
 /// new note, or a `--daily` bullet append), backing `shiki capture --undo`.
 /// Written by whichever path actually performed the capture (the in-TUI
 /// daemon, or the CLI's standalone direct-write fallback — see
 /// CLAUDE.md's Quick capture section) to the *same* file
-/// (`Config::default_last_capture_path`), so `--undo` works identically
-/// regardless of which path did the original capture: it just reads
-/// whatever's here. A single slot, not a stack — undoing only ever
+/// (`shiki_config::Config::default_last_capture_path`), so `--undo` works
+/// identically regardless of which path did the original capture: it just
+/// reads whatever's here. A single slot, not a stack — undoing only ever
 /// reverses the single most recent capture, same simplicity level as the
 /// TUI's own `leader+u` (undo delete), which is also one level deep.
+///
+/// Lives in `shiki-core` (not `shiki-config`, where it started) because the
+/// capture pipeline that writes it is domain logic shared by the CLI, TUI
+/// and native host — and the config crate deliberately doesn't depend on
+/// core.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum LastCapture {

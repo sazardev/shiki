@@ -28,6 +28,8 @@ jobs:
     name: Build desktop installers (Windows)
     runs-on: windows-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
@@ -47,7 +49,7 @@ jobs:
         working-directory: shiki-desktop/ui
         run: npm ci
 
-      - name: Build signed desktop installers
+      - name: Build desktop installers
         shell: bash
         working-directory: shiki-desktop
         env:
@@ -56,7 +58,18 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="$PWD/ui/node_modules/.bin:$PATH"
-          tauri build
+          # Dependabot-triggered runs never receive repo secrets (GitHub
+          # withholds them from that vault). With `createUpdaterArtifacts:
+          # true` and no key, `tauri build` fails outright, which made every
+          # Dependabot PR red. Fall back to an unsigned local build there:
+          # the installers are still produced and uploaded, only the updater
+          # signature (which a non-release PR has nowhere to publish anyway)
+          # is skipped.
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          else
+            tauri build
+          fi
 
       - uses: actions/upload-artifact@v7
         with:

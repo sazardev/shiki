@@ -475,3 +475,147 @@ pub fn action_icon(action: Action) -> crate::icons::Icon {
         Action::EditMetadata => crate::icons::TAG,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_key_understands_the_special_names() {
+        assert_eq!(parse_key("enter"), Some(KeyCode::Enter));
+        assert_eq!(parse_key("Enter"), Some(KeyCode::Enter));
+        assert_eq!(parse_key("tab"), Some(KeyCode::Tab));
+        assert_eq!(parse_key("esc"), Some(KeyCode::Esc));
+        assert_eq!(parse_key("escape"), Some(KeyCode::Esc));
+        assert_eq!(parse_key("space"), Some(KeyCode::Char(' ')));
+        assert_eq!(parse_key("backspace"), Some(KeyCode::Backspace));
+        assert_eq!(parse_key("f5"), None);
+        assert_eq!(parse_key(""), None);
+    }
+
+    #[test]
+    fn parse_key_keeps_the_case_of_single_chars() {
+        // The original case is preserved, not the lowercased probe — an
+        // uppercase binding has to come out as `Char('T')`, not `Char('t')`.
+        assert_eq!(parse_key("T"), Some(KeyCode::Char('T')));
+        assert_eq!(parse_key("t"), Some(KeyCode::Char('t')));
+    }
+
+    /// The documented invariant (`AGENTS.md`): matching is on `KeyCode`
+    /// alone, so a Shift binding configured as a plain uppercase char works
+    /// even though crossterm reports it with the SHIFT modifier set and the
+    /// `KeyEvent` here carries none.
+    #[test]
+    fn uppercase_bindings_resolve_by_keycode_alone() {
+        let cfg = KeybindingsConfig {
+            notes: shiki_config::config::NoteKeybindings {
+                tree_view: "T".into(),
+                ..Default::default()
+            },
+            preview: shiki_config::config::PreviewKeybindings {
+                history: "H".into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let maps = KeyMaps::from_config(&cfg);
+
+        assert_eq!(
+            maps.resolve_scoped(Focus::Notes, KeyCode::Char('T')),
+            Some(Action::ToggleTreeView)
+        );
+        assert_eq!(
+            maps.resolve_scoped(Focus::Preview, KeyCode::Char('H')),
+            Some(Action::ShowHistory)
+        );
+    }
+
+    /// Guards the shipped defaults: these actions are all bound to uppercase
+    /// letters, and a future edit that silently lowercases one (or moves the
+    /// binding behind a modifier check) would be caught here.
+    #[test]
+    fn uppercase_default_bindings_are_reachable() {
+        let maps = KeyMaps::from_config(&KeybindingsConfig::default());
+        assert_eq!(
+            maps.resolve_global(KeyCode::Char('T')),
+            Some(Action::ToggleTags)
+        );
+        assert_eq!(
+            maps.resolve_global(KeyCode::Char('B')),
+            Some(Action::ShowLinks)
+        );
+        assert_eq!(
+            maps.resolve_global(KeyCode::Char('U')),
+            Some(Action::CheckForUpdate)
+        );
+        assert_eq!(
+            maps.resolve_scoped(Focus::Notebooks, KeyCode::Char('G')),
+            Some(Action::ShowGitDash)
+        );
+        assert_eq!(
+            maps.resolve_scoped(Focus::Notebooks, KeyCode::Char('R')),
+            Some(Action::SetRemote)
+        );
+        assert_eq!(
+            maps.resolve_scoped(Focus::Notebooks, KeyCode::Char('P')),
+            Some(Action::PullAllNotebooks)
+        );
+        assert_eq!(
+            maps.resolve_scoped(Focus::Notes, KeyCode::Char('E')),
+            Some(Action::EditExternal)
+        );
+        assert_eq!(
+            maps.resolve_scoped(Focus::Notes, KeyCode::Char('D')),
+            Some(Action::ToggleDates)
+        );
+        assert_eq!(
+            maps.resolve_scoped(Focus::Notes, KeyCode::Char('M')),
+            Some(Action::EditMetadata)
+        );
+        assert_eq!(
+            maps.resolve_scoped(Focus::Preview, KeyCode::Char('H')),
+            Some(Action::ShowHistory)
+        );
+    }
+
+    #[test]
+    fn scopes_stay_independent() {
+        // The same key means a different action per scope — the reason these
+        // are four maps instead of one.
+        let maps = KeyMaps::from_config(&KeybindingsConfig::default());
+        assert_eq!(
+            maps.resolve_scoped(Focus::Notes, KeyCode::Char('a')),
+            Some(Action::NewNote)
+        );
+        assert_eq!(
+            maps.resolve_scoped(Focus::Notebooks, KeyCode::Char('a')),
+            Some(Action::NewNotebook)
+        );
+        assert_eq!(
+            maps.resolve_scoped(Focus::Preview, KeyCode::Char('a')),
+            None
+        );
+    }
+
+    #[test]
+    fn an_invalid_leader_or_quit_falls_back_to_the_default() {
+        let cfg = KeybindingsConfig {
+            leader: "not-a-key".into(),
+            quit: "also-not-a-key".into(),
+            ..Default::default()
+        };
+        let maps = KeyMaps::from_config(&cfg);
+        assert!(maps.is_leader(KeyCode::Char(' ')));
+        assert!(maps.is_quit(KeyCode::Char('q')));
+    }
+
+    #[test]
+    fn describe_key_renders_specials_readably() {
+        assert_eq!(describe_key(KeyCode::Char(' ')), "space");
+        assert_eq!(describe_key(KeyCode::Char('A')), "A");
+        assert_eq!(describe_key(KeyCode::Enter), "enter");
+        assert_eq!(describe_key(KeyCode::Tab), "tab");
+        assert_eq!(describe_key(KeyCode::Esc), "esc");
+        assert_eq!(describe_key(KeyCode::Backspace), "backspace");
+    }
+}

@@ -95,7 +95,7 @@ the [website](https://sazardev.github.io/shiki/#themes).
 - **Inline editor** built into the TUI, or your favorite external editor — auto-detected from
   `$VISUAL`/`$EDITOR`/the OS default, toggleable on the fly from the footer. Long lines wrap to the
   panel width instead of scrolling off-screen, and a `/`-menu (type `/` at the start of a line)
-  drops in 19 ready-made blocks — headers, code, math, tables, checklists, links, images,
+  drops in 21 ready-made blocks — headers, code, math, tables, checklists, links, images,
   callouts, a collapsible section, a YAML frontmatter skeleton, and more — fully
   customizable/overridable via `[snippets.<trigger>]` in `config.toml`.
 - **Editor conveniences, all independently toggleable**: `Ctrl+D` stamps the date (and time),
@@ -125,7 +125,8 @@ the [website](https://sazardev.github.io/shiki/#themes).
   and colliding notebook paths before they cause confusion.
 - **CLI commands** alongside the TUI (`new`, `capture`, `list`, `edit`, `show`, `search`,
   `daily`, `sync`, `export`, `publish`, `tasks`, `graph`, `query`, `notebook`, `theme`, `import`,
-  `config`, `doctor`) for quick one-off operations without opening the UI.
+  `diff`, `log`, `daemon`, `extension`, `config`, `doctor`) for quick one-off operations without
+  opening the UI.
 - **One-command migration**: `shiki import obsidian <vault>` adopts an existing Obsidian vault as
   a notebook in place (`--copy` to duplicate, `--tags` to merge inline #hashtags into frontmatter),
   and `shiki import notion <export.zip>` converts a Notion export — UUID-stripped names, internal

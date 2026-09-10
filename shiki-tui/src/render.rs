@@ -518,7 +518,7 @@ pub(crate) fn markdown_to_lines_indexed(
     body: &str,
     colors: &crate::syntax::SyntaxPalette,
     folded: &std::collections::HashSet<usize>,
-    images: Option<&crate::term_image::ImageCtx>,
+    images: Option<&crate::term_image::ImageCtx<'_>>,
 ) -> (
     Vec<(usize, Line<'static>)>,
     std::collections::HashMap<usize, usize>,
@@ -758,23 +758,23 @@ pub(crate) fn markdown_to_lines_indexed(
 
         // A block-level `![alt](path)` image — or Obsidian's `![[file]]`
         // embed form, which imported vaults are full of — on its own line
-        // renders as terminal art (via `term_image`, which shells out to
-        // chafa) when that's enabled and possible. Embeds get the extra
-        // name-anywhere-in-the-vault resolution since they usually carry a
-        // bare file name. Anything else (inline image mid-line, missing
-        // chafa, remote URL, undecodable file) falls through to the
-        // single-span icon+alt below.
+        // renders as terminal art when `ImageCtx.art` already holds it: the
+        // caller pre-renders images on a background thread (see
+        // `App::prefetch_note_images`), so this renderer never shells out to
+        // chafa and can't stall a frame. Anything else — art still loading,
+        // chafa absent, an undecodable file, a remote URL, an inline image
+        // mid-line — falls through to the single-span icon+alt below.
         if let Some(ctx) = images {
-            if ctx.enabled && ctx.chafa.is_some() {
+            if ctx.enabled {
                 let spec = crate::term_image::whole_line_embed_path(line)
                     .or_else(|| crate::term_image::whole_line_image_path(line));
                 if let Some(spec) = spec {
-                    let resolved = crate::term_image::resolve_embed_path(&ctx.base_dirs, &spec);
-                    if let (Some(path), Some(chafa)) = (resolved, &ctx.chafa) {
-                        if let Some(rows) = crate::term_image::render_rows(chafa, &path, ctx.cols) {
-                            for row in rows {
-                                lines.push((idx, row));
-                            }
+                    if let Some(path) = crate::term_image::resolve_embed_path(&ctx.base_dirs, &spec)
+                    {
+                        if let Some(rows) =
+                            ctx.art.get(&(path, ctx.cols)).and_then(|art| art.as_ref())
+                        {
+                            lines.extend(rows.iter().cloned().map(|row| (idx, row)));
                             continue;
                         }
                     }
@@ -1355,5 +1355,57 @@ mod tests {
         assert_eq!(t[1], "▏ ▏ nested quote");
         // Indented code keeps its text (leading spaces stripped), dim-styled.
         assert_eq!(t[2], "indented code");
+    }
+
+    #[test]
+    fn prefetched_art_replaces_the_icon_and_alt_fallback() {
+        let dir = std::env::temp_dir().join("shiki-render-art-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("pic.png");
+        std::fs::write(&image, "fake png").unwrap();
+        let body = "![a cat](pic.png)";
+
+        // With the caller's prefetch already holding art for this (path,
+        // cols), the art rows are what render.
+        let mut art = std::collections::HashMap::new();
+        art.insert(
+            (image.clone(), 40),
+            Some(vec![Line::from(Span::raw("ART-ROW"))]),
+        );
+        let ctx = crate::term_image::ImageCtx {
+            enabled: true,
+            cols: 40,
+            base_dirs: vec![dir.clone()],
+            art: &art,
+        };
+        let (indexed, _) = markdown_to_lines_indexed(
+            body,
+            &PALETTE,
+            &std::collections::HashSet::new(),
+            Some(&ctx),
+        );
+        let rendered: Vec<String> = indexed.iter().map(|(_, line)| line_text(line)).collect();
+        assert_eq!(rendered, vec!["ART-ROW".to_string()]);
+
+        // Without it — still being rendered, or chafa unavailable — the
+        // icon+alt fallback shows instead of an empty line.
+        let empty = std::collections::HashMap::new();
+        let ctx = crate::term_image::ImageCtx {
+            enabled: true,
+            cols: 40,
+            base_dirs: vec![dir.clone()],
+            art: &empty,
+        };
+        let (indexed, _) = markdown_to_lines_indexed(
+            body,
+            &PALETTE,
+            &std::collections::HashSet::new(),
+            Some(&ctx),
+        );
+        let rendered: Vec<String> = indexed.iter().map(|(_, line)| line_text(line)).collect();
+        assert!(rendered.iter().any(|t| t.contains("a cat")), "{rendered:?}");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

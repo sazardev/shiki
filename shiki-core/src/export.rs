@@ -126,3 +126,59 @@ fn render_html(notebook: &str, notes: &[Note]) -> String {
         articles = articles,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+
+    fn note(title: &str, tags: &[&str], body: &str) -> Note {
+        let mut frontmatter = crate::Frontmatter::new(title, "personal");
+        frontmatter.date = NaiveDate::from_ymd_opt(2026, 1, 2).unwrap();
+        frontmatter.tags = tags.iter().map(|t| t.to_string()).collect();
+        Note::new(
+            std::path::PathBuf::from("note.md"),
+            frontmatter,
+            body.into(),
+        )
+    }
+
+    #[test]
+    fn markdown_bundle_has_heading_meta_body_and_separator() {
+        let out = render(
+            "personal",
+            &[
+                note("First", &["a", "b"], "hello"),
+                note("Second", &[], "bye"),
+            ],
+            Format::Md,
+        );
+        assert!(out.starts_with("# personal\n\n## First\n\n"));
+        assert!(out.contains("*2026-01-02* \u{2014} tags: a, b\n\nhello\n\n---\n\n"));
+        // A tag-less note omits the em-dash segment entirely.
+        assert!(out.contains("## Second\n\n*2026-01-02*\n\nbye"));
+    }
+
+    #[test]
+    fn html_bundle_escapes_metadata_and_renders_body_markdown() {
+        let out = render(
+            "book & club",
+            &[note("A <B> & C", &["x<y"], "**bold**")],
+            Format::Html,
+        );
+        // Metadata interpolated directly into the shell is escaped...
+        assert!(out.contains("<title>book &amp; club</title>"));
+        assert!(out.contains("<h1>book &amp; club</h1>"));
+        assert!(out.contains("<h2>A &lt;B&gt; &amp; C</h2>"));
+        assert!(out.contains("<span class=\"tag\">x&lt;y</span>"));
+        assert!(!out.contains("A <B> & C"));
+        // ...while the body goes through pulldown-cmark as real Markdown.
+        assert!(out.contains("<strong>bold</strong>"));
+    }
+
+    #[test]
+    fn escape_html_covers_all_three_bare_characters() {
+        assert_eq!(escape_html("a & b < c > d"), "a &amp; b &lt; c &gt; d");
+        assert_eq!(escape_html("plain"), "plain");
+    }
+}

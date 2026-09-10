@@ -13,6 +13,7 @@ description = "shiki: pure logic (notebooks, notes, git, search, templates)"
 [dependencies]
 serde.workspace = true
 serde_yaml.workspace = true
+toml.workspace = true
 chrono.workspace = true
 regex.workspace = true
 git2.workspace = true
@@ -23,3 +24,6 @@ self_update.workspace = true
 tempfile.workspace = true
 pulldown-cmark.workspace = true
 age.workspace = true
+sha2.workspace = true
+libc.workspace = true
+directories.workspace = true

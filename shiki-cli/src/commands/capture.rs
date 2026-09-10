@@ -3,8 +3,13 @@ use std::net::TcpStream;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use shiki_config::{Config, LastCapture};
-use shiki_core::NotebookStore;
+use shiki_config::Config;
+use shiki_core::capture::{
+    build_capture_request, capture_into_daily, capture_into_new_note, capture_into_templated,
+    parse_pid, parse_port_file, with_source,
+};
+use shiki_core::process::is_pid_alive;
+use shiki_core::{LastCapture, NotebookStore};
 
 use super::unlock_if_encrypted;
 
@@ -17,41 +22,6 @@ pub(crate) enum DaemonResponse {
     Err(String),
 }
 
-fn parse_port_file(contents: &str) -> Option<u16> {
-    contents.split_whitespace().next()?.parse().ok()
-}
-
-fn parse_pid(contents: &str) -> Option<u32> {
-    contents.split_whitespace().nth(1)?.parse().ok()
-}
-
-#[allow(dead_code)]
-fn is_pid_alive(pid: u32) -> bool {
-    #[cfg(unix)]
-    {
-        if pid == 0 || pid > i32::MAX as u32 {
-            return false;
-        }
-        let ret = unsafe { libc::kill(pid as i32, 0) };
-        if ret == 0 {
-            return true;
-        }
-        let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-        // ESRCH = 3 on Linux/macOS — no such process
-        errno != 3
-    }
-    #[cfg(windows)]
-    {
-        let _ = pid;
-        true
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        let _ = pid;
-        true
-    }
-}
-
 fn parse_response_line(line: &str) -> Option<DaemonResponse> {
     let line = line.trim_end_matches(['\r', '\n']);
     if let Some(rest) = line.strip_prefix("OK ") {
@@ -59,68 +29,6 @@ fn parse_response_line(line: &str) -> Option<DaemonResponse> {
     }
     line.strip_prefix("ERR ")
         .map(|rest| DaemonResponse::Err(rest.to_string()))
-}
-
-/// Builds a `CAPTURE` request — see `shiki-tui/src/capture.rs`'s module doc
-/// comment for the exact wire format. Header lines are only emitted when
-/// actually needed, so the common case (plain capture, no flags) stays a
-/// minimal two-line request. `notebook` is only sent when the caller
-/// explicitly passed `-n` — omitting it lets the daemon apply its own
-/// content-prefix routing/`default_notebook` fallback instead.
-#[allow(clippy::too_many_arguments)]
-fn build_capture_request(
-    text: &str,
-    daily: bool,
-    tags: &[String],
-    notebook: Option<&str>,
-    folder: Option<&str>,
-    template: Option<&str>,
-    url: Option<&str>,
-    title: Option<&str>,
-    source: Option<&str>,
-) -> String {
-    let mut req = String::from("CAPTURE\n");
-    if daily {
-        req.push_str("daily=1\n");
-    }
-    if !tags.is_empty() {
-        req.push_str(&format!("tags={}\n", tags.join(",")));
-    }
-    if let Some(notebook) = notebook {
-        req.push_str(&format!("notebook={notebook}\n"));
-    }
-    if let Some(folder) = folder {
-        req.push_str(&format!("folder={folder}\n"));
-    }
-    if let Some(template) = template {
-        req.push_str(&format!("template={template}\n"));
-    }
-    if let Some(url) = url {
-        req.push_str(&format!("url={url}\n"));
-    }
-    if let Some(title) = title {
-        req.push_str(&format!("title={title}\n"));
-    }
-    if let Some(source) = source {
-        req.push_str(&format!("source={source}\n"));
-    }
-    req.push('\n');
-    req.push_str(text);
-    req
-}
-
-pub(crate) fn with_source(text: &str, url: Option<&str>, title: Option<&str>) -> String {
-    let Some(url) = url.filter(|s| !s.is_empty()) else {
-        return text.to_string();
-    };
-    if text.contains(url) {
-        return text.to_string();
-    }
-    if let Some(title) = title.filter(|t| !t.is_empty()) {
-        format!("{text}\n\nSource: [{title}]({url})")
-    } else {
-        format!("{text}\n\nSource: {url}")
-    }
 }
 
 fn read_clipboard_text() -> Result<String> {
@@ -328,10 +236,28 @@ pub(crate) fn perform_direct_capture(
         nb
     };
 
+    let templates_dir = Config::default_templates_dir()?;
     let (path, record) = if daily {
-        capture_into_daily(store, config, &nb, &text)?
+        let today = chrono::Local::now().date_naive();
+        let agenda = config
+            .general
+            .daily_agenda
+            .then(|| {
+                store
+                    .all_notes()
+                    .ok()
+                    .and_then(|pool| shiki_core::tasks::agenda_section(&pool, today))
+            })
+            .flatten();
+        capture_into_daily(
+            &nb,
+            &text,
+            &templates_dir,
+            &config.general.daily_template,
+            agenda.as_deref(),
+        )?
     } else if let Some(tmpl) = template.as_deref().filter(|s| !s.is_empty()) {
-        capture_into_templated(&nb, &text, tags, folder.as_deref(), tmpl)?
+        capture_into_templated(&nb, &text, tags, folder.as_deref(), tmpl, &templates_dir)?
     } else {
         capture_into_new_note(&nb, &text, tags, folder.as_deref())?
     };
@@ -339,110 +265,6 @@ pub(crate) fn perform_direct_capture(
         let _ = record.save(&record_path);
     }
     Ok((path, daily))
-}
-
-fn capture_into_templated(
-    nb: &shiki_core::Notebook,
-    text: &str,
-    tags: &[String],
-    folder: Option<&str>,
-    template_name: &str,
-) -> Result<(std::path::PathBuf, LastCapture)> {
-    let templates_dir = Config::default_templates_dir()?;
-    let tmpl = shiki_core::Template::load(&templates_dir, template_name)
-        .map_err(|_| anyhow::anyhow!("template '{template_name}' not found"))?;
-    let title = format!("Capture {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
-    let mut vars = std::collections::HashMap::new();
-    vars.insert("title", title.clone());
-    vars.insert("date", chrono::Local::now().format("%Y-%m-%d").to_string());
-    vars.insert("body", text.to_string());
-    vars.insert("notebook", nb.name.clone());
-    let rendered = tmpl.render(&vars);
-    let body = if rendered.contains(text) {
-        rendered
-    } else {
-        format!("{rendered}\n{text}\n")
-    };
-    let mut note = match folder {
-        Some(folder) if !folder.is_empty() => {
-            let relative = shiki_core::notebook::validate_relative_path(folder)?;
-            nb.create_note_in(&relative, &title, body)?
-        }
-        _ => nb.create_note(&title, body)?,
-    };
-    if !tags.is_empty() {
-        note.frontmatter.tags = tags.to_vec();
-        note.save_with_crypto(nb.crypto.as_ref())?;
-    }
-    let record = LastCapture::Note {
-        notebook: nb.name.clone(),
-        path: note.path.display().to_string(),
-    };
-    Ok((note.path, record))
-}
-
-fn capture_into_new_note(
-    nb: &shiki_core::Notebook,
-    text: &str,
-    tags: &[String],
-    folder: Option<&str>,
-) -> Result<(std::path::PathBuf, LastCapture)> {
-    let title = format!("Capture {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
-    let mut note = match folder {
-        Some(folder) => {
-            let relative = shiki_core::notebook::validate_relative_path(folder)?;
-            nb.create_note_in(&relative, &title, text)?
-        }
-        None => nb.create_note(&title, text)?,
-    };
-    if !tags.is_empty() {
-        note.frontmatter.tags = tags.to_vec();
-        note.save_with_crypto(nb.crypto.as_ref())?;
-    }
-    let record = LastCapture::Note {
-        notebook: nb.name.clone(),
-        path: note.path.display().to_string(),
-    };
-    Ok((note.path, record))
-}
-
-fn capture_into_daily(
-    store: &NotebookStore,
-    config: &Config,
-    nb: &shiki_core::Notebook,
-    text: &str,
-) -> Result<(std::path::PathBuf, LastCapture)> {
-    let today = chrono::Local::now().date_naive();
-    let templates_dir = Config::default_templates_dir()?;
-    let agenda = config
-        .general
-        .daily_agenda
-        .then(|| {
-            store
-                .all_notes()
-                .ok()
-                .and_then(|pool| shiki_core::tasks::agenda_section(&pool, today))
-        })
-        .flatten();
-    let mut note = shiki_core::daily::create_or_open(
-        nb,
-        today,
-        &templates_dir,
-        &config.general.daily_template,
-        agenda.as_deref(),
-    )?;
-    if !note.body.ends_with('\n') {
-        note.body.push('\n');
-    }
-    let appended = format!("- {text}\n");
-    note.body.push_str(&appended);
-    note.save_with_crypto(nb.crypto.as_ref())?;
-    let record = LastCapture::DailyAppend {
-        notebook: nb.name.clone(),
-        path: note.path.display().to_string(),
-        appended,
-    };
-    Ok((note.path, record))
 }
 
 fn format_capture_result(path: &str, via_daemon: bool, daily: bool, json: bool) -> String {
@@ -663,44 +485,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_port_file_accepts_valid_content() {
-        assert_eq!(parse_port_file("54321"), Some(54321));
-        assert_eq!(parse_port_file("54321\n"), Some(54321));
-        assert_eq!(parse_port_file("  54321  "), Some(54321));
-        // New format with pid
-        assert_eq!(parse_port_file("54321 12345\n"), Some(54321));
-        assert_eq!(parse_port_file("54321 99999"), Some(54321));
-    }
-
-    #[test]
-    fn parse_port_file_rejects_malformed_content() {
-        assert_eq!(parse_port_file(""), None);
-        assert_eq!(parse_port_file("not-a-port"), None);
-        assert_eq!(parse_port_file("-1"), None);
-    }
-
-    #[test]
-    fn parse_pid_extracts_second_token() {
-        assert_eq!(parse_pid("54321 12345"), Some(12345));
-        assert_eq!(parse_pid("54321 12345\n"), Some(12345));
-        assert_eq!(parse_pid("54321"), None);
-        assert_eq!(parse_pid(""), None);
-        assert_eq!(parse_pid("54321 not-a-pid"), None);
-    }
-
-    #[test]
-    fn is_pid_alive_current_process_is_alive() {
-        assert!(is_pid_alive(std::process::id()));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn is_pid_alive_nonexistent_is_not_alive() {
-        // u32::MAX is not a valid pid on any real system
-        assert!(!is_pid_alive(u32::MAX));
-    }
-
-    #[test]
     fn parse_response_line_recognizes_ok_and_err() {
         match parse_response_line("OK /tmp/note.md\n") {
             Some(DaemonResponse::Ok(path)) => assert_eq!(path, "/tmp/note.md"),
@@ -716,50 +500,6 @@ mod tests {
     fn parse_response_line_rejects_unrecognized_content() {
         assert!(parse_response_line("garbage").is_none());
         assert!(parse_response_line("").is_none());
-    }
-
-    #[test]
-    fn build_capture_request_omits_absent_headers() {
-        assert_eq!(
-            build_capture_request("buy milk", false, &[], None, None, None, None, None, None),
-            "CAPTURE\n\nbuy milk"
-        );
-    }
-
-    #[test]
-    fn build_capture_request_includes_every_header_when_given() {
-        let tags = vec!["work".to_string(), "idea".to_string()];
-        assert_eq!(
-            build_capture_request(
-                "buy milk",
-                true,
-                &tags,
-                Some("work"),
-                Some("work/meetings"),
-                Some("meeting"),
-                Some("https://example.com"),
-                Some("Example"),
-                Some("browser")
-            ),
-            "CAPTURE\ndaily=1\ntags=work,idea\nnotebook=work\nfolder=work/meetings\ntemplate=meeting\nurl=https://example.com\ntitle=Example\nsource=browser\n\nbuy milk"
-        );
-    }
-
-    #[test]
-    fn with_source_appends_url_and_title() {
-        assert_eq!(
-            with_source("hello", Some("https://x.com"), Some("X")),
-            "hello\n\nSource: [X](https://x.com)"
-        );
-        assert_eq!(
-            with_source("hello", Some("https://x.com"), None),
-            "hello\n\nSource: https://x.com"
-        );
-        assert_eq!(
-            with_source("hello https://x.com world", Some("https://x.com"), None),
-            "hello https://x.com world"
-        );
-        assert_eq!(with_source("hello", None, None), "hello");
     }
 
     #[test]

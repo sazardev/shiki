@@ -1,0 +1,171 @@
+<!--
+  Per-version release page template. `scripts/generate_release_pages.py`
+  fills in every {{PLACEHOLDER}} with plain string substitution and writes
+  the result to docs/changelog/0.9.3.html. Paths inside are written
+  relative to that output location (one level under docs/), i.e. `../css/`,
+  `../assets/`, `../index.html` etc. — not relative to this template file.
+
+  Unlike changelog.html (which fetches CHANGELOG.md live via JS so it can
+  never drift, see docs/js/main.js), this page's changelog body is baked in
+  statically at generation time — it has to be, since link-unfurlers (the
+  actual point of this page existing) read the raw HTML and never execute
+  JS, so the og:title/og:description/og:image and the visible content must
+  already be correct in the file as committed.
+-->
+<!DOCTYPE html>
+<html lang="en" data-theme="gruvbox-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>shiki v0.9.3 — Release notes</title>
+  <meta name="description" content="Git onboarding: creating a plain notebook in the TUI (when git.remote_template isn&#x27;t configured) now asks once — &quot;Git remote (URL or local path, empty = skip…" />
+  <meta name="keywords" content="shiki changelog, shiki v0.9.3, shiki release notes" />
+  <meta name="author" content="sazardev" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://sazardev.github.io/shiki/changelog/0.9.3.html" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://sazardev.github.io/shiki/changelog/0.9.3.html" />
+  <meta property="og:site_name" content="shiki" />
+  <meta property="og:title" content="shiki v0.9.3 — Release notes" />
+  <meta property="og:description" content="Git onboarding: creating a plain notebook in the TUI (when git.remote_template isn&#x27;t configured) now asks once — &quot;Git remote (URL or local path, empty = skip…" />
+  <meta property="og:image" content="https://sazardev.github.io/shiki/assets/og/0.9.3.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="shiki v0.9.3 — release card" />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="shiki v0.9.3 — Release notes" />
+  <meta name="twitter:description" content="Git onboarding: creating a plain notebook in the TUI (when git.remote_template isn&#x27;t configured) now asks once — &quot;Git remote (URL or local path, empty = skip…" />
+  <meta name="twitter:image" content="https://sazardev.github.io/shiki/assets/og/0.9.3.png" />
+  <meta name="twitter:image:alt" content="shiki v0.9.3 — release card" />
+
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+  <link rel="alternate" type="application/rss+xml" title="shiki changelog" href="../feed.xml" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/documentation.css" />
+
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "shiki v0.9.3 — Release notes", "description": "Git onboarding: creating a plain notebook in the TUI (when git.remote_template isn't configured) now asks once — \"Git remote (URL or local path, empty = skip…", "image": "https://sazardev.github.io/shiki/assets/og/0.9.3.png", "url": "https://sazardev.github.io/shiki/changelog/0.9.3.html", "mainEntityOfPage": {"@type": "WebPage", "@id": "https://sazardev.github.io/shiki/changelog/0.9.3.html"}, "author": {"@type": "Person", "name": "sazardev", "url": "https://github.com/sazardev"}, "publisher": {"@type": "Organization", "name": "shiki", "logo": {"@type": "ImageObject", "url": "https://sazardev.github.io/shiki/assets/favicon-512.png"}}, "datePublished": "2026-08-26", "dateModified": "2026-08-26"}</script>
+</head>
+<body class="doc-page">
+
+  <header class="topbar">
+    <div class="brand"><a href="../index.html" style="color:inherit;text-decoration:none;">shiki (私記)</a><span class="cursor"></span></div>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
+    <nav id="site-nav">
+      <a href="../index.html#themes">Themes</a>
+      <a href="../index.html#features">Features</a>
+      <a href="../index.html#install">Install</a>
+      <a href="../documentation.html">Docs</a>
+      <a href="../changelog.html" class="active">Changelog</a>
+      <a href="../press.html">Press</a>
+      <a href="https://github.com/sazardev/shiki">GitHub</a>
+      <span class="version-chip-wrap" id="version-chip-wrap">
+        <button type="button" class="pill pill-button" id="version-pill" hidden></button>
+        <div class="version-popover" id="version-popover" role="dialog" aria-label="What's new" hidden>
+          <div class="version-popover-header">
+            <strong>What's new</strong>
+            <a href="../changelog.html">Full changelog →</a>
+          </div>
+          <div class="version-popover-body changelog-body" id="version-popover-content">
+            <p class="changelog-loading">Loading changelog…</p>
+          </div>
+        </div>
+      </span>
+    </nav>
+  </header>
+
+  <section class="doc-hero">
+    <div class="container">
+      <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
+      <h1>shiki v0.9.3</h1>
+      <p class="muted" style="max-width: 66ch;">Released 2026-08-26.</p>
+      <div class="release-share-row">
+        <span class="release-share-label">Share:</span>
+        <a class="release-share-link" href="https://twitter.com/intent/tweet?text=shiki%20v0.9.3%3A%20Git%20onboarding%3A%20creating%20a%20plain%20notebook%20in%20the%20TUI%20%28when%20git.remote_template%20isn%27t%20configured%29%20now%20asks%20once%20%E2%80%94%20%22Git%20remote%20%28URL%20or%20local%20path%2C%20empty%20%3D%20skip%E2%80%A6&amp;url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.9.3.html" target="_blank" rel="noopener">X</a>
+        <a class="release-share-link" href="https://bsky.app/intent/compose?text=shiki%20v0.9.3%3A%20Git%20onboarding%3A%20creating%20a%20plain%20notebook%20in%20the%20TUI%20%28when%20git.remote_template%20isn%27t%20configured%29%20now%20asks%20once%20%E2%80%94%20%22Git%20remote%20%28URL%20or%20local%20path%2C%20empty%20%3D%20skip%E2%80%A6%20https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.9.3.html" target="_blank" rel="noopener">Bluesky</a>
+        <a class="release-share-link" href="https://www.reddit.com/submit?url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.9.3.html&amp;title=shiki%20v0.9.3%3A%20Git%20onboarding%3A%20creating%20a%20plain%20notebook%20in%20the%20TUI%20%28when%20git.remote_template%20isn%27t%20configured%29%20now%20asks%20once%20%E2%80%94%20%22Git%20remote%20%28URL%20or%20local%20path%2C%20empty%20%3D%20skip%E2%80%A6" target="_blank" rel="noopener">Reddit</a>
+        <a class="release-share-link" href="https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.9.3.html&amp;t=shiki%20v0.9.3%3A%20Git%20onboarding%3A%20creating%20a%20plain%20notebook%20in%20the%20TUI%20%28when%20git.remote_template%20isn%27t%20configured%29%20now%20asks%20once%20%E2%80%94%20%22Git%20remote%20%28URL%20or%20local%20path%2C%20empty%20%3D%20skip%E2%80%A6" target="_blank" rel="noopener">Hacker News</a>
+        <a class="release-share-link" href="https://wa.me/?text=shiki%20v0.9.3%3A%20Git%20onboarding%3A%20creating%20a%20plain%20notebook%20in%20the%20TUI%20%28when%20git.remote_template%20isn%27t%20configured%29%20now%20asks%20once%20%E2%80%94%20%22Git%20remote%20%28URL%20or%20local%20path%2C%20empty%20%3D%20skip%E2%80%A6%20https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.9.3.html" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="release-share-link" href="https://t.me/share/url?url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.9.3.html&amp;text=shiki%20v0.9.3%3A%20Git%20onboarding%3A%20creating%20a%20plain%20notebook%20in%20the%20TUI%20%28when%20git.remote_template%20isn%27t%20configured%29%20now%20asks%20once%20%E2%80%94%20%22Git%20remote%20%28URL%20or%20local%20path%2C%20empty%20%3D%20skip%E2%80%A6" target="_blank" rel="noopener">Telegram</a>
+        <a class="release-share-link" href="mailto:?subject=shiki%20v0.9.3%20released&amp;body=shiki%20v0.9.3%3A%20Git%20onboarding%3A%20creating%20a%20plain%20notebook%20in%20the%20TUI%20%28when%20git.remote_template%20isn%27t%20configured%29%20now%20asks%20once%20%E2%80%94%20%22Git%20remote%20%28URL%20or%20local%20path%2C%20empty%20%3D%20skip%E2%80%A6%0A%0Ahttps%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.9.3.html">Email</a>
+        <button type="button" class="copy-btn copy-btn-inline" data-copy-text="🚀 shiki v0.9.3 is out — Git onboarding: creating a plain notebook in the TUI (when git.remote_template isn&#x27;t configured) now asks once — &quot;Git remote (URL or local path, empty = skip…
+
+https://sazardev.github.io/shiki/changelog/0.9.3.html
+
+#rustlang #TUI #opensource">Copy announcement</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container release-layout">
+      <div class="release-shot">
+        <div class="release-shot-frame">
+          <img src="../assets/screenshots/gruvbox-dark.png" alt="shiki v0.9.3, running in a terminal" loading="lazy" />
+        </div>
+      </div>
+      <div class="changelog-body release-notes">
+<h4>Added</h4>
+<ul>
+<li><strong>Git onboarding</strong>: creating a plain notebook in the TUI (when <code>git.remote_template</code> isn&#x27;t configured) now asks once — &quot;Git remote (URL or local path, empty = skip)&quot; — so backup/sync gets set up on day one instead of never. <code>shiki notebook create &lt;name&gt; --remote &lt;url&gt;</code> does the same from the CLI, credentials redacted in all output.</li>
+<li><strong><code>shiki doctor</code> git health checks</strong>: warns when <code>user.name</code>/ <code>user.email</code> aren&#x27;t set anywhere (every sync would fail at commit time) — but only once notebooks exist; flags notebooks left with an unresolved merge, notebook directories without a git repo, and configured remote URLs in a form that can&#x27;t be one (paste accidents like <code>git clone https://…</code>); and registers the new <code>git_dash</code>/<code>diff</code> bindings in the keybinding-collision scan.</li>
+<li><strong>Pending-changes marker on note titles</strong>: a note with uncommitted changes now shows a <code>●</code> after its title in NOTES, colored by change type (same scheme as before — new/modified/deleted). The glyph survives the selected row&#x27;s highlight repaint, so the dirty cue no longer vanishes exactly where you&#x27;re looking; falls back to a plain bullet when Nerd Font icons are off.</li>
+<li><strong>Git dashboard (<code>G</code> in NOTEBOOKS)</strong>: every notebook&#x27;s sync state in one read-only modal, phrased in plain language instead of git jargon — &quot;all synced&quot;, &quot;2 uncommitted · 3 on remote — s saves, p pulls&quot;, &quot;merge in progress — resolve conflicts first&quot; — with each notebook&#x27;s latest commits listed underneath and <code>j</code>/<code>k</code> navigation between notebooks. Configurable via <code>[keybindings.notebooks] git_dash</code> (default <code>&quot;G&quot;</code>).</li>
+<li><strong>Pending-changes diff (<code>d</code> in PREVIEW)</strong>: pressing <code>d</code> on a note with uncommitted edits now shows them in a &quot;Working changes&quot; popup — working tree vs last commit, same +/- pane as the history modal&#x27;s diff view (without <code>r revert</code>, since there&#x27;s nothing to revert to yet). On a clean note <code>d</code> opens the version history instead, so the key always answers &quot;what changed here&quot;. Configurable via <code>[keybindings.preview] diff</code> (default <code>&quot;d&quot;</code>). Encrypted notebooks are refused (both sides would be ciphertext).</li>
+<li><strong><code>shiki diff [note]</code> and <code>shiki log [note]</code></strong>: the same git visibility on the command line. <code>diff</code> without a note prints every pending change in the notebook with per-file +/− stats; <code>log</code> lists recent commits, or every commit that touched one specific note.</li>
+<li><strong>Rename updates every inbound <code>[[wikilink]]</code></strong>: renaming a note (the <code>r</code> prompt in NOTES) no longer silently breaks the links other notes hold to it. When the note has backlinks, a confirm asks first — <code>y</code> renames *and* rewrites every matching link across every notebook (<code>[[old title]]</code>, <code>[[old-slug]]</code>, preserving <code>|display</code> aliases and <code>#heading</code>/<code>^block</code> suffixes, skipping fenced code), <code>n</code> renames without touching anything, <code>Esc</code> cancels. Rewrites go through raw-text surgery per file (frontmatter skipped, never synthesized into plain notes) and respect encrypted notebooks via their cached passphrase; locked ones are skipped rather than half-touched.</li>
+<li><strong><code>aliases:</code> frontmatter support</strong> — an optional list of alternate names that resolve exactly like the title does (same case-insensitive + slug fallback) in wikilink resolution, backlinks, and the graph, so a renamed note&#x27;s old name keeps working even where a rewrite missed (an edit in flight on another machine). The key is the same one Obsidian writes, so imported vaults carry theirs over untouched; empty is omitted from serialization entirely, so existing notes round-trip byte-stable.</li>
+<li><strong><code>[[note#heading]]</code> / <code>[[note^block]]</code> compatibility</strong> — Obsidian-style sub-addresses now parse as links to <code>note</code> everywhere (resolution, backlinks, graph edges, outgoing-links panel); the suffix is stripped before matching instead of being treated as part of the target text.</li>
+<li><strong><code>![[embed]]</code> images render in PREVIEW</strong> — an Obsidian-style embed line draws as terminal art (chafa) just like <code>!<a href="path" target="_blank" rel="noopener">alt</a></code> does, resolving by bare file name anywhere in the notebook&#x27;s immediate subfolders (the usual <code>attachments/</code> layout of imported vaults) after the ordinary relative- path chain misses. Alias/sub-address parts don&#x27;t change which file is meant.</li>
+<li><strong>Image paste (<code>Ctrl+V</code>) saves attachments</strong>: with an image (screenshot) on the clipboard while editing a note, it&#x27;s saved as a PNG under the current notebook&#x27;s <code>[general] attachments_dir</code> (default <code>attachments/</code>, resolved against the notebook root so the inserted <code>!<a href="attachments/…" target="_blank" rel="noopener">pasted-…</a></code> link renders from any folder depth) and the markdown link lands at the cursor as one undo step. Text pastes are unaffected; <code>[editor] paste_images</code> (on) gates it, and it only engages for real note edits — not config.toml, snippet bodies, the scratchpad, or conflict files. Both toggles live in Settings (GENERAL/EDITOR).</li>
+<li><strong><code>shiki import obsidian &lt;vault&gt;</code></strong> — adopts an existing Obsidian vault as a notebook: in-place by default (registered under <code>[notebooks.&lt;name&gt;] path</code>, files stay put, <code>--git-init</code> runs git init when the vault isn&#x27;t already a repo) or copied into the data dir with <code>--copy</code>. <code>--tags</code> merges inline <code>#hashtags</code> into each note&#x27;s frontmatter tags through a raw-YAML edit that preserves foreign frontmatter verbatim (Obsidian doesn&#x27;t write shiki&#x27;s <code>notebook:</code>/ <code>date:</code> keys, and parsing through the strict struct would have synthesized replacements); plain notes without frontmatter are left untouched.</li>
+<li><strong><code>shiki import notion &lt;export.zip | folder&gt;</code></strong> — converts a Notion markdown export into a fresh notebook: the <code>&lt;Page&gt; &lt;32-hex-uuid&gt;</code> name suffixes are stripped from pages and folders, internal page links (URL-percent-encoded, relative or nested) become <code>[[wikilinks]]</code> with display aliases preserved when they differ from the target&#x27;s name, and CSV databases plus non-markdown assets are counted and reported as skipped. Accepts the raw <code>.zip</code> or an already-extracted directory.</li>
+<li><strong>OS Capture supreme — <code>shiki capture</code> as system daemon</strong>: <code>general.enable_capture_daemon</code> is now <strong>on by default</strong> (was off), so a running TUI is live by construction. The capture wire protocol gains <code>template=</code>, <code>url=</code>, <code>title=</code>, <code>source=</code> headers; the daemon (<code>shiki-tui/src/capture.rs</code>) centralizes <code>Source: <a href="url" target="_blank" rel="noopener">title</a></code> appending so every client (CLI, <code>shiki-native-host</code>, rofi/waybar pipes) gets the same provenance footer. CLI gains <code>shiki capture --clip</code> (OS clipboard via <code>arboard</code>, Wayland/X11/macOS), <code>--url</code>/<code>--title</code> (appended once as <code>Source:</code>), <code>--template &lt;name&gt;</code> (render through any <code>{{title}}</code>/<code>{{date}}</code>/<code>{{body}}</code> template), and <code>--source</code> (origin marker for logs). The browser extension and <code>shiki-native-host</code> now send those headers instead of pre-appending. Plus <code>scripts/rofi-capture.sh</code> (rofi/wofi/dmenu), <code>scripts/waybar-shiki.sh</code> (Waybar/Polybar overdue + daemon dot, <code>shiki tasks --overdue --count</code> + <code>shiki capture --check</code>), <code>scripts/clip-capture.sh</code>, and <code>contrib/</code> examples (Hyprland, Waybar, Raycast). One command powers every hotkey: <code>shiki capture</code>.</li>
+<li><strong>Headless capture daemon (<code>shiki daemon</code>)</strong> — the same loopback-port capture daemon the TUI runs, standalone with no UI: <code>shiki capture</code>/<code>--undo</code>/<code>--check</code> work identically (same <code>capture.port</code> + wire protocol), every request is appended to the shared <code>shiki.log</code>, and encrypted-locked notebooks reply <code>locked:</code> instead of prompting a background process. <code>contrib/shiki-daemon.service</code> wires it to <code>systemctl --user</code>, so capture stays live from boot with no TUI ever opened. <code>shiki doctor</code> now reports daemon reachability.</li>
+<li><strong>Voice capture (<code>shiki capture --voice</code>)</strong> — records the microphone (<code>arecord</code> → <code>ffmpeg</code> → <code>sox</code>, watchdog-timed so a missing audio device fails fast instead of hanging) and transcribes locally via whisper.cpp: <code>whisper-cli</code> is auto-fetched from ggml-org/whisper.cpp&#x27;s release on first use (same pattern as <code>pretty-pdf</code>), and the model (<code>ggml-base.en.bin</code> by default, <code>--model</code> to change) is downloaded once from Hugging Face into <code>{data_dir}/bin/models/</code>. Nothing leaves the machine. <code>--seconds N</code> sets the recording length; works with every other capture flag (<code>--daily</code>, <code>--tags</code>, <code>--folder</code>, <code>-n</code>). <code>shiki doctor</code> reports recorder + whisper availability.</li>
+<li><strong>shiki Desktop — a native GUI app</strong> (<code>shiki-desktop</code>, new workspace member): the same notebooks, config and themes as the TUI, in a Tauri 2 + Svelte 5 window (Windows/MSI + NSIS installers, Linux/macOS builds follow the same pipeline). Reads the real <code>config.toml</code> and data dir, lists notebooks with their encryption state, and paints the active theme via the same hex palettes the TUI uses. Ships a signed installer in every release (<code>.msi</code> + <code>-setup.exe</code> + minisign <code>.sig</code>), plus an in-app auto-update: the UI checks GitHub Releases on startup and offers a one-click &quot;Update&quot; button that downloads, verifies and installs the new version (passive mode on Windows, app relaunches itself).</li>
+</ul>
+<h4>Fixed</h4>
+<ul>
+<li><strong>CLI no longer panics when piped into <code>head</code>/<code>less</code></strong>: closing stdout mid-output (<code>shiki diff | head</code>) used to print a raw <code>failed printing to stdout: Broken pipe</code> panic. The process now exits silently on SIGPIPE like every other Unix tool (no effect on Windows).</li>
+<li>A notebook untracked via delete&#x27;s &quot;keep files, just untrack&quot; answer came back on every relaunch: startup (<code>App::new</code>) listed notebooks straight from disk without applying the <code>hidden</code> filter only <code>reload_notebooks</code> had. One shared filter (<code>visible_notebooks</code>) decides for both now. <code>shiki notebook list</code> hides them too (with a new <code>--all</code> flag showing them marked <code>(hidden)</code>), and the browser extension&#x27;s notebook picker applies the same rule so untracked notebooks stop being capturable.</li>
+<li>Every CLI subcommand launched the TUI instead of running: the pre-config extension check called <code>cli.command.take()</code> unconditionally, consuming whatever command was parsed and leaving <code>None</code> behind — which the dispatch reads as &quot;no args, launch TUI&quot;. The take is now guarded so only a genuine <code>Extension</code> command is consumed.</li>
+<li>The merge-conflict resolver modal (auto-opened when a pull comes back with conflicts, reopenable any time with <code>p</code> while mid-merge) gained <code>i</code> — edit inline: loads the conflicted file&#x27;s raw content into the normal inline editor, and saving writes it back and stages it as that file&#x27;s resolution, the same bookkeeping <code>o</code>/<code>t</code>/<code>e</code> trigger. Removing conflict markers no longer requires an external editor.</li>
+</ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="release-nav">
+    <div class="container release-nav-row">
+      <a href="0.9.2.html" class="release-nav-link">← v0.9.2</a>
+      <a href="../changelog.html" class="release-nav-link">All releases</a>
+      <a href="0.9.4.html" class="release-nav-link">v0.9.4 →</a>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/sazardev/shiki">GitHub</a>
+        <a href="https://github.com/sazardev/shiki/releases/tag/v0.9.3">GitHub Release</a>
+        <a href="https://github.com/sazardev/shiki/issues">Issues</a>
+        <a href="https://github.com/sazardev/shiki/blob/main/LICENSE">MIT License</a>
+        <a class="coffee-link" href="https://buymeacoffee.com/sazarcode">☕ Buy me a coffee</a>
+      </div>
+      <small>shiki (私記) — built by <a href="https://github.com/sazardev">sazardev</a>. Free and open source, forever.</small>
+    </div>
+  </footer>
+
+  <script src="../js/main.js"></script>
+</body>
+</html>

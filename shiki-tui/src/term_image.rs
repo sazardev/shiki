@@ -21,24 +21,29 @@ use ratatui::text::{Line, Span};
 /// Everything the markdown renderer needs to know about image rendering,
 /// bundled so `markdown_to_lines_indexed` stays a plain function taking
 /// plain data (it's called from `app.rs`'s preview cache and from tests).
-pub struct ImageCtx {
+///
+/// The renderer never runs `chafa` itself: `art` is filled ahead of time by
+/// the caller's background prefetch (`App::prefetch_note_images`), so a slow
+/// decode can't stall a frame. A path that's missing from `art` (still
+/// being rendered, chafa absent, undecodable file) just falls through to
+/// the icon+alt representation.
+pub struct ImageCtx<'a> {
     /// Master switch (`[general] preview_images`).
     pub enabled: bool,
-    /// Resolved `chafa` binary; `None` means "don't even try". The caller
-    /// resolves this once per refresh from `chafa_path`/`$PATH` via
-    /// `chafa_binary`.
-    pub chafa: Option<PathBuf>,
     /// The art's target width in columns, precomputed by the caller as
     /// `preview_image_scale × preview panel width` (clamped to a sane
     /// range). Stored precomputed so the pure markdown renderer never has
-    /// to know the panel layout.
+    /// to know the panel layout. Also the second half of `art`'s key.
     pub cols: usize,
     /// Directories to resolve a relative image path against, tried in order:
     /// the note's own folder, the notebook root, then `data_dir`.
     pub base_dirs: Vec<PathBuf>,
+    /// `(resolved image path, cols) -> rendered rows` — `None` records a
+    /// failed render so it isn't retried on every refresh.
+    pub art: &'a std::collections::HashMap<(PathBuf, usize), Option<Vec<Line<'static>>>>,
 }
 
-impl ImageCtx {
+impl ImageCtx<'_> {
     /// The `chafa` binary to shell out to: `chafa_path` when set, otherwise
     /// whatever's found on `$PATH` (the same split-paths scan
     /// `shiki_core::process::on_path` does, but returning the actual path
@@ -144,6 +149,26 @@ pub fn resolve_image_path(base_dirs: &[PathBuf], spec: &str) -> Option<PathBuf> 
         .iter()
         .map(|base| base.join(&candidate))
         .find(|p| p.is_file())
+}
+
+/// Every local image `body` refers to with a whole-line `![alt](path)` or
+/// `![[embed]]`, resolved and deduplicated in first-appearance order — the
+/// exact set the renderer will try to look up in `ImageCtx::art`, so the
+/// caller's background prefetch (`App::prefetch_note_images`) renders
+/// precisely what's needed and nothing else.
+pub fn body_image_paths(body: &str, base_dirs: &[PathBuf]) -> Vec<PathBuf> {
+    let mut paths: Vec<PathBuf> = Vec::new();
+    for line in body.lines() {
+        let Some(spec) = whole_line_embed_path(line).or_else(|| whole_line_image_path(line)) else {
+            continue;
+        };
+        if let Some(path) = resolve_embed_path(base_dirs, &spec) {
+            if !paths.contains(&path) {
+                paths.push(path);
+            }
+        }
+    }
+    paths
 }
 
 /// Renders `path` to terminal-art rows at `cols` columns wide (chafa picks
@@ -436,6 +461,25 @@ mod tests {
         let dir = std::env::temp_dir().join("shiki-term-image-test-missing");
         let resolved = resolve_image_path(std::slice::from_ref(&dir), "nope.png");
         assert!(resolved.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn body_image_paths_collects_resolved_whole_line_images_once() {
+        let dir = std::env::temp_dir().join("shiki-body-images-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("attachments")).unwrap();
+        std::fs::write(dir.join("a.png"), "x").unwrap();
+        std::fs::write(dir.join("attachments").join("b.png"), "x").unwrap();
+        let bases = vec![dir.clone()];
+        // The same image twice counts once; the remote URL is excluded; the
+        // mid-line image isn't a whole-line one.
+        let body = "text ![inline](a.png) more\n\n![alt](a.png)\n\n![[b.png]]\n\n![alt](a.png)\n\n![r](https://x/y.png)";
+        let paths = body_image_paths(body, &bases);
+        assert_eq!(
+            paths,
+            vec![dir.join("a.png"), dir.join("attachments").join("b.png")]
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

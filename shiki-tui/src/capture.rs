@@ -44,7 +44,11 @@ use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::Duration;
 
-use shiki_config::{Config, LastCapture};
+use shiki_config::Config;
+use shiki_core::capture::{
+    capture_into_daily, capture_into_new_note, capture_into_templated, with_source,
+};
+use shiki_core::LastCapture;
 
 use crate::app::App;
 
@@ -208,67 +212,6 @@ fn write_port_file(port: u16) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Whether `pid` is still a live process.
-///
-/// On Unix, `kill(pid,0)` with signal 0 does not send a signal but
-/// performs the usual permission checks — 0 means the process exists
-/// (or we lack permission to signal it, which still means it exists),
-/// `ESRCH` means no such process. On Windows, where `libc::kill` is not
-/// available and `kill -0` semantics differ, we conservatively return
-/// `true` (treat the port file as not stale) — stale detection there
-/// falls back to the TCP connect timeout, which already cleans up the
-/// user-visible symptom, just not the file itself immediately.
-#[allow(dead_code)]
-fn is_pid_alive(pid: u32) -> bool {
-    #[cfg(unix)]
-    {
-        if pid == 0 || pid > i32::MAX as u32 {
-            return false;
-        }
-        // SAFETY: `kill` is async-signal-safe and we pass a valid pid + 0.
-        let ret = unsafe { libc::kill(pid as i32, 0) };
-        if ret == 0 {
-            return true;
-        }
-        // `kill` failed — check errno. ESRCH = no such process → stale.
-        // EPERM = process exists but we can't signal it → alive.
-        let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-        // libc::ESRCH is 3 on Linux, 3 on macOS — use raw value to avoid
-        // needing `errno` crate, but prefer `libc::ESRCH` when available.
-        #[allow(unused_variables)]
-        let esrch = {
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            {
-                3
-            }
-            #[cfg(any(target_os = "macos", target_os = "ios"))]
-            {
-                3
-            }
-            #[cfg(not(any(
-                target_os = "linux",
-                target_os = "android",
-                target_os = "macos",
-                target_os = "ios"
-            )))]
-            {
-                3
-            }
-        };
-        errno != esrch
-    }
-    #[cfg(windows)]
-    {
-        let _ = pid;
-        true
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        let _ = pid;
-        true
-    }
-}
-
 fn accept_loop(
     listener: TcpListener,
     capture_tx: Sender<CaptureRequest>,
@@ -428,20 +371,6 @@ fn resolve_notebook_and_text<'a>(
 /// `App::set_status`, so a capture that happened while the TUI was
 /// unattended still leaves a trace in the logs modal (`leader` then `l`),
 /// not just a footer message nobody was there to read.
-fn with_source(text: &str, url: Option<&str>, title: Option<&str>) -> String {
-    let Some(url) = url else {
-        return text.to_string();
-    };
-    if url.is_empty() || text.contains(url) {
-        return text.to_string();
-    }
-    if let Some(title) = title.filter(|t| !t.is_empty()) {
-        format!("{text}\n\nSource: [{title}]({url})")
-    } else {
-        format!("{text}\n\nSource: {url}")
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 fn perform_capture(
     app: &mut App,
@@ -453,7 +382,7 @@ fn perform_capture(
     template: Option<&str>,
     url: Option<&str>,
     title: Option<&str>,
-    source: Option<&str>,
+    _source: Option<&str>,
 ) -> CaptureReply {
     let text = text.trim();
     if text.is_empty() {
@@ -500,9 +429,29 @@ fn perform_capture(
     let nb = nb.with_crypto(crypto);
 
     let result = if daily {
-        capture_into_daily(app, &nb, text)
+        let today = chrono::Local::now().date_naive();
+        let templates_dir = Config::default_templates_dir().unwrap_or_default();
+        let agenda = app
+            .config
+            .general
+            .daily_agenda
+            .then(|| {
+                app.store
+                    .all_notes()
+                    .ok()
+                    .and_then(|pool| shiki_core::tasks::agenda_section(&pool, today))
+            })
+            .flatten();
+        capture_into_daily(
+            &nb,
+            text,
+            &templates_dir,
+            &app.config.general.daily_template,
+            agenda.as_deref(),
+        )
     } else if let Some(tmpl) = template.filter(|s| !s.is_empty()) {
-        capture_into_templated(&nb, text, tags, folder, tmpl, source)
+        let templates_dir = Config::default_templates_dir().unwrap_or_default();
+        capture_into_templated(&nb, text, tags, folder, tmpl, &templates_dir)
     } else {
         capture_into_new_note(&nb, text, tags, folder)
     };
@@ -533,109 +482,6 @@ fn perform_capture(
     app.set_status(format!("captured: {}", path.display()));
 
     CaptureReply::Ok(path)
-}
-
-fn capture_into_templated(
-    nb: &shiki_core::Notebook,
-    text: &str,
-    tags: &[String],
-    folder: Option<&str>,
-    template_name: &str,
-    _source: Option<&str>,
-) -> shiki_core::Result<(PathBuf, LastCapture)> {
-    let templates_dir = Config::default_templates_dir().unwrap_or_default();
-    let tmpl = shiki_core::Template::load(&templates_dir, template_name)
-        .map_err(|_| shiki_core::Error::TemplateNotFound(template_name.to_string()))?;
-    let title = format!("Capture {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
-    let mut vars = std::collections::HashMap::new();
-    vars.insert("title", title.clone());
-    vars.insert("date", chrono::Local::now().format("%Y-%m-%d").to_string());
-    vars.insert("body", text.to_string());
-    // Also expose notebook name for templates that want it
-    vars.insert("notebook", nb.name.clone());
-    let rendered = tmpl.render(&vars);
-    let body = if rendered.contains(text) {
-        rendered
-    } else {
-        format!("{rendered}\n{text}\n")
-    };
-    let mut note = match folder {
-        Some(folder) if !folder.is_empty() => {
-            let relative = shiki_core::notebook::validate_relative_path(folder)?;
-            nb.create_note_in(&relative, &title, body)?
-        }
-        _ => nb.create_note(&title, body)?,
-    };
-    if !tags.is_empty() {
-        note.frontmatter.tags = tags.to_vec();
-        note.save_with_crypto(nb.crypto.as_ref())?;
-    }
-    let record = LastCapture::Note {
-        notebook: nb.name.clone(),
-        path: note.path.display().to_string(),
-    };
-    Ok((note.path, record))
-}
-
-fn capture_into_new_note(
-    nb: &shiki_core::Notebook,
-    text: &str,
-    tags: &[String],
-    folder: Option<&str>,
-) -> shiki_core::Result<(PathBuf, LastCapture)> {
-    let title = format!("Capture {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
-    let mut note = match folder {
-        Some(folder) => {
-            let relative = shiki_core::notebook::validate_relative_path(folder)?;
-            nb.create_note_in(&relative, &title, text)?
-        }
-        None => nb.create_note(&title, text)?,
-    };
-    if !tags.is_empty() {
-        note.frontmatter.tags = tags.to_vec();
-        note.save_with_crypto(nb.crypto.as_ref())?;
-    }
-    let record = LastCapture::Note {
-        notebook: nb.name.clone(),
-        path: note.path.display().to_string(),
-    };
-    Ok((note.path, record))
-}
-
-fn capture_into_daily(
-    app: &App,
-    nb: &shiki_core::Notebook,
-    text: &str,
-) -> shiki_core::Result<(PathBuf, LastCapture)> {
-    let today = chrono::Local::now().date_naive();
-    let templates_dir = Config::default_templates_dir().unwrap_or_default();
-    let agenda = if app.config.general.daily_agenda {
-        app.store
-            .all_notes()
-            .ok()
-            .and_then(|pool| shiki_core::tasks::agenda_section(&pool, today))
-    } else {
-        None
-    };
-    let mut note = shiki_core::daily::create_or_open(
-        nb,
-        today,
-        &templates_dir,
-        &app.config.general.daily_template,
-        agenda.as_deref(),
-    )?;
-    if !note.body.ends_with('\n') {
-        note.body.push('\n');
-    }
-    let appended = format!("- {text}\n");
-    note.body.push_str(&appended);
-    note.save_with_crypto(nb.crypto.as_ref())?;
-    let record = LastCapture::DailyAppend {
-        notebook: nb.name.clone(),
-        path: note.path.display().to_string(),
-        appended,
-    };
-    Ok((note.path, record))
 }
 
 /// Reverses the single most recent capture — see `LastCapture`'s own doc
@@ -803,24 +649,6 @@ mod tests {
             }
             _ => panic!("expected Capture"),
         }
-    }
-
-    #[test]
-    fn with_source_appends_url_and_title() {
-        assert_eq!(
-            with_source("hello", Some("https://x.com"), Some("X")),
-            "hello\n\nSource: [X](https://x.com)"
-        );
-        assert_eq!(
-            with_source("hello", Some("https://x.com"), None),
-            "hello\n\nSource: https://x.com"
-        );
-        // Already contains url -> no duplicate
-        assert_eq!(
-            with_source("hello https://x.com world", Some("https://x.com"), None),
-            "hello https://x.com world"
-        );
-        assert_eq!(with_source("hello", None, None), "hello");
     }
 
     #[test]

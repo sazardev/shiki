@@ -1,10 +1,12 @@
 pub mod browser;
+pub mod capture;
 pub mod crypto;
 pub mod daily;
 pub mod editor;
 pub mod export;
 pub mod git;
 pub mod headings;
+pub mod last_capture;
 pub mod note;
 pub mod notebook;
 pub mod process;
@@ -21,6 +23,7 @@ pub mod voice;
 pub mod wikilinks;
 
 pub use daily::daily_note_path;
+pub use last_capture::LastCapture;
 pub use note::{Frontmatter, Note};
 pub use notebook::{Notebook, NotebookStore};
 pub use search::SearchEngine;
@@ -33,6 +36,8 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("yaml error: {0}")]
     Yaml(#[from] serde_yaml::Error),
+    #[error("toml error: {0}")]
+    Toml(#[from] toml::ser::Error),
     #[error("git error: {0}")]
     Git(#[from] git2::Error),
     #[error("note not found: {0}")]

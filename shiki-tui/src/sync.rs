@@ -8,10 +8,12 @@ use shiki_core::{Notebook, NotebookStore};
 /// through, so a notebook untracked mid-session stays untracked after a
 /// restart too (startup used to skip this filter entirely, which made an
 /// untracked notebook silently come back on every relaunch).
-pub(crate) fn visible_notebooks(store: &NotebookStore, config: &Config) -> Vec<Notebook> {
-    store
-        .list()
-        .unwrap_or_default()
+pub(crate) fn visible_notebooks(
+    store: &NotebookStore,
+    config: &Config,
+) -> shiki_core::Result<Vec<Notebook>> {
+    Ok(store
+        .list()?
         .into_iter()
         .filter(|nb| {
             !config
@@ -19,7 +21,7 @@ pub(crate) fn visible_notebooks(store: &NotebookStore, config: &Config) -> Vec<N
                 .get(&nb.name)
                 .is_some_and(|over| over.hidden)
         })
-        .collect()
+        .collect())
 }
 
 /// One in-flight git operation's eventual result, sent back over
@@ -62,7 +64,17 @@ impl App {
         // (the same filter startup uses), so it stops showing up anywhere
         // the notebook list is used, without needing its own invalidation
         // logic anywhere else.
-        let visible = visible_notebooks(&self.store, &self.config);
+        let visible = match visible_notebooks(&self.store, &self.config) {
+            Ok(visible) => visible,
+            // Used to be swallowed into an empty list (`unwrap_or_default`),
+            // which made a real I/O/permission failure look the same as "no
+            // notebooks configured" — silently. Keep the panel as-is and say
+            // what happened instead.
+            Err(e) => {
+                self.set_status(format!("could not list notebooks: {e}"));
+                return;
+            }
+        };
         self.notebooks = visible
             .into_iter()
             // Attaches whatever passphrase is cached for an encrypted
@@ -103,7 +115,13 @@ impl App {
                 self.maybe_prompt_for_notebook_passphrase();
                 (Vec::new(), Vec::new())
             }
-            Err(_) => (Vec::new(), Vec::new()),
+            // Anything else used to be an indistinguishable empty list; the
+            // distinction between "this folder is empty" and "listing it
+            // failed" matters, so surface the failure.
+            Err(e) => {
+                self.set_status(format!("could not list notes: {e}"));
+                (Vec::new(), Vec::new())
+            }
         }
     }
 
@@ -157,10 +175,21 @@ impl App {
         self.merge_active = self
             .selected_notebook()
             .is_some_and(|nb| shiki_core::git::merge_in_progress(&nb.path));
-        self.note_statuses = self
+        self.note_statuses = match self
             .selected_notebook()
-            .and_then(|nb| shiki_core::git::file_statuses(&nb.path).ok())
-            .unwrap_or_default();
+            .map(|nb| shiki_core::git::file_statuses(&nb.path))
+            .transpose()
+        {
+            Ok(map) => map.unwrap_or_default(),
+            // The per-note colors are the only consumer of this call, but its
+            // failure still means the notebook's status couldn't be read —
+            // fold it into the same `status_error` the footer/git panel
+            // already render rather than showing an all-clean list.
+            Err(e) => {
+                self.git_status.status_error = Some(e.to_string());
+                Default::default()
+            }
+        };
         if self.show_drawer {
             self.refresh_drawer_statuses();
         }
@@ -558,8 +587,9 @@ impl App {
                 self.pending_changes.insert(notebook.clone(), 0);
                 // A new commit may have changed the currently-previewed
                 // note's revision count — force the footer's cache to
-                // recompute instead of showing a stale number.
-                self.history_count_cache = None;
+                // recompute (and drop any pre-commit walk still in flight)
+                // instead of showing a stale number.
+                self.invalidate_history_count();
                 if self.selected_notebook().map(|n| n.name.as_str()) == Some(notebook.as_str()) {
                     self.refresh_git_status();
                 }
@@ -620,6 +650,7 @@ mod tests {
         // No overrides at all — everything on disk shows up.
         let config = Config::default();
         let names: Vec<String> = visible_notebooks(&store, &config)
+            .unwrap()
             .into_iter()
             .map(|n| n.name)
             .collect();
@@ -636,6 +667,7 @@ mod tests {
             },
         );
         let names: Vec<String> = visible_notebooks(&store, &config)
+            .unwrap()
             .into_iter()
             .map(|n| n.name)
             .collect();
@@ -658,6 +690,6 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(visible_notebooks(&store, &config).len(), 1);
+        assert_eq!(visible_notebooks(&store, &config).unwrap().len(), 1);
     }
 }

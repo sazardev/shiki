@@ -21,8 +21,9 @@ cargo fmt --all                      # format (run after editing, before checkin
 cargo run -p shiki-cli -- <args>     # run the binary, e.g. `-- new "titulo"`, `-- daily`, no args launches the TUI
 ```
 
-There are ~293 `#[test]`s: 134 in `shiki-core`, 17 in `shiki-config`, 129 in `shiki-tui`, 13 in
-`shiki-cli` — `cargo test --workspace` is green. They're all inline `#[cfg(test)]` modules inside
+There are 398 `#[test]`s: 180 in `shiki-core`, 20 in `shiki-config`, 176 in `shiki-tui`, 16 in
+`shiki-cli`, plus 1 in `shiki-native-host` and 5 in `shiki-desktop` — `cargo test --workspace` is
+green. They're all inline `#[cfg(test)]` modules inside
 the source files (no `tests/` dirs, no `#[ignore]`, no fixture setup), so the pattern set by
 `panel_drawer::tests` (`shiki-tui/src/panel_drawer.rs`) — covering `drawer_hit_at`'s mouse
 coordinate math as a plain function of numbers, not `&App` — is the norm. When adding tests,
@@ -45,8 +46,11 @@ XDG_CONFIG_HOME=/tmp/shiki-test-config XDG_DATA_HOME=/tmp/shiki-test-data \
 app — every crate inherits it via `version.workspace = true`, so there's exactly one place to bump.
 The TUI status bar shows it (right-aligned in the footer, paired with the `? help` hint) via
 `env!("CARGO_PKG_VERSION")` in `shiki-tui/src/status_bar.rs`, which reads shiki-tui's own
-(inherited) manifest version at compile time. Cutting a release is two steps: bump the workspace
-version, add a `CHANGELOG.md` entry (follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)).
+(inherited) manifest version at compile time. Cutting a release is more than a version bump: bump
+the workspace version, add a `CHANGELOG.md` entry (follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/)), update `docs/index.html`'s hardcoded
+JSON-LD `softwareVersion`, then follow the `/deploy` runbook (`.opencode/skill/deploy/SKILL.md`) for
+the site sync and store-by-store verification.
 
 **Tagging the release is automatic, not a manual `git tag && git push` step anymore.**
 `.github/workflows/auto-tag.yml` watches every push to `main`; if the triggering commit's message
@@ -207,9 +211,9 @@ content isn't worth finishing. This also means every release's `update-screensho
 touches `docs/assets/screenshots/**`) triggers its own Pages deploy automatically — a new
 release's refreshed screenshots go live with no separate manual "redeploy the site" step.
 
-**All 12 themes have a real captured screenshot** (`docs/assets/screenshots/*.png`, via
-`scripts/screenshots.sh`'s `THEMES` array — originally only 5 were captured; extended to all 12
-after Omar pointed out that showing a CSS-only mockup for the other 7 wasn't what "capture every
+**All 37 themes have a real captured screenshot** (`docs/assets/screenshots/*.png`, via
+`scripts/screenshots.sh`'s `THEMES` array — originally only 5 were captured; extended to all of them
+after Omar pointed out that showing a CSS-only mockup for the rest wasn't what "capture every
 theme" meant). `#term-fallback`, a small CSS-only mockup of the three-pane layout, still exists as
 a genuine fallback (not dead code) for any theme `shiki-config` adds in the future before a
 screenshot's been captured for it — `docs/js/main.js`'s per-theme `screenshot` flag controls this,
@@ -369,7 +373,7 @@ at AI assistants/crawlers that check for it directly, the same way search engine
 
 ## Architecture
 
-Cargo workspace, four crates with a strict one-way dependency chain:
+Cargo workspace. The four terminal crates form a strict one-way dependency chain:
 
 ```
 shiki-core   (pure domain logic, no TUI, no config crate dependency)
@@ -386,7 +390,7 @@ string→`Color` conversion lives in `shiki-tui/src/render.rs::hex_to_color`, ke
 crate reusable outside a TUI context. The `"default"` built-in theme (`Theme::terminal_default`)
 uses `"reset"`/ANSI names throughout specifically so it doesn't impose a fixed palette.
 Included theme palettes live one-per-file under `shiki-config/src/themes/` (catppuccin, tokyo_night,
-gruvbox, nord, solarized, the League of Legends champion palettes in `lol.rs` — `LoL (Jinx)`,
+gruvbox, nord, solarized, dracula, monokai, one_dark, the League of Legends champion palettes in `lol.rs` — `LoL (Jinx)`,
 `LoL (Teemo)`, `LoL (Ahri)` — the video-game palettes in `games.rs` — Pokémon, Zelda, Portal,
 Mario, Overwatch, Halo, Stardew Valley — and the hacker/cyberpunk palettes in `hacker.rs` —
 Matrix, Cyberpunk 2077, Arasaka, Synthwave, Tron, Fallout, Blade Runner, Doom, GitS, Mr. Robot),
@@ -529,9 +533,9 @@ so they can set `show_settings = true` unconditionally in their own branch.
 **Re-export asymmetry to be aware of:** `shiki_config::Config` and `shiki_config::Theme` are
 re-exported at the crate root, but the nested types (`Keybindings`, `GitConfig`, `ThemeConfig`)
 are not — reach them via `shiki_config::config::Keybindings` etc. `shiki_core` re-exports `Note`,
-`Frontmatter`, `Notebook`, `NotebookStore`, `SearchEngine`, `TagIndex`, `Template` at the root, but
-functions like `shiki_core::daily::create_or_open` and `shiki_core::git::commit_all` are only
-reachable through their module path.
+`Frontmatter`, `LastCapture`, `Notebook`, `NotebookStore`, `SearchEngine`, `TagIndex`, `Template` at
+the root, but functions like `shiki_core::daily::create_or_open` and `shiki_core::git::commit_all`
+are only reachable through their module path.
 
 **Note file format** (`shiki-core/src/note.rs`): a `.md` file starting with `---\n`, YAML
 frontmatter, a closing `\n---`, then the Markdown body. This is parsed/serialized manually
@@ -692,7 +696,7 @@ at the top of `handle_normal_key`. Navigation (`hjkl`, arrows, `tab`, `enter`, `
 everywhere (`quit` is matched via `KeyMaps::is_quit`, a plain `KeyCode` comparison, not an
 `Action` variant).
 
-**`App::on_key` dispatches on `Mode`** (`shiki-tui/src/app.rs`) — `Insert` routes to
+**`App::on_key` dispatches on `Mode`** (`shiki-tui/src/key_handlers.rs`) — `Insert` routes to
 `handle_insert_key` (drives `InputBox` for new note/notebook, rename, jump-search, set-remote, and
 move-to-notebook), `Edit` routes to `handle_edit_key` (forwards keys into the `tui-textarea`-backed
 `InlineEditor`, `Esc` saves and exits), `Normal`/`Visual` route to `handle_normal_key`. A delete
@@ -705,9 +709,7 @@ calls to disable raw mode / leave the alternate screen, spawn the editor via
 `shiki_core::editor::command_for` (splits multi-word commands like `"code --wait"`), and restore
 the terminal. The theme picker (leader+`c`) live-previews by mutating `self.theme` as you move the
 cursor and only persists to `config.toml` on `Enter`; `Esc` reverts to
-`available_themes[theme_index]`. `shiki-tui/src/command.rs`'s `CommandPalette` is still unused
-dead code — the notes-scope search (`/`) and global search (leader+`g`) were both built directly
-in `App` instead.
+`available_themes[theme_index]`.
 
 The scratchpad (`leader+p`) is intentionally an in-memory `InlineEditor`, not a temporary file:
 notebooks are independent git repositories and any file placed inside one can be picked up by
@@ -1419,9 +1421,10 @@ list with no error (the caller's `.ok().unwrap_or_default()` swallowed the failu
 stay on disk and under git untouched; they just won't appear as notes until they have frontmatter.
 
 **`KeyMaps` matches on `KeyCode` only, not the full `KeyEvent`.** Don't change this back to keying
-on `KeyEvent`/comparing `KeyModifiers` — Shift-based bindings (`A`, `E`, `T`, `P`, `R` by default)
-are configured as plain uppercase chars with no modifier syntax in `config.toml`, so matching must
-stay modifier-agnostic or those bindings silently stop firing.
+on `KeyEvent`/comparing `KeyModifiers` — Shift-based bindings (the shipped defaults `B`, `D`, `E`,
+`G`, `H`, `M`, `P`, `R`, `T`, `U`) are configured as plain uppercase chars with no modifier syntax
+in `config.toml`, so matching must stay modifier-agnostic or those bindings silently stop firing.
+`shiki-tui/src/keybindings.rs::tests` guards this invariant.
 
 **Config/data locations**: resolved via `directories::ProjectDirs::from("", "", "shiki")`
 (`Config::default_path`, `Config::default_data_dir`, `Config::default_templates_dir` in
@@ -1719,10 +1722,17 @@ supposed to answer "are you there" as fast as the TCP handshake itself. Reply is
 enabled`/`OK disabled`, never `ERR` — being asked for status isn't itself a failure state, unlike an
 actual capture attempt.
 
-**`--daily` reuses `shiki_core::daily::create_or_open` on both sides of the daemon boundary
-(`shiki-tui/src/capture.rs::capture_into_daily` and `shiki-cli/src/commands/capture.rs::
-capture_into_daily`, two call sites, same underlying primitive)** — same template/agenda-on-
-creation behavior the `t` keybinding and `shiki daily` already have, since a daily note capture is
+**The capture pipeline itself lives in `shiki-core/src/capture.rs`, shared by all three
+clients** — CLI (`shiki-cli/src/commands/capture.rs`), TUI daemon (`shiki-tui/src/capture.rs`) and
+native host (`shiki-native-host`) each used to carry near-identical private copies of
+`with_source`/`build_capture_request`/`capture_into_new_note`/`capture_into_templated`/
+`capture_into_daily`; keeping them in core means a fix can't land in one client and miss another
+(that's how the native host's port-file parser — now `capture::parse_port_file` — silently failed
+on the real `"{port} {pid}"` format). Callers still resolve their own encryption/passphrase state
+and pass a `Notebook` that already carries its crypto; the core functions only save through
+`note.save_with_crypto(nb.crypto.as_ref())`. `--daily` reuses `shiki_core::daily::create_or_open`
+through `capture::capture_into_daily` — same template/agenda-on-creation behavior the `t`
+keybinding and `shiki daily` already have, since a daily note capture is
 just "open or create today's daily the normal way, then append one more line." The agenda section
 is still only injected on first creation, never on an append to an already-existing daily, per
 `create_or_open`'s own existing contract — appending a bullet is not a "recreate the daily" event.
@@ -1771,7 +1781,7 @@ path on the first bad segment (`..`, empty, embedded separator) — same per-com
 separated segment of a multi-level path, so `--folder ../../etc` fails loudly instead of writing
 somewhere outside the notebook.
 
-**`LastCapture` (`shiki-config/src/last_capture.rs`) is a one-slot record, not a stack — undoing
+**`LastCapture` (`shiki-core/src/last_capture.rs`) is a one-slot record, not a stack — undoing
 only ever reverses the single most recent capture, matching the TUI's own `leader+u` (undo delete),
 which is also one level deep.** It's a plain TOML file (`Config::default_last_capture_path()`,
 same collision reasoning as every other fixed file in the config dir), written by *both*

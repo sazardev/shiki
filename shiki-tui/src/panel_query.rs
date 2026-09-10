@@ -18,16 +18,7 @@ use crate::icons;
 use crate::render::{hex_to_color, panel_block};
 
 pub(crate) fn yaml_cell_text(v: &serde_yaml::Value) -> String {
-    match v {
-        serde_yaml::Value::String(s) => s.clone(),
-        serde_yaml::Value::Number(n) => n.to_string(),
-        serde_yaml::Value::Bool(b) => b.to_string(),
-        serde_yaml::Value::Null => String::new(),
-        other => serde_yaml::to_string(other)
-            .unwrap_or_default()
-            .trim()
-            .to_string(),
-    }
+    shiki_core::query::yaml_value_to_string(v)
 }
 
 pub fn render(frame: &mut Frame, frame_area: Rect, app: &App) {

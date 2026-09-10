@@ -329,7 +329,11 @@ pub fn parse(input: &str) -> Result<Query, QueryError> {
 // Evaluation
 // ---------------------------------------------------------------------
 
-fn yaml_value_to_string(v: &serde_yaml::Value) -> String {
+/// Renders any YAML value as a single display string: scalars plainly,
+/// everything else via YAML serialization trimmed to one line — shared by
+/// the query modal (`panel_query`) and `shiki query`'s own table printer so
+/// a value can't render differently in the two surfaces.
+pub fn yaml_value_to_string(v: &serde_yaml::Value) -> String {
     match v {
         serde_yaml::Value::String(s) => s.clone(),
         serde_yaml::Value::Number(n) => n.to_string(),

@@ -12,3 +12,98 @@ pub fn on_path(bin: &str) -> bool {
     };
     std::env::split_paths(&path_var).any(|dir| dir.join(bin).is_file())
 }
+
+/// Expands a leading `~` (or `~/...`) to the user's home directory; anything
+/// else — including a plain `/absolute` or `./relative` path — is returned
+/// unchanged for the caller to resolve against the current directory
+/// itself. A `~` that can't be resolved (no home directory at all) also
+/// comes back unchanged, so a caller can decide whether that's an error or
+/// just something to pass along.
+pub fn expand_home(path: &str) -> std::path::PathBuf {
+    if let Some(rest) = path.strip_prefix('~') {
+        if let Some(home) = directories::BaseDirs::new().map(|d| d.home_dir().to_path_buf()) {
+            let rest = rest.strip_prefix('/').unwrap_or(rest);
+            return if rest.is_empty() {
+                home
+            } else {
+                home.join(rest)
+            };
+        }
+    }
+    std::path::PathBuf::from(path)
+}
+
+/// Whether `pid` is still a live process.
+///
+/// On Unix, `kill(pid, 0)` sends no signal but performs the usual permission
+/// checks: success or a permission error both mean the process exists (we
+/// may just not be allowed to signal it), while `ESRCH` means no such
+/// process. On Windows there's no cheap equivalent, so this conservatively
+/// reports `true` — a stale capture-daemon port file is then caught by the
+/// TCP connect timeout instead (the user-visible symptom is still handled,
+/// just not the file cleanup done here on Unix).
+pub fn is_pid_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        if pid == 0 || pid > i32::MAX as u32 {
+            return false;
+        }
+        // SAFETY: signal 0 performs no signal delivery, and `pid` was
+        // range-checked above.
+        let ret = unsafe { libc::kill(pid as i32, 0) };
+        if ret == 0 {
+            return true;
+        }
+        std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+    }
+    #[cfg(windows)]
+    {
+        let _ = pid;
+        true
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = pid;
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn current_process_is_alive() {
+        assert!(is_pid_alive(std::process::id()));
+    }
+
+    #[test]
+    fn expand_home_leaves_non_tilde_paths_untouched() {
+        assert_eq!(
+            expand_home("/abs/path"),
+            std::path::PathBuf::from("/abs/path")
+        );
+        assert_eq!(
+            expand_home("./relative"),
+            std::path::PathBuf::from("./relative")
+        );
+    }
+
+    #[test]
+    fn expand_home_expands_a_tilde_when_a_home_exists() {
+        // The sandbox/CI always has a home directory, so this asserts the
+        // expansion path; the no-home fallback is the untouched-path branch
+        // covered above.
+        if let Some(home) = directories::BaseDirs::new().map(|d| d.home_dir().to_path_buf()) {
+            assert_eq!(expand_home("~"), home);
+            assert_eq!(expand_home("~/notes"), home.join("notes"));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn nonexistent_pid_is_not_alive() {
+        // u32::MAX is not a valid pid on any real system.
+        assert!(!is_pid_alive(u32::MAX));
+    }
+}

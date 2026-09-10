@@ -40,7 +40,7 @@ jobs:
       # Matrixed rather than ubuntu-only: shiki-core/src/editor.rs has
       # `#[cfg(target_os = "macos")]`/`#[cfg(target_os = "windows")]` blocks
       # that an ubuntu-only clippy run would never actually lint.
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
   theme-drift:
     name: theme drift (Rust vs docs)
@@ -91,5 +91,5 @@ jobs:
       - if: matrix.os == 'ubuntu-latest'
         name: Install Linux Tauri system deps
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev
-      - run: cargo check --workspace
-      - run: cargo test --workspace
+      - run: cargo check --workspace --locked
+      - run: cargo test --workspace --locked

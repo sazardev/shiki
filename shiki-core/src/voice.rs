@@ -21,6 +21,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+use sha2::{Digest, Sha256};
+
 use crate::{process::on_path, Error, Result};
 
 /// The default whisper.cpp model — a ~140 MB English-only `base` model,
@@ -33,6 +35,11 @@ const WHISPER_REPO: &str = "whisper.cpp";
 /// whisper.cpp's converted models live in a Hugging Face repo (its own
 /// `models/download-ggml-model.sh` uses the same `resolve/main` URL).
 const MODEL_BASE_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
+/// The `/raw/…` twin of `MODEL_BASE_URL`: same repo and path, but serving
+/// the small git-lfs pointer (which carries the file's sha256 and size)
+/// instead of the multi-megabyte resolved model. Used purely to learn the
+/// expected digest before trusting a download.
+const MODEL_RAW_BASE_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/raw/main";
 
 fn bin_file_name() -> &'static str {
     if cfg!(windows) {
@@ -264,13 +271,115 @@ pub fn ensure_whisper(cache_dir: &Path) -> Result<PathBuf> {
 /// Ensures `model` (e.g. `ggml-base.en.bin`) is present in `model_dir`,
 /// downloading it from Hugging Face once via `curl`/`wget` if missing.
 /// Returns the path to the model file.
+///
+/// The download is verified against the sha256 Hugging Face publishes for
+/// the file (the repo's git-lfs pointer) before it's renamed into place — a
+/// corrupt or substituted model is removed and reported, never handed to
+/// `whisper-cli`.
 pub fn ensure_model(model_dir: &Path, model: &str) -> Result<PathBuf> {
+    validate_model_name(model)?;
     std::fs::create_dir_all(model_dir)?;
     let path = model_dir.join(model);
     if path.is_file() {
         return Ok(path);
     }
+    download_verified(model_dir, model)?;
+    Ok(path)
+}
 
+/// `model` is joined straight onto `model_dir` and interpolated into the
+/// download URL, so it has to be a bare `ggml-*.bin` filename: no path
+/// separators and no `..` (which would let a crafted value write outside
+/// `model_dir`), nothing that could turn the URL into a different path.
+fn validate_model_name(model: &str) -> Result<()> {
+    let valid = model.starts_with("ggml-")
+        && model.ends_with(".bin")
+        && !model.contains(['/', '\\'])
+        && !model.contains("..");
+    if valid {
+        Ok(())
+    } else {
+        Err(Error::Voice(format!(
+            "invalid model name '{model}' \u{2014} expected a bare 'ggml-*.bin' filename"
+        )))
+    }
+}
+
+/// Parses the git-lfs pointer text Hugging Face serves for a model into
+/// `(sha256_hex, size_bytes)`. `None` for anything that isn't a well-formed
+/// pointer.
+fn parse_lfs_pointer(text: &str) -> Option<(String, u64)> {
+    let mut oid = None;
+    let mut size = None;
+    for line in text.lines() {
+        if let Some(hex) = line.strip_prefix("oid sha256:") {
+            oid = Some(hex.trim());
+        } else if let Some(n) = line.strip_prefix("size ") {
+            size = n.trim().parse::<u64>().ok();
+        }
+    }
+    let oid = oid?;
+    if oid.len() != 64 || !oid.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some((oid.to_ascii_lowercase(), size?))
+}
+
+fn sha256_file(path: &Path) -> Result<String> {
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+/// Downloads the git-lfs pointer for `model` and returns its expected
+/// digest. Fails closed: when the pointer can't be fetched or doesn't look
+/// like one, the model is not downloaded at all — installing something
+/// unverified is the exact failure mode this exists to prevent.
+fn fetch_expected_digest(model_dir: &Path, model: &str) -> Result<(String, u64)> {
+    let url = format!("{MODEL_RAW_BASE_URL}/{model}");
+    let ptr = model_dir.join(format!("{model}.ptr"));
+    if curl_download(&url, &ptr).is_err() && wget_download(&url, &ptr).is_err() {
+        let _ = std::fs::remove_file(&ptr);
+        return Err(Error::Voice(format!(
+            "could not fetch integrity metadata for '{model}' from {url} \u{2014} need curl or wget on $PATH"
+        )));
+    }
+    let result = std::fs::metadata(&ptr)
+        .and_then(|m| {
+            // A real pointer is a handful of lines; a much larger response
+            // means this path didn't resolve to one, so refuse instead of
+            // parsing a multi-megabyte body.
+            if m.len() > 4096 {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "integrity metadata is not a git-lfs pointer",
+                ))
+            } else {
+                std::fs::read_to_string(&ptr)
+            }
+        })
+        .map_err(Error::from)
+        .and_then(|text| {
+            parse_lfs_pointer(&text).ok_or_else(|| {
+                Error::Voice(format!(
+                    "unexpected integrity metadata for '{model}' \u{2014} refusing to install an unverified model"
+                ))
+            })
+        });
+    let _ = std::fs::remove_file(&ptr);
+    result
+}
+
+fn download_verified(model_dir: &Path, model: &str) -> Result<()> {
+    let (expected_hash, expected_size) = fetch_expected_digest(model_dir, model)?;
     let url = format!("{MODEL_BASE_URL}/{model}");
     let tmp = model_dir.join(format!("{model}.part"));
     if curl_download(&url, &tmp).is_err() && wget_download(&url, &tmp).is_err() {
@@ -279,8 +388,26 @@ pub fn ensure_model(model_dir: &Path, model: &str) -> Result<PathBuf> {
             "could not download whisper model '{model}' from {url} \u{2014} need curl or wget on $PATH"
         )));
     }
-    std::fs::rename(&tmp, &path)?;
-    Ok(path)
+    let checked = std::fs::metadata(&tmp)
+        .map(|m| m.len())
+        .map_err(Error::from)
+        .and_then(|size| sha256_file(&tmp).map(|hash| (size, hash)));
+    match checked {
+        Ok((size, hash)) if size == expected_size && hash == expected_hash => {
+            std::fs::rename(&tmp, model_dir.join(model))?;
+            Ok(())
+        }
+        Ok((size, hash)) => {
+            let _ = std::fs::remove_file(&tmp);
+            Err(Error::Voice(format!(
+                "integrity check failed for '{model}' (expected {expected_size} bytes sha256:{expected_hash}, got {size} bytes sha256:{hash}) \u{2014} download removed"
+            )))
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp);
+            Err(e)
+        }
+    }
 }
 
 fn curl_download(url: &str, dest: &Path) -> Result<()> {
@@ -362,5 +489,82 @@ mod tests {
     fn default_model_is_a_ggml_bin() {
         assert!(DEFAULT_MODEL.starts_with("ggml-"));
         assert!(DEFAULT_MODEL.ends_with(".bin"));
+    }
+
+    #[test]
+    fn validate_model_name_accepts_the_real_models() {
+        assert!(validate_model_name(DEFAULT_MODEL).is_ok());
+        assert!(validate_model_name("ggml-large-v3-turbo.bin").is_ok());
+    }
+
+    #[test]
+    fn validate_model_name_rejects_traversal_and_non_models() {
+        for bad in [
+            "../ggml-base.en.bin",
+            "../evil.bin",
+            "ggml-../evil.bin",
+            "ggml-base/other.bin",
+            "ggml-base\\other.bin",
+            "evil.bin",
+            "ggml-base.en",
+            "",
+            "ggml-base.en.bin/../../x",
+        ] {
+            assert!(
+                validate_model_name(bad).is_err(),
+                "expected '{bad}' to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_lfs_pointer_reads_oid_and_size() {
+        let pointer = "version https://git-lfs.github.com/spec/v1\n\
+oid sha256:a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002\n\
+size 147964211\n";
+        assert_eq!(
+            parse_lfs_pointer(pointer),
+            Some((
+                "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002".to_string(),
+                147_964_211
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_lfs_pointer_normalizes_uppercase_hex() {
+        let pointer =
+            "oid sha256:A03779C86DF3323075F5E796CB2CE5029F00EC8869EEE3FDFB897AFE36C6D002\nsize 3\n";
+        let (hash, size) = parse_lfs_pointer(pointer).unwrap();
+        assert_eq!(
+            hash,
+            "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
+        );
+        assert_eq!(size, 3);
+    }
+
+    #[test]
+    fn parse_lfs_pointer_rejects_non_pointers() {
+        assert_eq!(parse_lfs_pointer(""), None);
+        assert_eq!(parse_lfs_pointer("<!doctype html><html>…"), None);
+        // Truncated oid and missing size are both malformed.
+        assert_eq!(parse_lfs_pointer("oid sha256:abc\nsize 10\n"), None);
+        assert_eq!(
+            parse_lfs_pointer(
+                "oid sha256:a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002\n"
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn sha256_file_matches_a_known_vector() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("abc.bin");
+        std::fs::write(&path, b"abc").unwrap();
+        assert_eq!(
+            sha256_file(&path).unwrap(),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
     }
 }

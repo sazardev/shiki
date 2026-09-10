@@ -158,7 +158,7 @@ pub fn commit_all(path: &Path, message: &str) -> Result<bool> {
 
     let signature = repo
         .signature()
-        .unwrap_or_else(|_| Signature::now("shiki", "shiki@localhost").unwrap());
+        .or_else(|_| Signature::now("shiki", "shiki@localhost"))?;
 
     let parents: Vec<_> = repo
         .head()
@@ -383,7 +383,7 @@ fn finalize_merge_commit(repo: &Repository, their: &git2::Oid, message: &str) ->
     let tree = repo.find_tree(tree_id)?;
     let signature = repo
         .signature()
-        .unwrap_or_else(|_| Signature::now("shiki", "shiki@localhost").unwrap());
+        .or_else(|_| Signature::now("shiki", "shiki@localhost"))?;
     let our_commit = repo.head()?.peel_to_commit()?;
     let their_commit = repo.find_commit(*their)?;
     repo.commit(

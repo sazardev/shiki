@@ -28,7 +28,7 @@ pub fn obsidian(
     convert_tags: bool,
     git_init: bool,
 ) -> Result<()> {
-    let src = expand_home(raw_path)?;
+    let src = shiki_core::process::expand_home(raw_path.trim());
     anyhow::ensure!(
         src.is_dir(),
         "'{}' isn't a directory (pass the vault's root folder)",
@@ -336,7 +336,7 @@ fn rewrite_notion_links(body: &str, titles: &BTreeMap<String, String>) -> (Strin
 }
 
 pub fn notion(store: &NotebookStore, raw_path: &str, name: Option<&str>) -> Result<()> {
-    let src = expand_home(raw_path)?;
+    let src = shiki_core::process::expand_home(raw_path.trim());
     anyhow::ensure!(src.exists(), "'{}' doesn't exist", src.display());
 
     // Zip exports get unpacked into a throwaway dir; everything downstream
@@ -488,25 +488,6 @@ fn extract_zip(zip_path: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-/// `~/…` expansion for the source path argument — imports usually come from
-/// somewhere in the home directory and shell quoting varies.
-fn expand_home(raw: &str) -> Result<PathBuf> {
-    let trimmed = raw.trim();
-    if trimmed == "~" || trimmed.starts_with("~/") {
-        let home = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .context("could not resolve '~' (no HOME set)")?;
-        let expanded = if trimmed == "~" {
-            PathBuf::from(home)
-        } else {
-            PathBuf::from(home).join(trimmed.trim_start_matches("~/"))
-        };
-        Ok(expanded)
-    } else {
-        Ok(PathBuf::from(trimmed))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -547,14 +528,6 @@ mod tests {
             "{out}"
         );
         assert!(out.contains("[an image](pic.png)"), "{out}");
-    }
-
-    #[test]
-    fn home_expansion_expands_tilde_prefixes_only() {
-        assert_eq!(
-            expand_home("/abs/path").unwrap(),
-            PathBuf::from("/abs/path")
-        );
     }
 
     #[test]
