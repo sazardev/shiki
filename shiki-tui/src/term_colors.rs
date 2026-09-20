@@ -102,6 +102,12 @@ pub fn query_fg_bg() -> Option<(Color, Color)> {
 /// tty. Either reply missing (or unparseable) means the whole query is
 /// treated as failed — a half-known pair would blend against the wrong
 /// background.
+///
+/// `cfg(any(unix, test))`: on Windows nothing in a normal build calls this
+/// (there's no `/dev/tty` query), but the unit tests still exercise the
+/// parser on every platform — without the `test` half, `-D dead-code` fails
+/// the Windows clippy job.
+#[cfg(any(unix, test))]
 fn parse_fg_bg(bytes: &[u8]) -> Option<(Color, Color)> {
     let fg = parse_response(bytes, 10)?;
     let bg = parse_response(bytes, 11)?;
@@ -110,6 +116,7 @@ fn parse_fg_bg(bytes: &[u8]) -> Option<(Color, Color)> {
 
 /// Finds `ESC ] <code> ;` in `bytes` and parses the payload up to the first
 /// `BEL` or `ESC \` (ST) terminator.
+#[cfg(any(unix, test))]
 fn parse_response(bytes: &[u8], code: u8) -> Option<Color> {
     let prefix = format!("\x1b]{code};");
     let start = bytes
@@ -132,6 +139,7 @@ fn parse_response(bytes: &[u8], code: u8) -> Option<Color> {
 /// The two color specs terminals actually reply with: xterm-style
 /// `rgb:RRRR/GGGG/BBBB` (each component 1-4 hex digits, scaled to 8 bits)
 /// and the CSS-style `#RRGGBB` some terminals use.
+#[cfg(any(unix, test))]
 fn parse_color_spec(spec: &str) -> Option<(u8, u8, u8)> {
     if let Some(rest) = spec.strip_prefix("rgb:") {
         let mut parts = rest.split('/');
@@ -166,6 +174,7 @@ fn parse_color_spec(spec: &str) -> Option<(u8, u8, u8)> {
 
 /// `"18"` -> `0x18`, `"1818"` -> `0x18`, `"f"` -> `0xff` — OSC components
 /// carry their own bit depth, so scale each to the full 0-255 range.
+#[cfg(any(unix, test))]
 fn scale_hex(component: &str) -> Option<u8> {
     if component.is_empty() || component.len() > 4 {
         return None;
