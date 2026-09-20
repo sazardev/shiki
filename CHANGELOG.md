@@ -62,6 +62,9 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ### Security
 
+- **Updated `rustls` 0.23.43 → 0.23.45** (transitive via `reqwest`/`self_update`) to clear
+  RUSTSEC-2026-0285 — TLS 1.3 handshake messages incorrectly accepted across encryption-level
+  boundaries (medium). Its `aws-lc-rs`/`rustls-webpki` transitive deps moved with it.
 - Verified whisper model downloads (sha256) instead of renaming an unchecked 148 MB download into
   place.
 
