@@ -6,6 +6,23 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-09-20
+
+### Added
+
+- **The `default` (terminal-inherit) theme's selected-row highlight now adapts to the terminal's own
+  color scheme** instead of a fixed ANSI `darkgray` that could be invisible against one palette and
+  drown out the row's accent text on another (on Ghostty's *Aether* it resolved to `#ad2222` on
+  `#4b515b`, ~1.15:1). `selection` accepts a new `"auto"` value — a 20%-alpha blend of the theme's
+  `fg` over its `bg`, precomputed because SGR has no alpha — which `default` now uses; since both
+  its `fg`/`bg` slots are `"reset"`, the app queries the terminal's real fg/bg over OSC 10/11 once
+  at startup (`/dev/tty`, 120 ms budget, late replies drained so they can't leak in as keystrokes)
+  and falls back to the previous fixed gray when the terminal doesn't answer (tmux without
+  passthrough, non-VT consoles, Windows). Selected-row text on that theme now uses `fg` instead of
+  `accent`, which is readable on a band derived from `fg` by construction. Every hex palette keeps
+  its own hand-picked `selection` untouched, and an explicit `theme.overrides.selection` still
+  wins.
+
 ### Changed
 
 - **The capture pipeline now lives once in `shiki-core::capture`** — the CLI, the in-TUI daemon and
