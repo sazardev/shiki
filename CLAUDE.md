@@ -406,7 +406,25 @@ is why every theme looked "flat"/less faithful than the same palette elsewhere (
 none of them were using their own `selection` color for the one thing it's for. Fixed by adding
 `.bg(hex_to_color(&theme.selection))` to every one of those `.highlight_style(...)` calls (verified
 by inspecting live ANSI output via `tmux capture-pane -e`, not just visually — e.g. gruvbox-dark's
-selected row now carries `48;2;60;56;54`, exactly `#3c3836`).
+selected row now carries `48;2;60;56;54`, exactly `#3c3836`). Those ~29 call sites now resolve
+through `App::selection_bg()`/`App::selection_fg()` instead of reading the slot inline — see the
+`"auto"` paragraph below.
+
+**The `default` (terminal-inherit) theme's `selection` is `"auto"`, not a color.** SGR has no
+alpha, so "the text color at 20%" is precomputed: `render::selection_bg` blends the theme's `fg`
+over its `bg` at 20% (integer math, `term_colors::SELECTION_ALPHA_PERCENT`) — and since `default`
+has both slots as `"reset"`, `shiki-cli/src/tui.rs` queries the terminal's real fg/bg over
+OSC 10/11 once at startup (`shiki-tui/src/term_colors.rs`: `/dev/tty` directly, not stdin, so a
+reply that loses the race with the 120 ms timeout can't be misparsed by crossterm as `Alt+]` plus
+stray characters; a final non-blocking drain catches late ones) and `App::set_terminal_colors`
+stores the pair. A terminal that never answers (tmux without `allow-passthrough`, a non-VT console,
+Windows) falls back to the old fixed `DarkGray`, so nothing regresses. `selection_fg` returns the
+theme's `fg` instead of `accent` for `"auto"`: `default`'s `accent` is a bare ANSI name (`blue`)
+whose palette entry can be nearly the same darkness as the band — Ghostty's *Aether* scheme
+resolves it to `#ad2222`, ~1.6:1 against the blend — while `fg` on a band derived from `fg` is
+readable by construction. Only `default` uses `"auto"` (`only_terminal_default_uses_auto_selection`
+enforces it): every hex palette's hand-picked `selection` value is already this same subtle band,
+and changing them would be a visual regression, not a fix.
 
 **Gruvbox's `accent`/`link` are its iconic yellow (`#fabd2f` dark, `#b57614` light), not blue —
 every other included theme already sets `accent == link`, gruvbox was the one outlier still

@@ -19,7 +19,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     // so the whole selection reads as a band while the actual cursor row
     // still stands out more, via `highlight_style` overriding this for
     // whichever one row `ListState::select` points at.
-    let visual_bg = hex_to_color(&app.theme.selection);
+    let visual_bg = app.selection_bg();
 
     let items: Vec<ListItem> = if total == 0 {
         vec![ListItem::new("  no notes yet — press `a` to create one")
@@ -97,8 +97,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .block(panel_block(Line::from(title), focused, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(hex_to_color(&app.theme.accent))
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(highlight_symbol.as_str());

@@ -85,8 +85,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(hex_to_color(&app.theme.accent))
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(highlight_symbol.as_str());

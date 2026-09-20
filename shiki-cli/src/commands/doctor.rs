@@ -813,13 +813,16 @@ fn check_theme_health(config: &Config, r: &mut Report) {
 
 /// Same set of values `shiki-tui::render::hex_to_color` accepts: a known
 /// ANSI name, `"reset"`/empty, or a 6-digit hex string (with or without a
-/// leading `#`). Kept independent of `render::hex_to_color` itself (which
+/// leading `#`) — plus `"auto"`, which only `selection` uses (a derived
+/// 20%-alpha fg-over-bg blend; see `render::selection_bg`), so a config that
+/// opts into it isn't warned about as an unrecognized color.
+/// Kept independent of `render::hex_to_color` itself (which
 /// lives in `shiki-tui` and has no "was this valid" return value, only a
 /// color to fall back to) rather than trying to reuse it here.
 fn is_valid_color_value(value: &str) -> bool {
     match value.to_ascii_lowercase().as_str() {
         "reset" | "" | "black" | "red" | "green" | "yellow" | "blue" | "magenta" | "cyan"
-        | "white" | "gray" | "grey" | "darkgray" | "darkgrey" => return true,
+        | "white" | "gray" | "grey" | "darkgray" | "darkgrey" | "auto" => return true,
         _ => {}
     }
     let hex = value.trim_start_matches('#');

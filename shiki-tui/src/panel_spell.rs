@@ -59,8 +59,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(accent)
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol("▸ ");
@@ -82,7 +82,6 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 pub fn render_suggestions(frame: &mut Frame, area: Rect, app: &App) {
     let fg = hex_to_color(&app.theme.fg);
     let muted = hex_to_color(&app.theme.muted);
-    let accent = hex_to_color(&app.theme.accent);
 
     let Some(miss) = app
         .spell_report
@@ -106,8 +105,8 @@ pub fn render_suggestions(frame: &mut Frame, area: Rect, app: &App) {
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(accent)
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol("▸ ");

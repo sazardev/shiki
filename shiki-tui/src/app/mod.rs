@@ -33,6 +33,12 @@ pub(crate) use types::{
 pub struct App {
     pub config: Config,
     pub theme: Theme,
+    /// The terminal's own foreground/background colors, queried once at TUI
+    /// startup over OSC 10/11 (`term_colors::query_fg_bg`), or `None` when
+    /// the terminal never answered. Only consumed by the `"auto"` selection
+    /// slot of the terminal-inherit theme — see `render::selection_bg`; the
+    /// 36 hex palettes ignore it entirely.
+    pub terminal_colors: Option<(Color, Color)>,
     pub store: NotebookStore,
     pub notebooks: Vec<Notebook>,
     pub selected_notebook: usize,
@@ -856,6 +862,7 @@ impl App {
         let mut app = Self {
             config,
             theme,
+            terminal_colors: None,
             store,
             notebooks,
             selected_notebook: 0,
@@ -1382,6 +1389,30 @@ impl App {
         } else {
             Some(self.notes_path.join(" / "))
         }
+    }
+
+    /// Hands `App` the terminal's own fg/bg from the one startup OSC 10/11
+    /// query (`shiki-cli/src/tui.rs`) — a separate setter rather than an
+    /// `App::new` parameter because the query is real terminal I/O that has
+    /// no place in unit tests, and because it's only needed by the `"auto"`
+    /// selection slot (see `render::selection_bg`).
+    pub fn set_terminal_colors(&mut self, colors: Option<(Color, Color)>) {
+        self.terminal_colors = colors;
+    }
+
+    /// Background every selected/highlighted row should paint — the theme's
+    /// `selection` slot, or the derived 20%-alpha fg-over-bg band for the
+    /// terminal-inherit theme. One method so all ~29 list/table highlight
+    /// styles across the TUI resolve it identically.
+    pub fn selection_bg(&self) -> Color {
+        crate::render::selection_bg(&self.theme, self.terminal_colors)
+    }
+
+    /// Foreground for those same selected rows — `accent` except on the
+    /// terminal-inherit theme, where the band is derived from `fg` and
+    /// `accent` can be too close to it to read (see `render::selection_fg`).
+    pub fn selection_fg(&self) -> Color {
+        crate::render::selection_fg(&self.theme)
     }
 
     pub(crate) fn apply_sort(&mut self) {

@@ -1004,7 +1004,11 @@ Content in **markdown**.
         <code>tag</code>, <code>muted</code>. Slots accept <code>#rrggbb</code> hex, the terminal's
         native ANSI names (<code>red</code>, <code>blue</code>, <code>cyan</code>,
         <code>darkgray</code>, …), or <code>"reset"</code> to inherit the terminal's own default for
-        that slot.
+        that slot. <code>selection</code> additionally accepts <code>"auto"</code> — a 20%-alpha
+        blend of <code>fg</code> over <code>bg</code>; the <code>default</code> theme uses it
+        (querying the terminal's real fg/bg over OSC 10/11, falling back to a fixed gray when the
+        terminal doesn't answer) so the selected-row band always matches the system color scheme
+        instead of a fixed ANSI gray that can clash with it.
       </p>
       <figure class="doc-shot-card">
         <img data-shot="wide-05-theme-picker" width="1260" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="The theme picker modal with a live preview while browsing" />

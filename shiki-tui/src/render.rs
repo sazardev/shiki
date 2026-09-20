@@ -99,6 +99,64 @@ pub fn hex_to_color(value: &str) -> Color {
     Color::Rgb(r, g, b)
 }
 
+/// Background for every selected/highlighted row. Normally the theme's own
+/// `selection` slot; the terminal-inherit `default` theme sets it to `"auto"`
+/// instead, which derives the band from the theme's `fg` over its `bg` at
+/// 20% alpha — for that theme both slots are `"reset"`, so `term` (the
+/// terminal's real fg/bg, queried over OSC 10/11 at startup — see
+/// `term_colors::query_fg_bg`) supplies the RGB values to blend. A terminal
+/// that never answered falls back to the old fixed `DarkGray`, so an
+/// unsupported terminal renders exactly like it did before `"auto"` existed.
+pub fn selection_bg(theme: &Theme, term: Option<(Color, Color)>) -> Color {
+    if theme.selection != "auto" {
+        return hex_to_color(&theme.selection);
+    }
+    let fg = rgb_slot(&theme.fg, term.map(|(fg, _)| fg));
+    let bg = rgb_slot(&theme.bg, term.map(|(_, bg)| bg));
+    match (fg, bg) {
+        (Some(fg), Some(bg)) => {
+            let (r, g, b) = crate::term_colors::blend_fg_over_bg(
+                fg,
+                bg,
+                crate::term_colors::SELECTION_ALPHA_PERCENT,
+            );
+            Color::Rgb(r, g, b)
+        }
+        _ => Color::DarkGray,
+    }
+}
+
+/// Foreground for a selected/highlighted row: `accent` everywhere, except
+/// the `"auto"` terminal-inherit theme, which keeps the theme's own `fg`.
+/// `accent` there is a bare ANSI name (`blue`) whose palette entry can be
+/// nearly the same darkness as the selection band — on Ghostty's *Aether*
+/// scheme it resolves to `#ad2222`, ~1.6:1 against the blend. `fg` on a band
+/// derived from `fg` is readable by construction.
+pub fn selection_fg(theme: &Theme) -> Color {
+    if theme.selection == "auto" {
+        hex_to_color(&theme.fg)
+    } else {
+        hex_to_color(&theme.accent)
+    }
+}
+
+/// A theme slot's RGB value, resolving `"reset"` to `fallback` (the terminal
+/// query result) when one was supplied. ANSI names other than `reset` can't
+/// be blended against — their RGB is the terminal palette's, which the query
+/// doesn't return — so they resolve to `None` and `selection_bg` falls back.
+fn rgb_slot(value: &str, fallback: Option<Color>) -> Option<(u8, u8, u8)> {
+    if value.eq_ignore_ascii_case("reset") || value.is_empty() {
+        return match fallback {
+            Some(Color::Rgb(r, g, b)) => Some((r, g, b)),
+            _ => None,
+        };
+    }
+    match hex_to_color(value) {
+        Color::Rgb(r, g, b) => Some((r, g, b)),
+        _ => None,
+    }
+}
+
 /// Themed panel `Block`: fills bg/fg from the theme, uses a thicker accent
 /// border when focused and a plain square one otherwise. Shared by every
 /// panel and popup so the whole UI reads as one consistent surface instead of
@@ -1407,5 +1465,58 @@ mod tests {
         assert!(rendered.iter().any(|t| t.contains("a cat")), "{rendered:?}");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn hex_themes_keep_their_own_selection_color() {
+        let theme = shiki_config::themes::by_name("gruvbox-dark").unwrap();
+        assert_eq!(
+            selection_bg(&theme, None),
+            hex_to_color(&theme.selection),
+            "a non-auto theme must render its palette's selection untouched"
+        );
+        assert_eq!(selection_fg(&theme), hex_to_color(&theme.accent));
+        // Even a terminal query result doesn't override an explicit slot.
+        assert_eq!(
+            selection_bg(&theme, Some((Color::Rgb(1, 2, 3), Color::Rgb(4, 5, 6)))),
+            hex_to_color(&theme.selection)
+        );
+    }
+
+    #[test]
+    fn auto_selection_blends_fg_over_bg_at_20_percent() {
+        let theme = Theme::terminal_default();
+        let term = Some((Color::Rgb(0xb9, 0xbe, 0xc6), Color::Rgb(0x18, 0x1a, 0x1f)));
+        assert_eq!(selection_bg(&theme, term), Color::Rgb(0x38, 0x3b, 0x40));
+        // The selected row's text is the theme's fg, not the (possibly
+        // unreadable) accent.
+        assert_eq!(selection_fg(&theme), Color::Reset);
+    }
+
+    #[test]
+    fn auto_selection_without_terminal_colors_falls_back_to_darkgray() {
+        let theme = Theme::terminal_default();
+        assert_eq!(selection_bg(&theme, None), Color::DarkGray);
+        assert_eq!(
+            selection_bg(&theme, Some((Color::Reset, Color::Reset))),
+            Color::DarkGray,
+            "a Reset fallback carries no RGB to blend"
+        );
+    }
+
+    #[test]
+    fn auto_selection_blends_hex_fg_bg_without_a_query() {
+        let mut theme = Theme::terminal_default();
+        theme.fg = "#ebdbb2".into();
+        theme.bg = "#282828".into();
+        // 20% of #ebdbb2 over #282828.
+        assert_eq!(
+            selection_bg(&theme, None),
+            Color::Rgb(
+                ((0x28 * 80 + 0xeb * 20 + 50) / 100) as u8,
+                ((0x28 * 80 + 0xdb * 20 + 50) / 100) as u8,
+                ((0x28 * 80 + 0xb2 * 20 + 50) / 100) as u8,
+            )
+        );
     }
 }

@@ -33,6 +33,7 @@ pub(crate) mod spell_report;
 pub mod status_bar;
 pub(crate) mod sync;
 pub(crate) mod syntax;
+pub mod term_colors;
 pub(crate) mod term_image;
 pub mod tree;
 pub mod which;

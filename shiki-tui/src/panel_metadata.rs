@@ -59,7 +59,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let list = List::new(items)
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
+                .bg(app.selection_bg())
                 .fg(tag_color)
                 .add_modifier(Modifier::BOLD),
         )

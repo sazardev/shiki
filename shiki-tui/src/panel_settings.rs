@@ -850,7 +850,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let items: Vec<ListItem> = lines.into_iter().map(ListItem::new).collect();
     let list = List::new(items).highlight_style(
         Style::default()
-            .bg(hex_to_color(&app.theme.selection))
+            .bg(app.selection_bg())
             .add_modifier(Modifier::BOLD),
     );
 

@@ -50,7 +50,6 @@ pub fn render(frame: &mut Frame, frame_area: Rect, app: &App) {
         &app.query_suggestions_visible,
         app.query_selected,
         app.query_error.as_deref(),
-        accent,
         true,
     );
 }
@@ -76,7 +75,6 @@ pub(crate) fn render_result_table(
     suggestions: &[crate::app::QuerySuggestion],
     selected: usize,
     error: Option<&str>,
-    accent: ratatui::style::Color,
     can_manage_saved: bool,
 ) {
     let muted = hex_to_color(&app.theme.muted);
@@ -106,8 +104,8 @@ pub(crate) fn render_result_table(
             .block(panel_block(Line::from(title), true, &app.theme))
             .highlight_style(
                 Style::default()
-                    .bg(hex_to_color(&app.theme.selection))
-                    .fg(accent)
+                    .bg(app.selection_bg())
+                    .fg(app.selection_fg())
                     .add_modifier(Modifier::BOLD),
             )
             .highlight_symbol(format!("{} ", icons::ARROW));
@@ -185,8 +183,8 @@ pub(crate) fn render_result_table(
         .block(panel_block(Line::from(title), true, &app.theme))
         .row_highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(accent)
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(format!("{} ", icons::ARROW));

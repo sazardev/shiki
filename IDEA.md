@@ -846,7 +846,12 @@ Each theme defines ~20 configurable color slots:
 `highlight`, `error`, `warning`, `success`, `inactive`,
 `scrollbar`, `tab_active`, `tab_inactive`, etc. Slots accept `#rrggbb` hex,
 the terminal's native ANSI names (`red`, `blue`, `cyan`, `darkgray`, …), or
-`"reset"` to inherit the terminal's own default for that slot.
+`"reset"` to inherit the terminal's own default for that slot. `selection`
+additionally accepts `"auto"` — a 20%-alpha blend of `fg` over `bg`; the
+`default` theme uses it (querying the terminal's real fg/bg over OSC 10/11,
+falling back to a fixed gray when the terminal doesn't answer) so the
+selected-row band always matches the system color scheme instead of a fixed
+ANSI gray that can clash with it.
 
 ---
 

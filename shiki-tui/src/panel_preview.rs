@@ -107,7 +107,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     if let (Some(_), Some(selection)) = (app.selected_note(), &app.preview_selection) {
         let start = selection.anchor_row.min(selection.current_row);
         let end = selection.anchor_row.max(selection.current_row);
-        let selection_bg = hex_to_color(&app.theme.selection);
+        let selection_bg = app.selection_bg();
         for line in lines.iter_mut().take(end + 1).skip(start) {
             for span in &mut line.spans {
                 span.style = span.style.bg(selection_bg);

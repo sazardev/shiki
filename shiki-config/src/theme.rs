@@ -5,6 +5,13 @@ use serde::{Deserialize, Serialize};
 /// `magenta`, `cyan`, `black`, `gray`/`grey`, `darkgray`/`darkgrey`), or
 /// `"reset"` to inherit whatever the terminal's own default color is —
 /// see `shiki-tui/src/render.rs::hex_to_color` for how these resolve.
+/// `selection` additionally accepts `"auto"`: derive the selected-row
+/// background from the theme's own `fg`/`bg` (the terminal's real colors,
+/// queried over OSC 10/11, when either slot is `"reset"`) as a 20%-alpha
+/// blend — see `shiki-tui/src/render.rs::selection_bg`. The `default`
+/// (terminal-inherit) theme uses it so its highlight always matches whatever
+/// the terminal's color scheme is instead of a fixed ANSI gray that can
+/// clash with it.
 /// Kept agnostic of ratatui/crossterm so shiki-config isn't coupled to the TUI.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Theme {
@@ -53,7 +60,13 @@ impl Theme {
             bg: "reset".into(),
             fg: "reset".into(),
             accent: "blue".into(),
-            selection: "darkgray".into(),
+            // "auto" instead of a fixed `darkgray`: the selected-row band is
+            // derived from the terminal's own fg/bg at 20% alpha (see
+            // `shiki-tui/src/render.rs::selection_bg`), so it matches the
+            // system color scheme by construction — a fixed ANSI gray can be
+            // nearly invisible against one palette and drown out `accent` on
+            // another.
+            selection: "auto".into(),
             border: "reset".into(),
             statusbar: "reset".into(),
             highlight: "yellow".into(),

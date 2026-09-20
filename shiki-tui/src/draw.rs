@@ -108,8 +108,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
                 .block(panel_block(Line::from(list_title), true, &app.theme))
                 .highlight_style(
                     Style::default()
-                        .bg(hex_to_color(&app.theme.selection))
-                        .fg(hex_to_color(&app.theme.accent))
+                        .bg(app.selection_bg())
+                        .fg(app.selection_fg())
                         .add_modifier(Modifier::BOLD),
                 )
                 .highlight_symbol(highlight_symbol.as_str());
@@ -151,8 +151,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
                 .block(panel_block(Line::from(list_title), true, &app.theme))
                 .highlight_style(
                     Style::default()
-                        .bg(hex_to_color(&app.theme.selection))
-                        .fg(hex_to_color(&app.theme.accent))
+                        .bg(app.selection_bg())
+                        .fg(app.selection_fg())
                         .add_modifier(Modifier::BOLD),
                 )
                 .highlight_symbol(highlight_symbol.as_str());
@@ -435,8 +435,8 @@ fn render_theme_picker(frame: &mut Frame, frame_area: Rect, app: &App) {
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(hex_to_color(&app.theme.accent))
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(highlight_symbol.as_str());
@@ -468,8 +468,8 @@ fn render_template_picker(frame: &mut Frame, frame_area: Rect, app: &App) {
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(hex_to_color(&app.theme.accent))
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(highlight_symbol.as_str());
@@ -522,8 +522,8 @@ fn render_global_search(frame: &mut Frame, frame_area: Rect, app: &App) {
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(hex_to_color(&app.theme.accent))
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(highlight_symbol.as_str());
@@ -561,7 +561,6 @@ fn render_global_search_query(frame: &mut Frame, input_area: Rect, list_area: Re
         &app.query_suggestions_visible,
         app.global_search_selected,
         app.global_search_query_error.as_deref(),
-        warning,
         false,
     );
 }
@@ -631,8 +630,8 @@ fn render_logs(frame: &mut Frame, frame_area: Rect, app: &App) {
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(hex_to_color(&app.theme.accent))
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(highlight_symbol.as_str());
@@ -682,8 +681,8 @@ fn render_tree(frame: &mut Frame, frame_area: Rect, app: &App) {
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(hex_to_color(&app.theme.accent))
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(highlight_symbol.as_str());
@@ -748,8 +747,8 @@ fn render_links(frame: &mut Frame, frame_area: Rect, app: &App) {
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(hex_to_color(&app.theme.accent))
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(highlight_symbol.as_str());
@@ -875,8 +874,8 @@ fn render_history(frame: &mut Frame, frame_area: Rect, app: &App) {
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(hex_to_color(&app.theme.accent))
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(highlight_symbol.as_str());
@@ -951,8 +950,8 @@ fn render_conflicts(frame: &mut Frame, frame_area: Rect, app: &App) {
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(hex_to_color(&app.theme.accent))
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(highlight_symbol.as_str());
@@ -1010,8 +1009,8 @@ fn render_slash_menu(
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(hex_to_color(&app.theme.accent))
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(highlight_symbol.as_str());
@@ -1091,8 +1090,8 @@ fn render_wikilink_menu(
         .block(panel_block(Line::from(title), true, &app.theme))
         .highlight_style(
             Style::default()
-                .bg(hex_to_color(&app.theme.selection))
-                .fg(hex_to_color(&app.theme.accent))
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(highlight_symbol.as_str());

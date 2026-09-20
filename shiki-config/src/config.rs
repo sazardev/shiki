@@ -1702,7 +1702,11 @@ fn section_comment(line: &str) -> Option<&'static str> {
 # [theme.overrides] — accent, bg, fg, selection, border, statusbar,
 # highlight, error, warning, success, inactive, scrollbar, tab_active,
 # tab_inactive, panel_title, cursor, link, tag, muted. Anything left unset
-# falls back to `name`'s own value for that slot. `shiki theme create
+# falls back to `name`'s own value for that slot. `selection` also accepts
+# \"auto\" — a 20%-alpha blend of `fg` over `bg`, which the terminal-inherit
+# `default` theme uses so its selected-row band matches the system color
+# scheme (the terminal's real fg/bg are queried over OSC 10/11 at startup;
+# unsupported terminals fall back to a fixed gray). `shiki theme create
 # [--from <theme>]` scaffolds all 19 here at once from a real palette,
 # instead of hand-typing hex codes with no example to copy from.
 # - icons: when false, every Nerd Font glyph falls back to plain text —

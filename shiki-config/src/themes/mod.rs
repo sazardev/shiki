@@ -136,12 +136,15 @@ mod tests {
     }
 
     /// The same accepted forms `shiki-tui/src/render.rs::hex_to_color`
-    /// resolves: `#rrggbb` hex, terminal ANSI names, or `"reset"`.
+    /// resolves — plus `"auto"`, which only `selection` uses (a derived
+    /// 20%-alpha fg-over-bg blend; see `render.rs::selection_bg`), so a
+    /// palette that sets it on any other slot would render as reset.
     fn is_valid_slot(value: &str) -> bool {
         let lower = value.to_ascii_lowercase();
         match lower.as_str() {
             "" | "reset" | "black" | "red" | "green" | "yellow" | "blue" | "magenta" | "cyan"
             | "white" | "gray" | "grey" | "darkgray" | "darkgrey" => return true,
+            "auto" => return true,
             _ => {}
         }
         let hex = value.trim_start_matches('#');
@@ -224,5 +227,20 @@ mod tests {
     #[test]
     fn catalog_has_37_themes() {
         assert_eq!(all().len(), 37);
+    }
+
+    /// Only the terminal-inherit `default` theme derives its selection from
+    /// the terminal's own colors; every hex palette keeps its hand-picked
+    /// `selection` value untouched.
+    #[test]
+    fn only_terminal_default_uses_auto_selection() {
+        assert_eq!(Theme::terminal_default().selection, "auto");
+        for theme in all().iter().filter(|t| t.name != "default") {
+            assert_ne!(
+                theme.selection, "auto",
+                "{} must keep an explicit selection color",
+                theme.name
+            );
+        }
     }
 }
