@@ -329,7 +329,7 @@
       <table class="ref-table">
         <thead><tr><th>Key</th><th>Action</th></tr></thead>
         <tbody>
-          <tr><td><code>a</code></td><td>New notebook. A git URL (<code>https://</code>, <code>git@host:...</code>, <code>ssh://</code>, <code>git://</code>) derives the notebook name from the repo instead, creates it, sets its remote, and pulls immediately — importing an existing repo is just <code>a</code> + paste URL + Enter. A filesystem path (<code>/abs/path</code>, <code>~/docs</code>, <code>./relative</code>) adopts that existing directory as a notebook instead of creating an empty one — name derived from the last path segment; asks to <code>git init</code> first if it isn't already a repo</td></tr>
+          <tr><td><code>a</code></td><td>New notebook — opens a "where from?" menu first: Local / GitHub / GitLab / Generic Git URL / SSH. <strong>Local</strong> asks for a name, same as before (a pasted git URL/path there still works too, as a fallback). <strong>GitHub</strong>/<strong>GitLab</strong> only ask for <code>owner/repo</code> — shiki builds the full URL, derives the notebook's name from the repo, sets the remote, and pulls immediately, no separate name question. <strong>Generic Git URL</strong> takes a full URL (<code>https://</code>, <code>git@host:...</code>, <code>ssh://</code>, <code>git://</code>) or a local path (<code>/abs/path</code>, <code>~/docs</code>, <code>./relative</code>, adopted as-is — name from the last path segment, asks to <code>git init</code> first if it isn't already a repo). <strong>SSH</strong> takes <code>host:path</code> or <code>user@host:path</code> (<code>git@</code> assumed if no user given), warning (non-blocking) if no SSH key/agent is detected. A failed attempt on any of these reopens the same prompt prefilled with what was typed instead of losing it</td></tr>
           <tr><td><code>r</code></td><td>Rename notebook</td></tr>
           <tr><td><code>d</code></td><td>Delete notebook (with confirmation)</td></tr>
           <tr><td><code>s</code></td><td>Git sync — commit (message auto-built from the diff, naming files directly for a small change, e.g. "shiki: added (First note.md)"), + push if the resolved policy's <code>auto_push</code> is on</td></tr>
@@ -337,8 +337,17 @@
           <tr><td><code>p</code></td><td>Git pull (fetch + fast-forward merge from the configured remote)</td></tr>
           <tr><td><code>P</code></td><td>Git pull for every notebook that has a remote configured</td></tr>
           <tr><td><code>R</code></td><td>Set the notebook's git remote (URL or local path)</td></tr>
+          <tr><td><code>Ctrl+C</code></td><td>Cancel whatever git operation (<code>s</code>/<code>u</code>/<code>p</code>/<code>P</code>, an auto-pull, or a new-notebook clone) is currently showing in the footer spinner — only intercepted while one is actually running</td></tr>
         </tbody>
       </table>
+      <p class="muted" style="max-width:70ch; font-size:0.88rem;">
+        The footer spinner shown while any of these run in the background also displays elapsed
+        seconds (<code>⠙ syncing 'notebook' (34s)…</code>), so a large clone/pull reads as "still
+        working" instead of looking indistinguishable from a hang. <code>Ctrl+C</code> doesn't
+        force-kill the underlying network call — that can't be done safely mid-flight — it just
+        stops waiting for it and frees the "only one op at a time" slot immediately; the abandoned
+        attempt may still finish quietly on disk, with its result simply discarded.
+      </p>
       <p class="muted" style="max-width:70ch; font-size:0.88rem;">
         Beyond manual <code>s</code>, a notebook can sync <strong>itself</strong> in the background:
         <code>[git] auto_sync = true</code> (off by default) syncs automatically every
@@ -347,7 +356,11 @@
         <code>auto_sync_every</code> can all be overridden per notebook under
         <code>[notebooks.&lt;name&gt;]</code>, falling back to the global <code>[git]</code> values
         for anything left unset. A failed push never blocks or loses anything — the commit already
-        happened locally either way, and the next sync attempt just tries the push again.
+        happened locally either way, and the next sync attempt just tries the push again. The other
+        direction — pulling — can also happen automatically: <code>[general] auto_pull_on_switch =
+        true</code> (off by default) pulls a notebook the first time it's selected each session,
+        provided it has a remote configured; silent when there's nothing to do, only a real pull
+        attempt shows up in the footer, same as manual <code>p</code>.
       </p>
 
       <div class="doc-callout">
@@ -1068,6 +1081,7 @@ Content in **markdown**.
           <tr><td><code>chafa_path</code></td><td><code>""</code></td><td>Absolute path to a <code>chafa</code> binary that isn't on <code>$PATH</code>; empty means look it up on <code>$PATH</code></td></tr>
           <tr><td><code>preview_image_scale</code></td><td><code>0.5</code></td><td>Fraction of the preview panel's width the rendered image art is drawn at (<code>(0.0, 1.0]</code>)</td></tr>
           <tr><td><code>attachments_dir</code></td><td><code>"attachments"</code></td><td>Folder (relative to the notebook root) where pasted clipboard images are saved; the inserted <code>![pasted-…](attachments/…)</code> link resolves from any note depth. An empty value falls back to <code>attachments</code></td></tr>
+          <tr><td><code>auto_pull_on_switch</code></td><td><code>false</code></td><td>Switching to a notebook that has a remote configured triggers a background pull automatically (same footer spinner as manual <code>p</code>), once per notebook per session</td></tr>
         </tbody>
       </table>
       <div class="doc-callout">

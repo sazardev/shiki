@@ -18,12 +18,15 @@
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::process::Command;
+use std::time::Duration;
 
 use sha2::{Digest, Sha256};
 
-use crate::{process::on_path, Error, Result};
+use crate::{
+    process::{on_path, run_with_timeout},
+    Error, Result,
+};
 
 /// The default whisper.cpp model — a ~140 MB English-only `base` model,
 /// the usual trade-off between transcription quality and CPU speed for a
@@ -64,64 +67,6 @@ pub fn recorder_available() -> bool {
 /// on first use), so doctor reports it as informational, not a failure.
 pub fn whisper_available(cache_dir: &Path) -> bool {
     on_path("whisper-cli") || cache_dir.join(bin_file_name()).is_file()
-}
-
-/// Outcome of one recorder attempt: whether it succeeded, plus its stderr
-/// (collected rather than inherited, so a failed attempt is silent and the
-/// reason is only surfaced if *every* recorder fails).
-struct RecorderResult {
-    success: bool,
-    stderr: String,
-}
-
-/// Runs `command`, killing it if it hasn't exited within `timeout` —
-/// std-only, so a recorder that hangs opening a missing audio device (a
-/// real failure mode: `ffmpeg -f pulse` blocks indefinitely with no
-/// PulseAudio/pipewire running) fails fast instead of wedging the whole
-/// capture.
-fn run_with_timeout(command: &mut Command, timeout: Duration) -> RecorderResult {
-    command.stdout(Stdio::null()).stderr(Stdio::piped());
-    let mut child = match command.spawn() {
-        Ok(c) => c,
-        Err(e) => {
-            return RecorderResult {
-                success: false,
-                stderr: format!("could not spawn: {e}"),
-            };
-        }
-    };
-    let start = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let mut buf = String::new();
-                if let Some(mut err) = child.stderr.take() {
-                    let _ = err.read_to_string(&mut buf);
-                }
-                return RecorderResult {
-                    success: status.success(),
-                    stderr: buf,
-                };
-            }
-            Ok(None) => {
-                if start.elapsed() > timeout {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return RecorderResult {
-                        success: false,
-                        stderr: format!("timed out after {}s", timeout.as_secs()),
-                    };
-                }
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            Err(e) => {
-                return RecorderResult {
-                    success: false,
-                    stderr: format!("{e}"),
-                };
-            }
-        }
-    }
 }
 
 /// Fast pre-check that a PulseAudio/pipewire socket actually exists on

@@ -185,8 +185,17 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     if let Some(label) = &app.sync_in_flight {
         spans.push(sep.clone());
         let frame = SPINNER_FRAMES[app.spinner_frame % SPINNER_FRAMES.len()];
+        // Elapsed seconds since this op actually started — the one piece of
+        // information that answers "is this just slow, or genuinely stuck?"
+        // for something as unbounded as a network clone/pull; the spinner
+        // moving proves the render loop itself is alive, but says nothing
+        // about how long the background op has actually been running.
+        let elapsed = app
+            .sync_started_at
+            .map(|t| t.elapsed().as_secs())
+            .unwrap_or(0);
         spans.push(Span::styled(
-            format!("{frame} syncing '{label}'…"),
+            format!("{frame} syncing '{label}' ({elapsed}s)…"),
             plain.fg(accent),
         ));
     } else if app.git_status.is_repo {

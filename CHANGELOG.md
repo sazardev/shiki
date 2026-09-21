@@ -23,6 +23,37 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   `[theme.notebooks]` name-only map is still read for configs written before this, just never
   written to anymore.
 
+- **New notebook (`a`) opens a "where from?" menu first, before asking for anything else** — Local /
+  GitHub / GitLab / Generic Git URL / SSH, instead of always asking for a plain name up front.
+  GitHub and GitLab only ask for `owner/repo`: shiki builds the full URL, derives the notebook's
+  name from the repo, sets the remote, and pulls immediately — no separate name question at all.
+  SSH takes `host:path` or `user@host:path` (defaults the user to `git`) and warns (non-blocking) if
+  no SSH key/agent is detected. Generic Git URL is the same free-text URL-or-local-path prompt this
+  flow always had, just reached via an explicit menu choice now; Local asks for a name exactly like
+  before. Picking GitHub also runs a silent, backgrounded `gh auth status`/`gh repo view`
+  reachability check and surfaces a warning if something looks wrong — advisory only, never blocks
+  the actual clone attempt. A failed attempt on any of these reopens the same prompt prefilled with
+  what was typed, instead of losing it — and now shows the actual error right below the input box,
+  in the theme's error color, instead of only in the (easily-missed, truncatable) footer status
+  line; the notebook itself is never at risk either way, since it isn't created until the prompt
+  actually succeeds. **The actual clone/pull no longer freezes the whole app with no feedback while
+  it runs** — it's backgrounded through the same spinner mechanism manual pull (`p`) already uses,
+  so a bad or slow remote shows "cloning '⟨name⟩'…" immediately, an animated spinner in the footer
+  for as long as it's actually trying, and a clear final message either way, instead of looking
+  indistinguishable from a hang or a crash. The spinner (shared by manual `s`/`u`/`p`/`P` too) now
+  also shows elapsed seconds (`⠙ syncing 'x' (34s)…`), so a genuinely large clone/pull reads as
+  "still working, 34 seconds in" instead of leaving that ambiguous.
+
+- **`Ctrl+C` cancels an in-flight sync/pull/clone**, and notebooks can now optionally keep
+  themselves fresh on their own. `Ctrl+C` while the footer spinner is showing detaches from
+  whatever's running (manual `s`/`u`/`p`/`P`, an auto-pull, or a new-notebook clone) and frees the
+  "one op at a time" slot immediately — the underlying network call can't be safely force-killed
+  mid-flight, so the abandoned attempt may still finish quietly in the background, its result
+  simply discarded. Separately, `[general] auto_pull_on_switch` (off by default) pulls a notebook
+  automatically the first time it's selected each session, provided it has a remote configured —
+  silent when there's nothing to do (no remote, already pulled this session, something else already
+  syncing), visible through the same spinner as manual `p` only when a real pull actually starts.
+
 ### Changed
 
 - **`shiki-core`/`shiki-config` are now genuinely portable to a non-native target, not just

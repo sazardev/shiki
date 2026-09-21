@@ -235,6 +235,15 @@ pub struct General {
     /// `"attachments"`; an empty value falls back to the same default.
     #[serde(default = "default_attachments_dir")]
     pub attachments_dir: String,
+    /// When true, switching to a notebook that has a remote configured
+    /// triggers a background pull automatically (same `spawn_git_op`/footer
+    /// spinner path as manual `p`), once per notebook per session — so
+    /// content is more likely to already be fresh without a manual `p` every
+    /// time. Off by default: this adds a network call at a moment (simply
+    /// navigating) that previously never touched the network at all, which
+    /// isn't something to opt everyone into silently.
+    #[serde(default)]
+    pub auto_pull_on_switch: bool,
 }
 
 impl Default for General {
@@ -268,6 +277,7 @@ impl Default for General {
             chafa_path: String::new(),
             preview_image_scale: default_preview_image_scale(),
             attachments_dir: default_attachments_dir(),
+            auto_pull_on_switch: false,
         }
     }
 }

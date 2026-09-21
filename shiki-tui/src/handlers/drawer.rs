@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::app::{App, PendingInput};
+use crate::app::App;
 
 impl App {
     /// Unlike `open_logs`/`open_tree` (one-directional, closed via `Esc`
@@ -46,13 +46,14 @@ impl App {
                 }
             }
             KeyCode::Enter => self.jump_to_drawer_notebook(),
-            // Both open the same `PendingInput::NewNotebook` prompt — it
-            // already detects a pasted git URL and clones instead of
-            // creating a plain notebook (`looks_like_git_url`), so "import"
-            // isn't separate logic, just a second entry point into it.
+            // Both open the same source-kind picker `Action::NewNotebook`
+            // does — "import" isn't separate logic, just a second entry
+            // point into it (its GitHub/GitLab/Generic-Git/SSH choices are
+            // exactly the "import" path; Local is exactly "new").
             KeyCode::Char('n') | KeyCode::Char('i') => {
                 self.show_drawer = false;
-                self.start_input(PendingInput::NewNotebook, String::new());
+                self.notebook_source_index = 0;
+                self.show_notebook_source_picker = true;
             }
             _ => {}
         }

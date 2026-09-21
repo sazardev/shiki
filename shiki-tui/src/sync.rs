@@ -1,4 +1,4 @@
-use crate::app::App;
+use crate::app::{notebook_name_from_git_url, App};
 use shiki_config::Config;
 use shiki_core::{Notebook, NotebookStore};
 
@@ -54,6 +54,14 @@ pub(crate) enum GitOpKind {
     /// status, so `apply_git_op_result`'s arm for this is a no-op beyond the
     /// status message itself.
     Publish,
+    /// A brand-new notebook's very first pull, right after
+    /// `App::create_notebook_from_url` created it and set its remote — the
+    /// new-notebook wizard's GitHub/GitLab/SSH/Generic-Git entries. A
+    /// distinct variant from `Pull` purely so the status message reads
+    /// "cloned" (what a first import actually is) rather than "pulled";
+    /// never carries a conflict, since a just-created notebook has no local
+    /// commits of its own to conflict with.
+    Clone { notebook: String },
 }
 
 impl App {
@@ -351,6 +359,79 @@ impl App {
         });
     }
 
+    /// New-notebook fast path for pasting a git URL directly (also the
+    /// shared tail for the source-kind picker's GitHub/GitLab/SSH/Generic-Git
+    /// entries, once each has built its own `url`): creates the notebook and
+    /// points its remote at `url` synchronously — both fast, local-only
+    /// operations — then backgrounds the actual `pull` through the same
+    /// `spawn_git_op`/footer-spinner machinery `p`/`P` already use. A first
+    /// clone can be just as slow (or hang just as long against a bad host)
+    /// as any other network pull; doing it synchronously left the whole
+    /// render loop frozen with no feedback at all while it ran — no spinner,
+    /// no "in progress" message, indistinguishable from the app having
+    /// crashed. Returns `Err` only for the synchronous failures (bad URL
+    /// shape, name collision, couldn't set remote) so the caller can reopen
+    /// its prompt prefilled for those, exactly as before; once the
+    /// background pull actually starts, `Ok` carries an immediate "cloning…"
+    /// status so there's visible feedback the instant Enter is pressed, and
+    /// any *pull* failure is reported later through the normal
+    /// status/spinner path instead (the same way a manual `p` failing
+    /// already is) — by then there's no still-open prompt left to susefully
+    /// reopen.
+    pub(crate) fn create_notebook_from_url(&mut self, url: &str) -> Result<String, String> {
+        // Redacted before it ever reaches a status message/log_history —
+        // never the real `url`, which still goes to `set_remote`/`pull`
+        // below since those actually need the credentials to work.
+        let redacted = shiki_core::git::redact_credentials(url);
+        let name = notebook_name_from_git_url(url)
+            .ok_or_else(|| format!("could not derive a notebook name from '{redacted}'"))?;
+        let notebook = self
+            .store
+            .create(&name)
+            .map_err(|e| format!("could not create '{name}': {e}"))?;
+        if let Err(e) = shiki_core::git::set_remote(&notebook.path, url) {
+            self.reload_notebooks();
+            return Err(format!("created '{name}' but could not set remote: {e}"));
+        }
+        self.reload_notebooks();
+        // Marked as already "handled" *before* selecting it below — selecting
+        // a notebook can itself trigger `maybe_auto_pull_on_switch`, which
+        // would otherwise race this function's own explicit pull for the
+        // exact same notebook and steal `spawn_git_op`'s single in-flight
+        // slot out from under it.
+        self.auto_pulled_notebooks.insert(name.clone());
+        if let Some(idx) = self.notebooks.iter().position(|nb| nb.name == name) {
+            self.set_selected_notebook(idx);
+        }
+        let remote = self.config.git.remote.clone();
+        let branch = self.config.git.branch.clone();
+        let path = notebook.path.clone();
+        let (spawn_name, message_name) = (name.clone(), name.clone());
+        self.spawn_git_op(spawn_name, move || {
+            let message = match shiki_core::git::pull(&path, &remote, &branch) {
+                Ok(outcome) => {
+                    let actual_branch = outcome.branch();
+                    if actual_branch == branch {
+                        format!("cloned '{message_name}' from {redacted}")
+                    } else {
+                        format!(
+                            "cloned '{message_name}' from {redacted} (branch '{actual_branch}')"
+                        )
+                    }
+                }
+                Err(e) => format!("created '{message_name}' and set remote, but pull failed: {e}"),
+            };
+            GitOpResult {
+                kind: GitOpKind::Clone {
+                    notebook: message_name,
+                },
+                message,
+                conflict: None,
+            }
+        });
+        Ok(format!("cloning '{name}'…"))
+    }
+
     pub(crate) fn pull_notebook(&mut self) {
         let Some(nb) = self.selected_notebook().cloned() else {
             self.set_status("no notebook selected".into());
@@ -377,6 +458,44 @@ impl App {
             ));
             return;
         }
+        self.auto_pulled_notebooks.insert(nb.name.clone());
+        self.spawn_pull_op(&nb);
+    }
+
+    /// Silent counterpart to `pull_notebook`, for `general.auto_pull_on_switch`
+    /// — called from `App::set_selected_notebook` whenever the selection
+    /// actually moves. Unlike manual `p`, every guard here fails *silently*
+    /// (no status message): switching to a notebook with no remote, or one
+    /// already auto-pulled this session, or while something else is already
+    /// syncing, is the ordinary case here, not something worth interrupting
+    /// the user over — only an actual pull attempt (via `spawn_pull_op`, the
+    /// same spinner/status path manual `p` uses) is ever visible. Off by
+    /// default (`general.auto_pull_on_switch`), since it puts a network call
+    /// behind plain navigation, which previously never touched the network
+    /// at all.
+    pub(crate) fn maybe_auto_pull_on_switch(&mut self) {
+        if !self.config.general.auto_pull_on_switch {
+            return;
+        }
+        let Some(nb) = self.selected_notebook().cloned() else {
+            return;
+        };
+        if self.auto_pulled_notebooks.contains(&nb.name)
+            || self.sync_in_flight.is_some()
+            || shiki_core::git::merge_in_progress(&nb.path)
+            || shiki_core::git::remote_url(&nb.path).is_none()
+        {
+            return;
+        }
+        self.auto_pulled_notebooks.insert(nb.name.clone());
+        self.spawn_pull_op(&nb);
+    }
+
+    /// The actual "spawn a background pull for `nb`" step, shared by
+    /// `pull_notebook` (after its own guards + status messages on failure)
+    /// and `maybe_auto_pull_on_switch` (after its own, silent guards) — one
+    /// implementation, so the two can't drift into pulling differently.
+    fn spawn_pull_op(&mut self, nb: &Notebook) {
         let remote = self.config.git.remote.clone();
         let configured_branch = self.config.git.branch.clone();
         let (nb_name, nb_path) = (nb.name.clone(), nb.path.clone());
@@ -425,6 +544,9 @@ impl App {
         let remote = self.config.git.remote.clone();
         let branch = self.config.git.branch.clone();
         let notebooks = self.notebooks.clone();
+        for nb in &notebooks {
+            self.auto_pulled_notebooks.insert(nb.name.clone());
+        }
         self.spawn_git_op("all notebooks".to_string(), move || {
             use shiki_core::git::PullOutcome;
             let (mut ok, mut failed, mut conflicted) = (0u32, 0u32, Vec::new());
@@ -545,11 +667,36 @@ impl App {
             return;
         }
         self.sync_in_flight = Some(label);
+        self.sync_started_at = Some(std::time::Instant::now());
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let _ = tx.send(op());
         });
         self.sync_rx = Some(rx);
+    }
+
+    /// `Ctrl+C` while the footer spinner is showing — detaches from whatever
+    /// background git op is running (manual `s`/`u`/`p`/`P`, an
+    /// auto-pull-on-switch, or a new-notebook clone). The underlying thread
+    /// can't be safely killed mid-git2-call — libgit2 has no cancellation
+    /// hook that fires before a connection is even established, only ones
+    /// tied to callbacks that only fire once data is already flowing — so
+    /// this doesn't stop the actual git operation: it just stops *waiting*
+    /// for it and frees the "only one at a time" slot immediately, so
+    /// something else (even a new sync) can start right away. The abandoned
+    /// attempt's result, whenever it eventually arrives, is silently
+    /// dropped — `sync_rx` is gone by then, so the background thread's
+    /// `tx.send(..)` just fails quietly, same as it already does on any
+    /// other disconnect.
+    pub(crate) fn cancel_sync(&mut self) {
+        let Some(label) = self.sync_in_flight.take() else {
+            return;
+        };
+        self.sync_started_at = None;
+        self.sync_rx = None;
+        self.set_status(format!(
+            "cancelled '{label}' — it may still finish quietly in the background"
+        ));
     }
 
     /// Non-blocking: called once per `run()` loop iteration, same spot and
@@ -561,12 +708,14 @@ impl App {
         match rx.try_recv() {
             Ok(result) => {
                 self.sync_in_flight = None;
+                self.sync_started_at = None;
                 self.sync_rx = None;
                 self.apply_git_op_result(result);
             }
             Err(std::sync::mpsc::TryRecvError::Empty) => {}
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                 self.sync_in_flight = None;
+                self.sync_started_at = None;
                 self.sync_rx = None;
             }
         }
@@ -626,6 +775,14 @@ impl App {
             // Nothing to refresh — publishing never touches note content or
             // git status, the status message set above is the whole result.
             GitOpKind::Publish => {}
+            // Same "only refresh if still selected" guard as `Pull` — the
+            // user could have switched notebooks (or created another one)
+            // while this one's first clone was still in flight.
+            GitOpKind::Clone { notebook } => {
+                if self.selected_notebook().map(|n| n.name.as_str()) == Some(notebook.as_str()) {
+                    self.refresh_notes_preserve_selection();
+                }
+            }
         }
         if self.show_drawer {
             self.refresh_drawer_statuses();

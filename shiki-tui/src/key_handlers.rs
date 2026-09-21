@@ -3,11 +3,12 @@ use shiki_config::Config;
 use shiki_core::{wikilinks, Note, Notebook};
 
 use crate::app::{
-    drawer_area, global_search_layout, global_search_popup_area, is_notebook_git_action,
-    looks_like_git_url, looks_like_path, relative_folder, App, BatchOp, ConflictView, DeleteTarget,
-    EditorFindState, FindField, Focus, MetadataPrompt, Mode, PassphrasePurpose, PendingInput,
-    PreviewSelection, QuerySuggestion, QuickCommand, SelectedEntry, TrashedEntry, UpdateMsg,
-    UpdateState,
+    check_github_preflight, drawer_area, global_search_layout, global_search_popup_area,
+    is_notebook_git_action, looks_like_git_url, looks_like_path, normalize_ssh_remote,
+    relative_folder, remote_url_from_owner_repo, App, BatchOp, ConflictView, DeleteTarget,
+    EditorFindState, FindField, Focus, MetadataPrompt, Mode, NotebookSourceKind, PassphrasePurpose,
+    PendingInput, PreviewSelection, QuerySuggestion, QuickCommand, SelectedEntry, TrashedEntry,
+    UpdateMsg, UpdateState,
 };
 use crate::editor::InlineEditor;
 use crate::icons;
@@ -324,7 +325,8 @@ impl App {
             | GeneralField::CompactFooter
             | GeneralField::ShowBorders
             | GeneralField::TasksShowDoneDefault
-            | GeneralField::PreviewImages => unreachable!(),
+            | GeneralField::PreviewImages
+            | GeneralField::AutoPullOnSwitch => unreachable!(),
         };
         self.settings_reopen_after_prompt = self.show_settings;
         self.show_settings = false;
@@ -420,6 +422,13 @@ impl App {
             GeneralField::PreviewImages => {
                 self.config.general.preview_images = !self.config.general.preview_images;
                 ("preview_images", self.config.general.preview_images)
+            }
+            GeneralField::AutoPullOnSwitch => {
+                self.config.general.auto_pull_on_switch = !self.config.general.auto_pull_on_switch;
+                (
+                    "auto_pull_on_switch",
+                    self.config.general.auto_pull_on_switch,
+                )
             }
             GeneralField::DefaultNotebook
             | GeneralField::Editor
@@ -1421,6 +1430,41 @@ impl App {
                 self.update_rx = None;
             }
         }
+    }
+
+    /// Non-blocking: called once per `run()` loop iteration, same spot as
+    /// `poll_update_channel`. Applies the new-notebook wizard's GitHub
+    /// preflight check the moment it resolves — `Some(warning)` becomes a
+    /// status message, `None` (everything looked reachable, or `gh` isn't
+    /// installed at all) stays silent, since this is purely advisory and
+    /// never blocked the actual clone attempt in the first place.
+    pub(crate) fn poll_gh_preflight_channel(&mut self) {
+        let Some(rx) = &self.gh_preflight_rx else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(Some(warning)) => {
+                self.set_status(warning);
+                self.gh_preflight_rx = None;
+            }
+            Ok(None) => self.gh_preflight_rx = None,
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => self.gh_preflight_rx = None,
+        }
+    }
+    /// Kicks off the background `gh` reachability check for `owner_repo` —
+    /// fire-and-forget, same `std::thread::spawn` + fresh `mpsc::channel`
+    /// shape as self-update's own background thread. Only one check is ever
+    /// in flight (a new one replaces the receiver for any still-running
+    /// previous one, which just gets its result silently discarded) — this
+    /// only ever fires once per wizard use in practice, so there's no real
+    /// contention to guard against.
+    pub(crate) fn spawn_github_preflight(&mut self, owner_repo: String) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(check_github_preflight(&owner_repo));
+        });
+        self.gh_preflight_rx = Some(rx);
     }
 
     /// Non-blocking: called once per `run()` loop iteration, same spot as
@@ -4921,6 +4965,64 @@ impl App {
         self.show_template_picker = false;
         self.create_note_with_template(title, template_choice);
     }
+    /// The new-notebook wizard's source-kind menu — the *first* thing `a`
+    /// (`Action::NewNotebook`) opens now, before any name is even typed, so
+    /// "where should this notebook come from?" is decided up front instead
+    /// of as a follow-up question after naming a plain one.
+    /// `j`/`k` navigate; `Esc`/`q` cancels outright (nothing was created
+    /// yet, so there's nothing to clean up); `Enter`/`l` opens whichever
+    /// prompt the selection calls for.
+    fn handle_notebook_source_picker_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => self.finish_notebook_source_picker(None),
+            KeyCode::Char('j') | KeyCode::Down => {
+                if self.notebook_source_index + 1 < NotebookSourceKind::ALL.len() {
+                    self.notebook_source_index += 1;
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.notebook_source_index = self.notebook_source_index.saturating_sub(1);
+            }
+            KeyCode::Enter | KeyCode::Char('l') | KeyCode::Right => {
+                let kind = NotebookSourceKind::ALL[self.notebook_source_index];
+                self.finish_notebook_source_picker(Some(kind));
+            }
+            _ => {}
+        }
+    }
+    /// Closes the source-kind picker and opens whichever prompt the
+    /// selection calls for — `None` (Esc/`q`) just closes it, since nothing
+    /// has been created yet at this point. **Local** opens the plain
+    /// name prompt (`PendingInput::NewNotebook`, unchanged); every other
+    /// kind opens its own guided prompt, each of which derives the
+    /// notebook's name from what's typed rather than asking for one
+    /// separately (see `App::create_notebook_from_url`).
+    fn finish_notebook_source_picker(&mut self, kind: Option<NotebookSourceKind>) {
+        self.show_notebook_source_picker = false;
+        let Some(kind) = kind else {
+            self.set_status("new notebook cancelled".into());
+            return;
+        };
+        match kind {
+            NotebookSourceKind::Local => self.start_input(PendingInput::NewNotebook, String::new()),
+            NotebookSourceKind::GitHub => {
+                self.start_input(PendingInput::NewNotebookGitHubRepo, String::new())
+            }
+            NotebookSourceKind::GitLab => {
+                self.start_input(PendingInput::NewNotebookGitLabRepo, String::new())
+            }
+            NotebookSourceKind::GenericGit => {
+                self.start_input(PendingInput::NewNotebookRemote, String::new())
+            }
+            NotebookSourceKind::Ssh => {
+                if !shiki_core::process::ssh_agent_or_key_available() {
+                    self.pending_input_title =
+                        Some(" SSH remote — no SSH key/agent detected, this may fail ".into());
+                }
+                self.start_input(PendingInput::NewNotebookSshRemote, String::new());
+            }
+        }
+    }
     /// Creates a note titled `title` in the current folder, with the given
     /// template's rendered body (or an empty one for `None`, "blank") — the
     /// single shared creation path for both the `show_template_picker` flow
@@ -5247,7 +5349,10 @@ impl App {
             Action::ExportNotebook => self.start_export_notebook(),
             Action::ToggleZenMode => self.toggle_zen_mode(),
 
-            Action::NewNotebook => self.start_input(PendingInput::NewNotebook, String::new()),
+            Action::NewNotebook => {
+                self.notebook_source_index = 0;
+                self.show_notebook_source_picker = true;
+            }
             Action::RenameNotebook => self.start_rename_notebook(),
             Action::DeleteNotebook => self.start_delete_notebook(),
             Action::SyncNotebook => self.sync_notebook(),
@@ -5380,12 +5485,20 @@ impl App {
                 }
             }
             Some(PendingInput::NewNotebook) => {
-                // Pasting a URL is the "import someone else's repo" fast
-                // path: derive the name from the repo, create, set the
-                // remote, and pull, instead of new notebook + name + `R` +
-                // URL + `p` as four separate steps.
+                // Reached via the source-kind picker's **Local** choice —
+                // still detects a pasted URL/path as a defensive fallback
+                // (picking Local out of habit, then pasting one anyway,
+                // still gets the sensible outcome), but the normal case is
+                // a plain name with no further questions asked (the picker
+                // already covers "connect to a remote?" up front now).
                 if !value.is_empty() && looks_like_git_url(&value) {
-                    self.create_notebook_from_url(&value);
+                    match self.create_notebook_from_url(&value) {
+                        Ok(status) => self.set_status(status),
+                        Err(e) => {
+                            self.set_status(e.clone());
+                            self.reopen_input_with_error(PendingInput::NewNotebook, value, e);
+                        }
+                    }
                 } else if !value.is_empty() && looks_like_path(&value) {
                     // Pointing at `/abs/path`, `~/docs`, or `./relative`
                     // adopts that existing directory as a notebook instead
@@ -5430,44 +5543,75 @@ impl App {
                                         status = format!("{status}, but could not set remote: {e}")
                                     }
                                 }
-                                self.set_status(status);
-                            } else {
-                                self.set_status(status);
-                                // No template covers this notebook — the one
-                                // onboarding question: want it synced to a Git
-                                // remote? Empty Enter skips and never asks
-                                // about *this* notebook again; `R` always works.
-                                self.pending_new_notebook_remote = Some(name.clone());
-                                self.start_input(PendingInput::NewNotebookRemote, String::new());
                             }
+                            self.set_status(status);
                         }
                         Err(e) => self.set_status(format!("could not create: {e}")),
                     }
                 }
             }
             Some(PendingInput::NewNotebookRemote) => {
-                let Some(name) = self.pending_new_notebook_remote.take() else {
-                    return;
-                };
+                // The picker's **Generic Git URL** entry — a full URL (any
+                // host/provider) or a local path to adopt, same free-text
+                // shape this prompt always had.
                 if value.is_empty() {
-                    self.set_status(format!("notebook '{name}' created without a git remote"));
+                    self.set_status("new notebook cancelled".into());
+                } else if looks_like_git_url(&value) {
+                    match self.create_notebook_from_url(&value) {
+                        Ok(status) => self.set_status(status),
+                        Err(e) => {
+                            self.set_status(e.clone());
+                            self.reopen_input_with_error(PendingInput::NewNotebookRemote, value, e);
+                        }
+                    }
+                } else if looks_like_path(&value) {
+                    self.adopt_notebook_from_path(&value);
+                } else {
+                    let e = format!("'{value}' doesn't look like a git URL or a local path");
+                    self.set_status(e.clone());
+                    self.reopen_input_with_error(PendingInput::NewNotebookRemote, value, e);
+                }
+            }
+            Some(source_kind @ PendingInput::NewNotebookGitHubRepo)
+            | Some(source_kind @ PendingInput::NewNotebookGitLabRepo) => {
+                if value.is_empty() {
+                    self.set_status("new notebook cancelled".into());
                     return;
                 }
-                match self.store.get(&name) {
-                    Ok(nb) => match shiki_core::git::set_remote(&nb.path, &value) {
-                        Ok(()) => {
-                            let redacted = shiki_core::git::redact_credentials(&value);
-                            self.set_status(format!(
-                                "notebook '{name}' created, remote set to '{redacted}'"
-                            ));
-                        }
-                        Err(e) => self.set_status(format!(
-                            "notebook '{name}' created, but could not set remote: {e}"
-                        )),
-                    },
-                    Err(e) => self.set_status(format!(
-                        "notebook '{name}' vanished right after creation: {e}"
-                    )),
+                let host = if source_kind == PendingInput::NewNotebookGitHubRepo {
+                    "github.com"
+                } else {
+                    "gitlab.com"
+                };
+                let Some(url) = remote_url_from_owner_repo(host, &value) else {
+                    let e = format!("'{value}' doesn't look like owner/repo");
+                    self.set_status(e.clone());
+                    self.reopen_input_with_error(source_kind, value, e);
+                    return;
+                };
+                if source_kind == PendingInput::NewNotebookGitHubRepo {
+                    self.spawn_github_preflight(value.clone());
+                }
+                match self.create_notebook_from_url(&url) {
+                    Ok(status) => self.set_status(status),
+                    Err(e) => {
+                        self.set_status(e.clone());
+                        self.reopen_input_with_error(source_kind, value, e);
+                    }
+                }
+            }
+            Some(PendingInput::NewNotebookSshRemote) => {
+                if value.is_empty() {
+                    self.set_status("new notebook cancelled".into());
+                    return;
+                }
+                let url = normalize_ssh_remote(&value);
+                match self.create_notebook_from_url(&url) {
+                    Ok(status) => self.set_status(status),
+                    Err(e) => {
+                        self.set_status(e.clone());
+                        self.reopen_input_with_error(PendingInput::NewNotebookSshRemote, value, e);
+                    }
                 }
             }
             Some(PendingInput::RenameNote) => {
@@ -5760,6 +5904,7 @@ impl App {
                             GeneralField::ShowBorders => "show_borders",
                             GeneralField::TasksShowDoneDefault => "tasks_show_done_default",
                             GeneralField::PreviewImages => "preview_images",
+                            GeneralField::AutoPullOnSwitch => "auto_pull_on_switch",
                         })
                     };
                     if let Some(label) = label {
@@ -5898,6 +6043,7 @@ impl App {
         // instant it opened.
         if self.pending_input.is_none() {
             self.pending_input_title = None;
+            self.pending_input_error = None;
             self.mode = Mode::Normal;
         }
     }
@@ -6247,15 +6393,10 @@ impl App {
             KeyCode::Esc => {
                 let kind = self.pending_input.take();
                 self.pending_input_title = None;
+                self.pending_input_error = None;
                 self.pending_batch = None;
                 if kind == Some(PendingInput::NewNote) {
                     self.pending_new_note_body = None;
-                }
-                // Abandoning the follow-up remote prompt just means "not
-                // now" for that notebook — clear the staged name so a later
-                // unrelated flow can't trip over it.
-                if kind == Some(PendingInput::NewNotebookRemote) {
-                    self.pending_new_notebook_remote = None;
                 }
                 self.mode = Mode::Normal;
                 // These `Settings*` prompts are only ever started from
@@ -8047,6 +8188,22 @@ impl App {
         }
     }
     pub fn on_key(&mut self, key: KeyEvent) {
+        // Cancels an in-flight background git op (manual s/u/p/P, an
+        // auto-pull-on-switch, or a new-notebook clone) — checked before
+        // every modal/mode dispatch below so it works no matter what else
+        // is open, since a slow sync can legitimately be running while
+        // you're doing something completely unrelated. `Ctrl+C` isn't bound
+        // to anything else in this app (crossterm's raw mode delivers it as
+        // a plain key event, not SIGINT), so this never shadows an existing
+        // binding; a no-op when nothing's running falls straight through to
+        // normal handling.
+        if key.code == KeyCode::Char('c')
+            && key.modifiers.contains(KeyModifiers::CONTROL)
+            && self.sync_in_flight.is_some()
+        {
+            self.cancel_sync();
+            return;
+        }
         // Checked first, ahead of every other modal: a revert confirmation
         // can be opened *from inside* the history modal (confirm-over-modal),
         // and confirm must intercept `y`/`n` in that case rather than the
@@ -8069,6 +8226,10 @@ impl App {
         }
         if self.show_template_picker {
             self.handle_template_picker_key(key);
+            return;
+        }
+        if self.show_notebook_source_picker {
+            self.handle_notebook_source_picker_key(key);
             return;
         }
         if self.show_global_search {

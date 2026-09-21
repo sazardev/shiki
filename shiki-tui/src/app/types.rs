@@ -4,15 +4,30 @@ use crate::input::InputBox;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PendingInput {
     NewNote,
+    /// Reached directly by `Action::NewNotebook` (`a` in NOTEBOOKS scope) only
+    /// via `App.show_notebook_source_picker`'s **Local** choice — the picker
+    /// itself is what `a` actually opens now, *before* any name is typed
+    /// (see `App::finish_notebook_source_picker`), so a remote (if any) is
+    /// decided up front instead of asked about after the fact. Still detects
+    /// a pasted git URL/local path as a defensive fallback even under
+    /// "Local", same as it always did.
     NewNotebook,
-    /// Staged follow-up to `NewNotebook`'s plain-name path: one optional
-    /// "sync this notebook to Git?" prompt, shown only when
-    /// `git.remote_template` didn't already configure a remote (users who
-    /// set up a template never get asked). The input takes the URL; the
-    /// just-created notebook's *name* lives in
-    /// `App.pending_new_notebook_remote`, same "one variant, the real
-    /// state lives alongside it" shape as `RenameTag`.
+    /// The picker's **Generic Git URL** entry: a full URL (any host/
+    /// provider) or a local path to adopt — the same free-text prompt this
+    /// variant always was, just reached from the picker now instead of
+    /// being the only way to connect a new notebook to a remote.
     NewNotebookRemote,
+    /// The picker's **GitHub** entry: takes `owner/repo`, builds
+    /// `https://github.com/{owner}/{repo}.git` (`remote_url_from_owner_repo`)
+    /// and hands it to `App::create_notebook_from_url` — the notebook name
+    /// is derived from the repo, same as pasting a URL directly does.
+    NewNotebookGitHubRepo,
+    /// Same shape as `NewNotebookGitHubRepo`, for `https://gitlab.com/...`.
+    NewNotebookGitLabRepo,
+    /// The picker's **SSH** entry: takes `host:path` or `user@host:path`,
+    /// normalized via `normalize_ssh_remote` before also going through
+    /// `App::create_notebook_from_url`.
+    NewNotebookSshRemote,
     NewFolder,
     RenameNote,
     RenameNotebook,
@@ -185,7 +200,10 @@ impl PendingInput {
         match self {
             PendingInput::NewNote => " New note (@ for quick date/template) ",
             PendingInput::NewNotebook => " New notebook ",
-            PendingInput::NewNotebookRemote => " Git remote (URL or local path, empty = skip) ",
+            PendingInput::NewNotebookRemote => " Generic Git URL (or local path) ",
+            PendingInput::NewNotebookGitHubRepo => " GitHub repo (owner/repo) ",
+            PendingInput::NewNotebookGitLabRepo => " GitLab repo (owner/repo) ",
+            PendingInput::NewNotebookSshRemote => " SSH remote (host:path or user@host:path) ",
             PendingInput::NewFolder => " New folder ",
             PendingInput::RenameNote | PendingInput::RenameNotebook => " Rename ",
             PendingInput::RenameTag => " Rename/merge tag ",
@@ -215,13 +233,21 @@ impl PendingInput {
     pub(crate) fn hint(self) -> Option<&'static str> {
         match self {
             PendingInput::NewNotebookRemote => Some(
-                "Empty Enter skips — the notebook works locally either way. You can always \
-                 add a remote later with R, or set git.remote_template to stop being asked.",
+                "A repo URL (https://, git@, ssh://) clones it — the notebook name is derived \
+                 from the repo. A local path (/abs, ~/docs, ./relative) adopts that existing \
+                 directory instead.",
+            ),
+            PendingInput::NewNotebookGitHubRepo | PendingInput::NewNotebookGitLabRepo => Some(
+                "e.g. torvalds/linux — shiki builds the full URL, derives the notebook name from \
+                 the repo, and pulls right away.",
+            ),
+            PendingInput::NewNotebookSshRemote => Some(
+                "e.g. git.example.com:notes/work.git — 'git@' is assumed if you don't type a user.",
             ),
             PendingInput::NewNotebook => Some(
-                "A name creates a new local notebook. Paste a repo URL (https://, git@, ssh://) \
-                 to clone it instead — make sure you're logged in first if it's private. A path \
-                 (/abs, ~/docs, ./relative) adopts that existing directory instead.",
+                "Creates a new local notebook under this name. Paste a repo URL (https://, git@, \
+                 ssh://) directly to clone it instead — make sure you're logged in first if it's \
+                 private. A path (/abs, ~/docs, ./relative) adopts that existing directory instead.",
             ),
             PendingInput::ExportNotebook => {
                 Some("Format is inferred from the extension — .md/.markdown for Markdown, anything else for HTML.")

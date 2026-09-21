@@ -1,5 +1,11 @@
 //! Tiny process-environment helpers shared by anything that needs to know
-//! whether an external binary is available, without executing it.
+//! whether an external binary is available, without executing it — plus
+//! `run_with_timeout`, for the cases (voice recording, the new-notebook
+//! wizard's `gh` preflight checks) that *do* need to actually run one, safely.
+
+use std::io::Read;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 /// Whether `bin` exists somewhere on `$PATH` — a plain lookup, deliberately
 /// not executing it (a `--version` probe could hang or have side effects for
@@ -11,6 +17,97 @@ pub fn on_path(bin: &str) -> bool {
         return false;
     };
     std::env::split_paths(&path_var).any(|dir| dir.join(bin).is_file())
+}
+
+/// Outcome of one `run_with_timeout` call: whether the command succeeded,
+/// plus its stderr (collected rather than inherited, so a caller can surface
+/// *why* only if it actually needs to).
+pub struct CommandOutcome {
+    pub success: bool,
+    pub stderr: String,
+}
+
+/// Runs `command`, killing it if it hasn't exited within `timeout` — std-only,
+/// so a command that hangs (a recorder opening a missing audio device, `gh`
+/// waiting on a stalled network call) fails fast instead of wedging whatever
+/// called it. Originally `shiki-core/src/voice.rs`'s own private helper;
+/// promoted here once the new-notebook wizard's `gh auth status`/`gh repo
+/// view` preflight checks needed the exact same "run a real external command
+/// safely" primitive — one implementation, not two copies that could drift.
+pub fn run_with_timeout(command: &mut Command, timeout: Duration) -> CommandOutcome {
+    command.stdout(Stdio::null()).stderr(Stdio::piped());
+    let mut child = match command.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            return CommandOutcome {
+                success: false,
+                stderr: format!("could not spawn: {e}"),
+            };
+        }
+    };
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let mut buf = String::new();
+                if let Some(mut err) = child.stderr.take() {
+                    let _ = err.read_to_string(&mut buf);
+                }
+                return CommandOutcome {
+                    success: status.success(),
+                    stderr: buf,
+                };
+            }
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return CommandOutcome {
+                        success: false,
+                        stderr: format!("timed out after {}s", timeout.as_secs()),
+                    };
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(e) => {
+                return CommandOutcome {
+                    success: false,
+                    stderr: format!("{e}"),
+                };
+            }
+        }
+    }
+}
+
+/// Whether an SSH key/agent is available at all — checked before offering
+/// the new-notebook wizard's SSH source kind, purely advisory (still lets
+/// the user proceed either way, just warns if nothing was found). Checks
+/// `SSH_AUTH_SOCK` (an agent is loaded — the codepath `git.rs::build_callbacks`
+/// actually tries first, via `Cred::ssh_key_from_agent`) or a handful of the
+/// most common default key file names under `~/.ssh`, since a key can exist
+/// without an agent running (git2 falls back to the credential helper, which
+/// only helps for HTTPS remotes, not these SSH-file-only ones).
+#[cfg(feature = "home-dir-expand")]
+pub fn ssh_agent_or_key_available() -> bool {
+    if std::env::var_os("SSH_AUTH_SOCK").is_some() {
+        return true;
+    }
+    let Some(home) = directories::BaseDirs::new().map(|d| d.home_dir().to_path_buf()) else {
+        return false;
+    };
+    let ssh_dir = home.join(".ssh");
+    ["id_ed25519", "id_rsa", "id_ecdsa"]
+        .iter()
+        .any(|name| ssh_dir.join(name).is_file())
+}
+
+/// Without `home-dir-expand` there's no `directories` dependency to resolve a
+/// home directory — falls back to just the agent-socket check, same
+/// "degrade gracefully, don't add a new dependency" contract `expand_home`
+/// already follows below.
+#[cfg(not(feature = "home-dir-expand"))]
+pub fn ssh_agent_or_key_available() -> bool {
+    std::env::var_os("SSH_AUTH_SOCK").is_some()
 }
 
 /// Expands a leading `~` (or `~/...`) to the user's home directory; anything
@@ -95,6 +192,23 @@ mod tests {
     #[test]
     fn current_process_is_alive() {
         assert!(is_pid_alive(std::process::id()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_with_timeout_reports_the_real_exit_status() {
+        let ok = run_with_timeout(&mut Command::new("true"), Duration::from_secs(5));
+        assert!(ok.success);
+        let fail = run_with_timeout(&mut Command::new("false"), Duration::from_secs(5));
+        assert!(!fail.success);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_with_timeout_kills_a_hanging_command() {
+        let res = run_with_timeout(Command::new("sleep").arg("5"), Duration::from_millis(200));
+        assert!(!res.success);
+        assert!(res.stderr.contains("timed out"));
     }
 
     #[test]

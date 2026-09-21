@@ -356,6 +356,19 @@ pub struct App {
     /// the moment the picker opened.
     pub(crate) template_picker_options: Vec<Option<String>>,
     pub(crate) template_picker_index: usize,
+    /// The new-notebook wizard's source-kind menu (`NotebookSourceKind::ALL`)
+    /// — same shape as `show_template_picker`/`template_picker_index`, just
+    /// over a fixed list instead of one built fresh per open.
+    pub(crate) show_notebook_source_picker: bool,
+    pub(crate) notebook_source_index: usize,
+    /// Advisory `gh` preflight check result for the new-notebook wizard's
+    /// GitHub prompt — same "background thread + polled once per `run()`
+    /// iteration" shape as `update_rx` below, not `sync.rs`'s `spawn_git_op`
+    /// (that's specific to real sync/pull operations with their own
+    /// in-flight/spinner state; this is a silent, one-shot, purely
+    /// informational check). `Some(warning)` sets a status message once it
+    /// arrives; `None` means nothing looked wrong, so nothing is shown.
+    pub(crate) gh_preflight_rx: Option<std::sync::mpsc::Receiver<Option<String>>>,
     /// The title already confirmed by the `NewNote` prompt, carried over
     /// while the template picker is up — the note isn't actually created
     /// until a template (or "blank") is chosen.
@@ -473,11 +486,18 @@ pub struct App {
     /// Overrides `PendingInput::title()`'s static text when set — only
     /// `PendingInput::MoveOrCopy` ever needs this (see its doc comment).
     pub(crate) pending_input_title: Option<String>,
-    /// The just-created notebook's name staged between the NewNotebook
-    /// prompt and its optional follow-up remote-URL one — see
-    /// `PendingInput::NewNotebookRemote`. `None` except while that second
-    /// prompt is up (or after Esc, which clears both together).
-    pub(crate) pending_new_notebook_remote: Option<String>,
+    /// Shown in place of the normal muted hint line under the input box,
+    /// styled in the theme's error color instead — set by
+    /// `App::reopen_input_with_error` when a synchronous failure (e.g. the
+    /// new-notebook wizard's "doesn't look like owner/repo") reopens the
+    /// same prompt for a retry, so the reason is visible right where the
+    /// user is already looking instead of only in the footer status line
+    /// (which can be truncated, or just not where attention is once
+    /// they've retyped something). Unlike the hint, not gated by
+    /// `general.show_hints` — this is a fact about what just happened, not
+    /// an optional tip. `start_input` always clears this, so it can never
+    /// leak into an unrelated later prompt.
+    pub(crate) pending_input_error: Option<String>,
     pub(crate) pending_delete: Option<(DeleteTarget, std::path::PathBuf)>,
     /// The items a move/copy is about to apply to, captured up front —
     /// populated whether it's a single note/folder or a whole Visual-mode
@@ -727,7 +747,25 @@ pub struct App {
     /// shown by the footer's spinner (e.g. the notebook's name) while
     /// something's running; `None` means idle.
     pub sync_in_flight: Option<String>,
+    /// When the in-flight operation actually started — the footer's spinner
+    /// shows elapsed seconds from this (`⠙ syncing 'x' (12s)…`), since
+    /// nothing else told the user whether a slow/stalled network operation
+    /// was still genuinely working or had silently wedged: a bad host used
+    /// to leave the app frozen with no feedback at all, and even after that
+    /// got backgrounded, a spinner with no elapsed-time context still left
+    /// "is this just a big repo or actually stuck?" unanswerable. Set
+    /// alongside `sync_in_flight` in `spawn_git_op`, cleared alongside it in
+    /// `poll_sync_channel`.
+    pub sync_started_at: Option<std::time::Instant>,
     pub(crate) sync_rx: Option<std::sync::mpsc::Receiver<crate::sync::GitOpResult>>,
+    /// Names of notebooks already pulled (successfully or not — an attempt
+    /// counts) this session, either automatically (`general.auto_pull_on_switch`)
+    /// or explicitly (manual `p`/`P`, or a fresh clone via the new-notebook
+    /// wizard) — so switching back and forth to the same notebook doesn't
+    /// re-trigger a network pull every single time, only the first time it's
+    /// visited each session. Never cleared during a session; resets on
+    /// relaunch, same as every other session-only cache in this app.
+    pub(crate) auto_pulled_notebooks: std::collections::HashSet<String>,
     /// Advanced once per `run()` iteration while `sync_in_flight` is set —
     /// indexes into a small Braille frame set for the footer's spinner. Not
     /// reset when idle: picking back up from wherever it left off is fine,
@@ -971,6 +1009,9 @@ impl App {
             show_template_picker: false,
             template_picker_options: Vec::new(),
             template_picker_index: 0,
+            show_notebook_source_picker: false,
+            notebook_source_index: 0,
+            gh_preflight_rx: None,
             pending_new_note_title: String::new(),
             pending_new_note_body: None,
             quick_template_selected: 0,
@@ -1010,7 +1051,7 @@ impl App {
             note_sort,
             pending_input: None,
             pending_input_title: None,
-            pending_new_notebook_remote: None,
+            pending_input_error: None,
             pending_delete: None,
             pending_batch: None,
             pending_batch_delete: None,
@@ -1073,7 +1114,9 @@ impl App {
             want_relaunch: false,
             relaunch_exe_path: None,
             sync_in_flight: None,
+            sync_started_at: None,
             sync_rx: None,
+            auto_pulled_notebooks: std::collections::HashSet::new(),
             spinner_frame: 0,
             capture_daemon: None,
             capture_rx,
@@ -1306,14 +1349,17 @@ impl App {
     /// Selects a notebook by index and, when the selection actually moves,
     /// re-resolves the active theme for it — per-notebook theme overrides
     /// (`config.notebooks.<name>`, plus the legacy `config.theme.notebooks`)
-    /// take effect the moment you switch notebooks, no restart. Every
-    /// notebook switch funnels through here so no call site can forget the
-    /// theme re-resolve.
+    /// take effect the moment you switch notebooks, no restart — and, if
+    /// `general.auto_pull_on_switch` is on, kicks off a silent background
+    /// pull the first time this session that notebook is visited
+    /// (`maybe_auto_pull_on_switch`). Every notebook switch funnels through
+    /// here so no call site can forget either.
     pub fn set_selected_notebook(&mut self, idx: usize) {
         let moved = self.selected_notebook != idx;
         self.selected_notebook = idx;
         if moved {
             self.refresh_theme_for_selected_notebook();
+            self.maybe_auto_pull_on_switch();
         }
     }
 
@@ -1499,58 +1545,6 @@ impl App {
         }
     }
 
-    /// New-notebook fast path for pasting a git URL directly: derives the
-    /// notebook name from the repo name, creates it, points its remote at
-    /// the URL, and pulls right away.
-    pub(crate) fn create_notebook_from_url(&mut self, url: &str) {
-        // Redacted before it ever reaches a status message/log_history —
-        // never the real `url`, which still goes to `set_remote`/`pull`
-        // below since those actually need the credentials to work.
-        let redacted = shiki_core::git::redact_credentials(url);
-        let Some(name) = notebook_name_from_git_url(url) else {
-            self.set_status(format!(
-                "could not derive a notebook name from '{redacted}'"
-            ));
-            return;
-        };
-        let notebook = match self.store.create(&name) {
-            Ok(nb) => nb,
-            Err(e) => {
-                self.set_status(format!("could not create '{name}': {e}"));
-                return;
-            }
-        };
-        if let Err(e) = shiki_core::git::set_remote(&notebook.path, url) {
-            self.reload_notebooks();
-            self.set_status(format!("created '{name}' but could not set remote: {e}"));
-            return;
-        }
-        self.reload_notebooks();
-        if let Some(idx) = self.notebooks.iter().position(|nb| nb.name == name) {
-            self.selected_notebook = idx;
-        }
-        match shiki_core::git::pull(
-            &notebook.path,
-            &self.config.git.remote,
-            &self.config.git.branch,
-        ) {
-            Ok(outcome) => {
-                self.reload_notes();
-                let branch = outcome.branch();
-                if branch == self.config.git.branch {
-                    self.set_status(format!("cloned '{name}' from {redacted}"));
-                } else {
-                    self.set_status(format!(
-                        "cloned '{name}' from {redacted} (branch '{branch}')"
-                    ));
-                }
-            }
-            Err(e) => self.set_status(format!(
-                "created '{name}' and set remote, but pull failed: {e}"
-            )),
-        }
-    }
-
     /// New-notebook fast path for pointing at an existing directory on disk
     /// (`/abs/path`, `~/docs`, `./relative`) instead of creating a fresh
     /// empty one or cloning a URL — derives the name from the last path
@@ -1732,6 +1726,7 @@ impl App {
         self.input.masked = false;
         self.pending_input = Some(kind);
         self.mode = Mode::Insert;
+        self.pending_input_error = None;
     }
 
     /// Same as `start_input`, but the input box renders every character as
@@ -1740,6 +1735,22 @@ impl App {
     pub(crate) fn start_masked_input(&mut self, kind: PendingInput, prefill: String) {
         self.start_input(kind, prefill);
         self.input.masked = true;
+    }
+
+    /// Reopens `kind`'s prompt prefilled with `prefill` (same shape as a
+    /// plain `start_input`), but with `error` shown in the modal itself in
+    /// place of the normal hint — the new-notebook wizard's retry-on-failure
+    /// path (a bad `owner/repo`, a name collision, etc.) uses this instead
+    /// of a bare `start_input` so the failure reason is visible right there,
+    /// not just in the footer status line.
+    pub(crate) fn reopen_input_with_error(
+        &mut self,
+        kind: PendingInput,
+        prefill: String,
+        error: String,
+    ) {
+        self.start_input(kind, prefill);
+        self.pending_input_error = Some(error);
     }
 
     /// The editor mode actually in effect right now: the resolved favorite
@@ -2384,6 +2395,114 @@ pub(crate) fn notebook_name_from_git_url(url: &str) -> Option<String> {
     (!name.is_empty()).then(|| name.to_string())
 }
 
+/// The new-notebook wizard's source-kind menu (`App::show_notebook_source_picker`)
+/// — replaces the old single free-text "Git remote (URL or local path)"
+/// follow-up question with a guided pick, so most of these need only
+/// `owner/repo` typed in instead of a full URL. `Local` and `GenericGit`
+/// need no dedicated confirm arm of their own: `Local` is exactly the old
+/// "skip" behavior, and `GenericGit` reopens the pre-existing
+/// `PendingInput::NewNotebookRemote` prompt verbatim.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NotebookSourceKind {
+    Local,
+    GitHub,
+    GitLab,
+    GenericGit,
+    Ssh,
+}
+
+impl NotebookSourceKind {
+    pub(crate) const ALL: [NotebookSourceKind; 5] = [
+        NotebookSourceKind::Local,
+        NotebookSourceKind::GitHub,
+        NotebookSourceKind::GitLab,
+        NotebookSourceKind::GenericGit,
+        NotebookSourceKind::Ssh,
+    ];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            NotebookSourceKind::Local => "Local (no remote)",
+            NotebookSourceKind::GitHub => "GitHub",
+            NotebookSourceKind::GitLab => "GitLab",
+            NotebookSourceKind::GenericGit => "Generic Git URL",
+            NotebookSourceKind::Ssh => "SSH",
+        }
+    }
+
+    pub(crate) fn description(self) -> &'static str {
+        match self {
+            NotebookSourceKind::Local => "just a local notebook, no syncing",
+            NotebookSourceKind::GitHub => "owner/repo — shiki builds the URL",
+            NotebookSourceKind::GitLab => "owner/repo — shiki builds the URL",
+            NotebookSourceKind::GenericGit => "paste a full URL or local path",
+            NotebookSourceKind::Ssh => "host:path or user@host:path",
+        }
+    }
+}
+
+/// Builds a `https://{host}/{spec}.git` remote from a typed `owner/repo`
+/// (GitHub) or `owner/repo`/`group/subgroup/repo` (GitLab, whose nested
+/// groups this handles for free — it only needs "at least one `/`, nothing
+/// leading/trailing", not a strict two-segment split, so `spec` is used
+/// as-is rather than parsed into separate owner/repo parts). `None` on
+/// anything that isn't a plausible `owner/repo`-shaped spec, so the caller
+/// can reject it with a clear error instead of building a broken URL.
+pub(crate) fn remote_url_from_owner_repo(host: &str, spec: &str) -> Option<String> {
+    let trimmed = spec.trim().trim_end_matches('/').trim_end_matches(".git");
+    if trimmed.is_empty() || trimmed.starts_with('/') || !trimmed.contains('/') {
+        return None;
+    }
+    Some(format!("https://{host}/{trimmed}.git"))
+}
+
+/// Normalizes a typed SSH remote spec into a full `user@host:path` URL —
+/// `git` (the near-universal git-over-SSH convention, self-hosted or not)
+/// is prefixed when no `user@` was already typed.
+pub(crate) fn normalize_ssh_remote(spec: &str) -> String {
+    let trimmed = spec.trim();
+    if trimmed.contains('@') {
+        trimmed.to_string()
+    } else {
+        format!("git@{trimmed}")
+    }
+}
+
+/// Runs on `App::spawn_github_preflight`'s background thread — never on the
+/// render loop. Returns `Some(warning)` only when something looks actually
+/// wrong; `None` (including "`gh` isn't installed at all") stays silent,
+/// since this whole check is advisory and must never make the wizard feel
+/// like it's blocking on `gh`. Plain exit-code checks only, no JSON parsing:
+/// a reachable repo is a reachable repo either way, public or private.
+pub(crate) fn check_github_preflight(owner_repo: &str) -> Option<String> {
+    if !shiki_core::process::on_path("gh") {
+        return None;
+    }
+    let timeout = std::time::Duration::from_secs(6);
+    let auth = shiki_core::process::run_with_timeout(
+        std::process::Command::new("gh").args(["auth", "status"]),
+        timeout,
+    );
+    if !auth.success {
+        return Some(
+            "gh isn't authenticated — if this repo is private, cloning may fail. Run `gh auth \
+             login`."
+                .to_string(),
+        );
+    }
+    let view = shiki_core::process::run_with_timeout(
+        std::process::Command::new("gh").args(["repo", "view", owner_repo]),
+        timeout,
+    );
+    if !view.success {
+        return Some(format!(
+            "could not find or access '{owner_repo}' via gh — double-check the name, or that \
+             you have access."
+        ));
+    }
+    None
+}
+
 pub(crate) fn shift(current: usize, delta: isize, len: usize) -> usize {
     if len == 0 {
         return 0;
@@ -2476,6 +2595,7 @@ pub fn run<B: Backend<Error = io::Error>>(
         app.poll_history_count_channel();
         app.poll_image_art_channel();
         app.poll_capture_channel();
+        app.poll_gh_preflight_channel();
         if app.sync_in_flight.is_some() {
             app.spinner_frame = app.spinner_frame.wrapping_add(1);
         }
@@ -2577,4 +2697,68 @@ fn suspend_and_edit<B: Backend<Error = io::Error>>(
     )?;
     crossterm::terminal::enable_raw_mode()?;
     terminal.clear()
+}
+
+#[cfg(test)]
+mod notebook_source_tests {
+    use super::*;
+
+    #[test]
+    fn remote_url_from_owner_repo_builds_a_github_url() {
+        assert_eq!(
+            remote_url_from_owner_repo("github.com", "torvalds/linux"),
+            Some("https://github.com/torvalds/linux.git".to_string())
+        );
+    }
+
+    #[test]
+    fn remote_url_from_owner_repo_handles_trailing_git_and_slash() {
+        assert_eq!(
+            remote_url_from_owner_repo("github.com", "torvalds/linux.git/"),
+            Some("https://github.com/torvalds/linux.git".to_string())
+        );
+    }
+
+    #[test]
+    fn remote_url_from_owner_repo_handles_nested_gitlab_groups() {
+        assert_eq!(
+            remote_url_from_owner_repo("gitlab.com", "group/subgroup/repo"),
+            Some("https://gitlab.com/group/subgroup/repo.git".to_string())
+        );
+    }
+
+    #[test]
+    fn remote_url_from_owner_repo_rejects_a_bare_name_with_no_slash() {
+        assert_eq!(remote_url_from_owner_repo("github.com", "linux"), None);
+    }
+
+    #[test]
+    fn remote_url_from_owner_repo_rejects_a_leading_slash() {
+        assert_eq!(
+            remote_url_from_owner_repo("github.com", "/torvalds/linux"),
+            None
+        );
+    }
+
+    #[test]
+    fn remote_url_from_owner_repo_rejects_empty_input() {
+        assert_eq!(remote_url_from_owner_repo("github.com", ""), None);
+        assert_eq!(remote_url_from_owner_repo("github.com", "   "), None);
+    }
+
+    #[test]
+    fn normalize_ssh_remote_prefixes_git_when_no_user_given() {
+        assert_eq!(
+            normalize_ssh_remote("git.example.com:notes/work.git"),
+            "git@git.example.com:notes/work.git"
+        );
+    }
+
+    #[test]
+    fn normalize_ssh_remote_leaves_an_explicit_user_untouched() {
+        assert_eq!(
+            normalize_ssh_remote("deploy@git.example.com:notes/work.git"),
+            "deploy@git.example.com:notes/work.git"
+        );
+    }
 }

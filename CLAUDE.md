@@ -1342,6 +1342,93 @@ just-created notebook has no commits yet, so an immediate push would only fail w
 naturally the first time there's actually something to sync. Empty string (the default) is a
 no-op, so existing configs/behavior are unaffected until someone opts in.
 
+**`a` (`Action::NewNotebook`) opens a guided source-kind picker *first*, before asking for anything
+else** — `App.show_notebook_source_picker` + `NotebookSourceKind::ALL` (`Local`/`GitHub`/`GitLab`/
+`GenericGit`/`Ssh`, `shiki-tui/src/app/mod.rs`), same list-picker shape (`show_X`/`X_index`/
+`handle_X_key`) as the template picker. This landed in two passes in the same session: the first
+version asked for a plain name *first* and only showed this picker as a follow-up question
+afterward (mirroring the old free-text "Git remote" prompt's position in the flow) — Omar tried it
+and immediately flagged that this wasn't the "guided" experience he'd actually asked for ("quería
+que fuera antes, como un guiado... para que te guiara según el que aplica"), so the picker was moved
+to open immediately on `a`, before any name/URL is typed, and the second pass is what's described
+below. **Don't reintroduce "ask for a name, then ask about a remote"** — the whole point is deciding
+*where this notebook comes from* before deciding anything else, since for every kind except Local
+the name is derived from the answer, not asked separately.
+
+`finish_notebook_source_picker` dispatches on the selection: **Local** opens the plain
+`PendingInput::NewNotebook` name prompt exactly as it always worked (still detects a pasted git
+URL/local path there too, as a defensive fallback — same `looks_like_git_url`/`looks_like_path`
+checks as before, `remote_template` auto-config still applies to the plain-name branch). **GitHub**/
+**GitLab** open `PendingInput::NewNotebookGitHubRepo`/`GitLabRepo`, asking only for `owner/repo` —
+`remote_url_from_owner_repo(host, spec)` builds `https://{host}/{spec}.git`, deliberately not
+splitting `spec` into separate owner/repo parts, which is *why* GitLab's nested `group/subgroup/repo`
+paths work with zero special-casing (it only needs "at least one `/`, nothing leading/trailing").
+**SSH** opens `PendingInput::NewNotebookSshRemote` (`host:path` or `user@host:path`, normalized via
+`normalize_ssh_remote` — defaults the user to `git`) — gated by a purely advisory
+`shiki_core::process::ssh_agent_or_key_available()` check (an agent socket *or* a default key file
+under `~/.ssh`) that only tweaks the prompt's title with a warning when neither is found, never
+blocks opening it. **Generic Git URL** opens `PendingInput::NewNotebookRemote` — the exact same
+free-text URL-or-local-path prompt this flow always had, just reached via an explicit menu choice
+now instead of being the only option. `Esc`/`q` at the picker itself just closes it — nothing was
+created yet at that point, so there's nothing to clean up or report beyond "new notebook cancelled".
+
+**Every remote-based kind (GitHub/GitLab/SSH/Generic-Git) funnels through `App::create_notebook_from_url`**
+once it's built a URL — the same function the pre-existing "paste a URL directly" fast path already
+used, now living in `sync.rs` (not `app/mod.rs`, where it started) so it can call the private
+`spawn_git_op` there. It derives the notebook's name from the URL (`notebook_name_from_git_url`), so
+none of these guided prompts ask for a name at all — typing `owner/repo` or `host:path` is the
+*only* question for that notebook.
+
+**The function is split into a synchronous half and a backgrounded half, and this split matters for
+which failures reopen the prompt and which don't.** `store.create` + `git::set_remote` run
+synchronously (both are fast, local-only — no network) and still return `Err(String)` on failure
+(bad URL shape, name collision, couldn't set remote), which the caller still reopens its prompt
+for, prefilled with whatever was typed and via `App::reopen_input_with_error` rather than a plain
+`start_input` — nothing was created yet at that point, so there's nothing to clean up either.
+`reopen_input_with_error` sets `App.pending_input_error: Option<String>`, which `draw.rs` shows in
+place of the prompt's normal muted hint line (same layout, just the theme's `error` color + bold,
+via a `render_input_with_message` helper both now share) — added because Omar tried the plain
+`set_status`-only version and pointed out the error was easy to miss in the footer, and asked for it
+"abajo en el input del modal" instead; both still happen (`set_status` first, for the log-history
+record, then the reopen), the modal text is just the thing actually catching the eye. `start_input`
+always clears `pending_input_error` on open, so it can never leak into an unrelated later prompt.
+The actual `git::pull`, though, now runs on a background thread via `spawn_git_op`
+(`GitOpKind::Clone`, see below) — **a real fix, not a refactor for its own sake**: the first version
+of this ran `pull` synchronously on the main thread, and Omar hit this directly — a bad/unreachable
+remote made the whole render loop freeze with *no* visible feedback at all (no spinner, no "in
+progress" message), indistinguishable from a hang or a crash ("no hay animación... eso no es
+seguro"). Because the pull is now async, `Ok(String)` from `create_notebook_from_url` is an
+*immediate* "cloning '⟨name⟩'…" status (shown the instant Enter is pressed), not the final outcome —
+and a **pull failure no longer reopens the prompt**, since by the time it's known the prompt may
+already be closed and the user doing something else entirely; it's reported through the normal
+status/log path instead, the same way a manual `p` failing already is. This is a deliberate trade-off
+(immediate responsiveness over "always offer an inline retry") — a failed clone still leaves the
+notebook there, remote set, ready for a manual `p` retry (or `R` to fix a wrong URL), same as any
+other pull failure in this app. Verified live against real repos: `github/gitignore` and
+`gitlab-org/gitlab-development-kit` clone successfully end-to-end through the GitHub/GitLab menu
+entries (arriving with the notebook already named after the repo and its notes already loaded, zero
+extra prompts); a nonexistent owner/repo and a nonexistent host both correctly show the immediate
+"cloning…" message, an animated footer spinner for the actual (sub-second, in this sandbox) duration
+of the failed attempt, and a clear final error afterward, with the app fully responsive throughout
+and the (empty, unconnected) notebook still left in place.
+
+**The GitHub entry also fires a purely advisory, backgrounded `gh` reachability check** —
+`App::spawn_github_preflight`/`check_github_preflight` (`key_handlers.rs`/`app/mod.rs`), a plain
+`std::thread::spawn` + fresh `mpsc::channel` polled by `poll_gh_preflight_channel` (called from
+`run()` next to `poll_update_channel`) — same shape as self-update's `update_rx`, deliberately
+*not* `sync.rs`'s `spawn_git_op`/`GitOpKind` machinery, which is specific to real sync/pull
+operations with their own in-flight/spinner state; this is a silent, one-shot, informational-only
+check with none of that. It never blocks the actual clone attempt, which fires synchronously right
+away regardless (unchanged from `create_notebook_from_url`'s existing behavior). Plain exit-code
+checks only, no JSON parsing: `gh` missing from `$PATH` → silent (nothing to check); `gh auth
+status` fails → "gh isn't authenticated — if this repo is private, cloning may fail"; that succeeds
+but `gh repo view {owner/repo}` fails → "could not find or access '{owner/repo}' via gh"; both
+succeed → silent (a reachable repo is a reachable repo, public or private, nothing worth saying).
+Uses a new shared `shiki_core::process::run_with_timeout` (promoted out of
+`shiki-core/src/voice.rs`'s own previously-private helper of the same name/shape, now a thin caller
+of the shared one — one "run a real external command safely" implementation instead of two) so a
+stalled `gh` invocation can't hang the background thread indefinitely.
+
 **Git remote support** (`shiki-core/src/git.rs::set_remote`/`remote_url`, plus the pre-existing
 `pull`/`push`/`commit_all`) lets a notebook's `origin` be a normal git URL or a local path — git2
 treats both the same for fetch. `Action::PullAllNotebooks` loops every notebook and reports
@@ -1406,8 +1493,62 @@ sends its `GitOpResult` back over `sync_rx`, polled once per `run()` iteration
 Only one operation runs at a time, globally (`App.sync_in_flight: Option<String>`, the label shown
 by the footer's spinner) — a second request while one's in flight is reported ("a sync is already
 running…") and dropped rather than queued, same simplicity level the self-updater already has.
-`GitOpKind` (`Sync`/`Pull`/`PullAll`) tells `apply_git_op_result` what to refresh once the result
-arrives: `Sync`/`Pull` only touch `git_status`/`reload_notes` if the notebook they were about is
+`App.sync_started_at: Option<Instant>` is set alongside `sync_in_flight` in `spawn_git_op` (cleared
+alongside it in `poll_sync_channel`) so the spinner can show elapsed seconds
+(`status_bar.rs`: `"{frame} syncing '{label}' ({elapsed}s)…"`) — added after Omar hit the
+new-notebook wizard's GitHub clone against his own real repo (`sazardev/shiki`) and, watching the
+spinner alone with no sense of duration, couldn't tell "still working" from "stuck." Verified live
+in this sandbox that it was neither: `ss -tnp` showed a genuinely `ESTAB`lished HTTPS connection to
+a real GitHub IP with a nonzero recv-queue throughout, and the clone completed successfully at
+~75s — `sazardev/shiki`'s own git history is legitimately sizable (every release regenerates and
+commits fresh per-theme screenshots/demo GIFs/OG images across 37 themes and many releases, per the
+Marketing site section above), not a hang. A byte-level "X received so far" progress readout would
+be even more informative but needs streaming updates from the background thread to the main one
+(the current channel only ever carries the *final* `GitOpResult`, once) — elapsed time alone was
+judged enough to resolve the actual ambiguity, so that bigger plumbing change wasn't taken on here.
+
+**`Ctrl+C` cancels an in-flight `spawn_git_op` (`App::cancel_sync`)** — checked at the very top of
+`on_key`, before every other modal/mode dispatch, so it works no matter what else is open (nothing
+else in this app binds `Ctrl+C`, and crossterm's raw mode delivers it as a plain key event, not
+SIGINT, so there's no signal handler to fight either). Investigated whether a *real* cancellation
+(actually aborting the underlying `git2` call) was feasible first: libgit2 only exposes cancellation
+through callbacks that fire *after* a connection is already established and data is flowing
+(`RemoteCallbacks::transfer_progress`/`sideband_progress`, returning `false` to abort) — a hang
+during DNS resolution or the initial TCP/TLS handshake happens before any such callback would ever
+fire, so no safe, complete "abort no matter what phase it's in" hook exists. Given that, `cancel_sync`
+does the honest, achievable thing instead: it clears `sync_in_flight`/`sync_started_at`/`sync_rx`
+immediately, which (a) makes the spinner disappear and (b) frees `spawn_git_op`'s "only one at a
+time" slot right away, so a *different* action (even a new sync) can start without waiting. The
+original background thread is **not** killed — it keeps running against whatever it was doing and
+eventually finishes on its own, but since `sync_rx` is already gone by then, its `tx.send(..)`
+(already wrapped in `let _ = ...`, same as every other `spawn_git_op` closure) just fails silently
+and the result is discarded. Verified live: cancelling a clone stuck against `192.0.2.1` (a
+non-routable TEST-NET address, chosen specifically so the connect attempt hangs rather than
+failing fast) via `Ctrl+C` after a few seconds immediately cleared the spinner and let a brand new
+`a` (new-notebook picker) open right away with no delay.
+
+**`general.auto_pull_on_switch` (off by default) pulls a notebook automatically the first time it's
+selected each session** — `App::maybe_auto_pull_on_switch`, called from `App::set_selected_notebook`
+whenever the selection actually moves. Unlike manual `p` (`pull_notebook`), every guard here fails
+*silently*: no remote configured, already auto-pulled (or explicitly pulled/cloned) this session,
+mid-merge, or something else already syncing are all the ordinary case for a passive background
+trigger, not something worth interrupting the user over — only a real pull attempt is ever visible,
+through the exact same `spawn_pull_op`/spinner path manual `p` uses (extracted out of
+`pull_notebook` specifically so the two can't drift into pulling differently).
+`App.auto_pulled_notebooks: HashSet<String>` is the "already handled this session" record, marked
+by `pull_notebook`/`pull_all_notebooks` (any explicit pull attempt, success or failure, counts) and
+by `create_notebook_from_url` (marked *before* `set_selected_notebook` runs, not after — selecting
+the just-created notebook would otherwise race the function's own explicit clone-pull for the exact
+same notebook and steal `spawn_git_op`'s single in-flight slot out from under it; this was a real
+bug caught by tracing the call order, not just a defensive guess). Verified live: toggling the
+setting on, giving a notebook a remote via `R` without pulling, switching away and back triggered a
+silent pull that completed and populated its notes; switching away and back again afterward did
+*not* re-trigger, confirming the once-per-session cap actually holds.
+
+`GitOpKind` (`Sync`/`Pull`/`PullAll`/`Publish`/`Clone` — the last added later, for a brand-new
+notebook's first pull inside `App::create_notebook_from_url`) tells `apply_git_op_result` what to
+refresh once the result arrives: `Sync`/`Pull`/`Clone` only touch `git_status`/`reload_notes` if the
+notebook they were about is
 *still* the selected one by the time the background thread finishes — a real correctness need this
 introduced, not just carried over, since the selection can change while the operation is in
 flight, which was never possible in the old synchronous version. The drawer's `drawer_statuses`

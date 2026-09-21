@@ -91,10 +91,11 @@ pub enum GeneralField {
     ChafaPath,
     PreviewImageScale,
     AttachmentsDir,
+    AutoPullOnSwitch,
 }
 
 impl GeneralField {
-    pub const ALL: [GeneralField; 27] = [
+    pub const ALL: [GeneralField; 28] = [
         GeneralField::DefaultNotebook,
         GeneralField::Editor,
         GeneralField::DailyTemplate,
@@ -122,6 +123,7 @@ impl GeneralField {
         GeneralField::ChafaPath,
         GeneralField::PreviewImageScale,
         GeneralField::AttachmentsDir,
+        GeneralField::AutoPullOnSwitch,
     ];
 }
 
@@ -472,6 +474,11 @@ pub(crate) fn general_rows(app: &App) -> Vec<Line<'static>> {
             cfg.general.preview_image_scale.to_string(),
         ),
         row_line(app, "attachments_dir", cfg.general.attachments_dir.clone()),
+        row_line(
+            app,
+            "auto_pull_on_switch",
+            cfg.general.auto_pull_on_switch.to_string(),
+        ),
     ]
 }
 
