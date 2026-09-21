@@ -354,7 +354,14 @@ fn sha256_file(path: &Path) -> Result<String> {
         }
         hasher.update(&buf[..n]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    // sha2 0.11's `finalize()` returns `hybrid_array::Array`, which no
+    // longer implements `LowerHex` (unlike the old `generic_array`-based
+    // type) — format each byte by hand instead of relying on `{:x}`.
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
 }
 
 /// Downloads the git-lfs pointer for `model` and returns its expected
