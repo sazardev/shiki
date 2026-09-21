@@ -6,6 +6,8 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-09-21
+
 ### Added
 
 - **Full per-notebook theme customization** — every notebook can now have its own base theme,
