@@ -128,3 +128,4 @@ tauri-plugin-dialog = { version = "2", features = [] }
 lto = true
 codegen-units = 1
 strip = true
+opt-level = "z"
