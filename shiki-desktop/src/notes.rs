@@ -412,9 +412,9 @@ pub fn search_notes(
     Ok(out)
 }
 
-/// Markdown rendered to HTML server-side (comrak, same parser the TUI's
-/// PREVIEW pane uses) plus the notebook root so the frontend can resolve
-/// relative image paths through Tauri's asset protocol.
+/// Markdown rendered to HTML server-side via `shiki_core::markdown`, plus
+/// the notebook root so the frontend can resolve relative image paths
+/// through Tauri's asset protocol.
 #[derive(Debug, Serialize)]
 pub struct RenderedNote {
     pub html: String,
@@ -440,19 +440,11 @@ pub fn render_note(
     })
 }
 
-/// Renders markdown to HTML with the same extension set the TUI preview
-/// enables (tables, task lists, strikethrough, autolinks, wikilinks, raw
-/// HTML for `<details>` folding), then rewrites relative image `src`s to
-/// absolute paths for the asset protocol.
+/// Renders markdown to HTML via the shared kernel renderer
+/// (`shiki_core::markdown::note_to_html`), then rewrites relative image
+/// `src`s to absolute paths for the asset protocol.
 fn render_markdown(md: &str, notebook_root: &Path) -> String {
-    let mut opts = comrak::Options::default();
-    opts.extension.strikethrough = true;
-    opts.extension.table = true;
-    opts.extension.autolink = true;
-    opts.extension.tasklist = true;
-    opts.extension.wikilinks_title_after_pipe = true;
-    opts.render.r#unsafe = true;
-    let html = comrak::markdown_to_html(md, &opts);
+    let html = shiki_core::markdown::note_to_html(md);
 
     // Absolute-ize relative image srcs so the webview can load them via
     // convertFileSrc. http(s)/data/anchor/absolute are left alone.

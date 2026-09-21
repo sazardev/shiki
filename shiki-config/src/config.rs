@@ -18,6 +18,42 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// A pluggable filesystem-access capability for `Config::load_or_init`/
+/// `save` — the same seam `shiki_core::fs::FileStore` gives the domain
+/// crate, duplicated locally rather than pulled in as a new cross-crate
+/// dependency: `shiki-config` is deliberately independent of `shiki-core`
+/// (neither depends on the other — `shiki-tui` is what depends on both),
+/// and importing `shiki-core` here purely for one small trait would blur
+/// that boundary for no real benefit. `LocalConfigFs` is the default; a
+/// future non-native consumer (no local disk to read `config.toml` from at
+/// all) supplies its own implementation instead.
+pub trait ConfigFileStore {
+    fn read_to_string(&self, path: &Path) -> std::io::Result<String>;
+    fn write(&self, path: &Path, contents: &[u8]) -> std::io::Result<()>;
+    fn create_dir_all(&self, path: &Path) -> std::io::Result<()>;
+    fn exists(&self, path: &Path) -> bool;
+}
+
+pub struct LocalConfigFs;
+
+impl ConfigFileStore for LocalConfigFs {
+    fn read_to_string(&self, path: &Path) -> std::io::Result<String> {
+        std::fs::read_to_string(path)
+    }
+
+    fn write(&self, path: &Path, contents: &[u8]) -> std::io::Result<()> {
+        std::fs::write(path, contents)
+    }
+
+    fn create_dir_all(&self, path: &Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(path)
+    }
+
+    fn exists(&self, path: &Path) -> bool {
+        path.exists()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct General {
     /// Field-level default so a `[general]` table missing this one key
@@ -1555,15 +1591,22 @@ impl Config {
 
     /// Loads the config from `path`, or creates and saves a default config if it doesn't exist.
     pub fn load_or_init(path: &Path) -> Result<Self> {
-        if path.exists() {
-            let contents = std::fs::read_to_string(path)?;
+        Self::load_or_init_with_fs(path, &LocalConfigFs)
+    }
+
+    /// `load_or_init`, through an injected `fs` backend instead of always
+    /// `LocalConfigFs` — the seam a future non-native caller (no local disk)
+    /// uses instead.
+    pub fn load_or_init_with_fs(path: &Path, fs: &dyn ConfigFileStore) -> Result<Self> {
+        if fs.exists(path) {
+            let contents = fs.read_to_string(path)?;
             Self::parse(&contents)
         } else {
             if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)?;
+                fs.create_dir_all(parent)?;
             }
             let contents = commented_default_toml();
-            std::fs::write(path, &contents)?;
+            fs.write(path, contents.as_bytes())?;
             Self::parse(&contents)
         }
     }
@@ -1577,11 +1620,16 @@ impl Config {
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
+        self.save_with_fs(path, &LocalConfigFs)
+    }
+
+    /// `save`, through an injected `fs` backend — see `load_or_init_with_fs`.
+    pub fn save_with_fs(&self, path: &Path, fs: &dyn ConfigFileStore) -> Result<()> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+            fs.create_dir_all(parent)?;
         }
         let contents = toml::to_string_pretty(self)?;
-        std::fs::write(path, contents)?;
+        fs.write(path, contents.as_bytes())?;
         Ok(())
     }
 }
@@ -2064,5 +2112,66 @@ mod tests {
                 "{section} has no comment line directly above it"
             );
         }
+    }
+
+    /// A tiny in-memory `ConfigFileStore` — proves the injected-backend
+    /// design actually works end-to-end, not just that it type-checks
+    /// against `LocalConfigFs`. Mirrors `shiki-core`'s own `MemFs` test
+    /// double (`notebook.rs`), duplicated rather than shared for the same
+    /// reason `ConfigFileStore` itself is its own local trait.
+    struct MemConfigFs {
+        files: std::sync::Mutex<std::collections::HashMap<PathBuf, Vec<u8>>>,
+    }
+
+    impl MemConfigFs {
+        fn new() -> Self {
+            Self {
+                files: std::sync::Mutex::new(std::collections::HashMap::new()),
+            }
+        }
+    }
+
+    impl ConfigFileStore for MemConfigFs {
+        fn read_to_string(&self, path: &Path) -> std::io::Result<String> {
+            self.files
+                .lock()
+                .unwrap()
+                .get(path)
+                .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "not found"))
+        }
+
+        fn write(&self, path: &Path, contents: &[u8]) -> std::io::Result<()> {
+            self.files
+                .lock()
+                .unwrap()
+                .insert(path.to_path_buf(), contents.to_vec());
+            Ok(())
+        }
+
+        fn create_dir_all(&self, _path: &Path) -> std::io::Result<()> {
+            Ok(())
+        }
+
+        fn exists(&self, path: &Path) -> bool {
+            self.files.lock().unwrap().contains_key(path)
+        }
+    }
+
+    #[test]
+    fn config_load_or_init_and_save_work_entirely_through_an_injected_in_memory_backend() {
+        let fs = MemConfigFs::new();
+        let path = PathBuf::from("/virtual/config.toml");
+
+        let created = Config::load_or_init_with_fs(&path, &fs).unwrap();
+        assert_eq!(created.theme.name, ThemeConfig::default().name);
+        assert!(fs.exists(&path), "load_or_init should have written a file");
+
+        let mut edited = created;
+        edited.theme.name = "gruvbox-dark".to_string();
+        edited.save_with_fs(&path, &fs).unwrap();
+
+        let reloaded = Config::load_or_init_with_fs(&path, &fs).unwrap();
+        assert_eq!(reloaded.theme.name, "gruvbox-dark");
     }
 }

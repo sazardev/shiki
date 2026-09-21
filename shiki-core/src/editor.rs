@@ -135,6 +135,29 @@ pub fn command_for(editor: &str, path: &std::path::Path) -> std::process::Comman
     command
 }
 
+/// A pluggable source of "how do I launch an editor" — the OS-spawning
+/// default (`NativeEditor`) just calls the free functions above; a future
+/// non-native consumer (e.g. one with no local process to spawn) can
+/// implement this instead. Purely additive: nothing in this crate or its
+/// existing consumers calls through this trait yet, so `command_for`/
+/// `detect_favorite_editor` themselves are untouched.
+pub trait EditorLauncher: Send + Sync {
+    fn detect_favorite(&self) -> Option<String>;
+    fn command_for(&self, editor: &str, path: &std::path::Path) -> std::process::Command;
+}
+
+pub struct NativeEditor;
+
+impl EditorLauncher for NativeEditor {
+    fn detect_favorite(&self) -> Option<String> {
+        detect_favorite_editor()
+    }
+
+    fn command_for(&self, editor: &str, path: &std::path::Path) -> std::process::Command {
+        command_for(editor, path)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

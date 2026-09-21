@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::Result;
+use crate::config::{ConfigFileStore, LocalConfigFs, Result};
 
 /// Whichever single entry (folder or note) was highlighted in NOTES at the
 /// point the session was saved. A plain `Option<String>` name isn't enough
@@ -71,7 +71,14 @@ impl SessionState {
     /// losing the exact cursor position on a corrupt/missing file is not
     /// worth failing startup over.
     pub fn load(path: &Path) -> Option<Self> {
-        let contents = std::fs::read_to_string(path).ok()?;
+        Self::load_with_fs(path, &LocalConfigFs)
+    }
+
+    /// `load`, through an injected `fs` backend instead of always
+    /// `LocalConfigFs` — the seam a future non-native caller (no local disk)
+    /// uses instead.
+    pub fn load_with_fs(path: &Path, fs: &dyn ConfigFileStore) -> Option<Self> {
+        let contents = fs.read_to_string(path).ok()?;
         let mut session: Self = toml::from_str(&contents).ok()?;
         session
             .notes_path
@@ -80,11 +87,16 @@ impl SessionState {
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
+        self.save_with_fs(path, &LocalConfigFs)
+    }
+
+    /// `save`, through an injected `fs` backend — see `load_with_fs`.
+    pub fn save_with_fs(&self, path: &Path, fs: &dyn ConfigFileStore) -> Result<()> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+            fs.create_dir_all(parent)?;
         }
         let contents = toml::to_string_pretty(self)?;
-        std::fs::write(path, contents)?;
+        fs.write(path, contents.as_bytes())?;
         Ok(())
     }
 }

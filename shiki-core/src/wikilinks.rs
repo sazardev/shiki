@@ -225,11 +225,22 @@ pub fn orphans(notes: &[Note]) -> Vec<usize> {
 /// (e.g. the file changed since the mention was detected); an I/O failure
 /// is a real error.
 pub fn link_mention(path: &std::path::Path, title: &str) -> crate::Result<bool> {
+    link_mention_with_fs(path, title, &crate::fs::LocalFs)
+}
+
+/// `link_mention`, through an injected `fs` backend instead of always
+/// `LocalFs` — the seam a future non-native caller (no local disk) uses
+/// instead.
+pub fn link_mention_with_fs(
+    path: &std::path::Path,
+    title: &str,
+    fs: &dyn crate::fs::FileStore,
+) -> crate::Result<bool> {
     let title = title.trim();
     if title.is_empty() {
         return Ok(false);
     }
-    let contents = std::fs::read_to_string(path)?;
+    let contents = fs.read_to_string(path)?;
     let mut lines: Vec<String> = contents.split('\n').map(str::to_string).collect();
 
     let mut start = 0;
@@ -247,7 +258,7 @@ pub fn link_mention(path: &std::path::Path, title: &str) -> crate::Result<bool> 
         if let Some(pos) = find_unlinked(line, &needle) {
             let end = pos + needle.len();
             line.replace_range(pos..end, &format!("[[{}]]", &line[pos..end]));
-            std::fs::write(path, lines.join("\n"))?;
+            fs.write(path, lines.join("\n").as_bytes())?;
             return Ok(true);
         }
     }
@@ -314,6 +325,18 @@ pub fn rewrite_links_to(
     new_title: &str,
     pool: &[(crate::Notebook, Note)],
 ) -> crate::Result<(usize, usize, Vec<String>)> {
+    rewrite_links_to_with_fs(old_targets, new_title, pool, &crate::fs::LocalFs)
+}
+
+/// `rewrite_links_to`, through an injected `fs` backend instead of always
+/// `LocalFs` — the seam a future non-native caller (no local disk) uses
+/// instead.
+pub fn rewrite_links_to_with_fs(
+    old_targets: &[String],
+    new_title: &str,
+    pool: &[(crate::Notebook, Note)],
+    fs: &dyn crate::fs::FileStore,
+) -> crate::Result<(usize, usize, Vec<String>)> {
     use crate::crypto::looks_encrypted;
 
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -338,7 +361,7 @@ pub fn rewrite_links_to(
     let mut notes_updated = 0usize;
     let mut notebooks_touched: Vec<String> = Vec::new();
     for (nb, note) in pool {
-        let raw = match std::fs::read_to_string(&note.path) {
+        let raw = match fs.read_to_string(&note.path) {
             Ok(raw) => raw,
             Err(_) => continue,
         };
@@ -408,7 +431,7 @@ pub fn rewrite_links_to(
             } else {
                 lines.join("\n")
             };
-            std::fs::write(&note.path, out)?;
+            fs.write(&note.path, out.as_bytes())?;
             notes_updated += 1;
             if !notebooks_touched.contains(&nb.name) {
                 notebooks_touched.push(nb.name.clone());

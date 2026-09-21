@@ -19,6 +19,7 @@ pub fn on_path(bin: &str) -> bool {
 /// itself. A `~` that can't be resolved (no home directory at all) also
 /// comes back unchanged, so a caller can decide whether that's an error or
 /// just something to pass along.
+#[cfg(feature = "home-dir-expand")]
 pub fn expand_home(path: &str) -> std::path::PathBuf {
     if let Some(rest) = path.strip_prefix('~') {
         if let Some(home) = directories::BaseDirs::new().map(|d| d.home_dir().to_path_buf()) {
@@ -33,6 +34,16 @@ pub fn expand_home(path: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(path)
 }
 
+/// Without the `home-dir-expand` feature (default-on for every existing
+/// consumer — see `shiki-core/Cargo.toml`), there's no `directories`
+/// dependency at all, so a leading `~` is left untouched rather than
+/// resolved — same "return unchanged" contract this function already uses
+/// for an unresolvable home directory.
+#[cfg(not(feature = "home-dir-expand"))]
+pub fn expand_home(path: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(path)
+}
+
 /// Whether `pid` is still a live process.
 ///
 /// On Unix, `kill(pid, 0)` sends no signal but performs the usual permission
@@ -43,7 +54,7 @@ pub fn expand_home(path: &str) -> std::path::PathBuf {
 /// TCP connect timeout instead (the user-visible symptom is still handled,
 /// just not the file cleanup done here on Unix).
 pub fn is_pid_alive(pid: u32) -> bool {
-    #[cfg(unix)]
+    #[cfg(all(unix, feature = "unix-process-check"))]
     {
         if pid == 0 || pid > i32::MAX as u32 {
             return false;
@@ -55,6 +66,15 @@ pub fn is_pid_alive(pid: u32) -> bool {
             return true;
         }
         std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+    }
+    // Without the `unix-process-check` feature (default-on for every
+    // existing consumer — see `shiki-core/Cargo.toml`), there's no `libc`
+    // dependency at all, so this falls back to the same conservative
+    // "assume alive" `true` Windows already uses above.
+    #[cfg(all(unix, not(feature = "unix-process-check")))]
+    {
+        let _ = pid;
+        true
     }
     #[cfg(windows)]
     {
@@ -89,6 +109,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "home-dir-expand")]
     #[test]
     fn expand_home_expands_a_tilde_when_a_home_exists() {
         // The sandbox/CI always has a home directory, so this asserts the

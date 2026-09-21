@@ -30,7 +30,9 @@ use crate::{process::on_path, Error, Result};
 /// quick voice capture.
 pub const DEFAULT_MODEL: &str = "ggml-base.en.bin";
 
+#[cfg(feature = "self-update")]
 const WHISPER_OWNER: &str = "ggml-org";
+#[cfg(feature = "self-update")]
 const WHISPER_REPO: &str = "whisper.cpp";
 /// whisper.cpp's converted models live in a Hugging Face repo (its own
 /// `models/download-ggml-model.sh` uses the same `resolve/main` URL).
@@ -215,6 +217,7 @@ pub fn record_to_wav(out: &Path, seconds: u32) -> Result<()> {
 /// current platform to the exact asset `self_update` should match (see
 /// `ensure_whisper`). macOS only ships an `.xcframework` (no CLI binary),
 /// so macOS must have `whisper-cli` on `$PATH` instead.
+#[cfg(feature = "self-update")]
 fn release_asset_target() -> Result<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("linux", "x86_64") => Ok("whisper-bin-ubuntu-x64.tar.gz"),
@@ -242,30 +245,45 @@ pub fn ensure_whisper(cache_dir: &Path) -> Result<PathBuf> {
         return Ok(cached);
     }
 
-    std::fs::create_dir_all(cache_dir)?;
-    let target = release_asset_target()?;
-    let mut builder = self_update::backends::github::Update::configure();
-    builder
-        .repo_owner(WHISPER_OWNER)
-        .repo_name(WHISPER_REPO)
-        .bin_name(bin_file_name())
-        // The full asset filename as the target substring — `whisper-bin-x64.zip`
-        // uniquely matches the plain build and skips `whisper-blas-bin-x64.zip`/
-        // `whisper-cublas-*.zip`, which share the platform string.
-        .target(target)
-        .asset_identifier(if cfg!(windows) { ".zip" } else { ".tar.gz" })
-        .bin_path_in_archive(bin_file_name())
-        .bin_install_path(&cached)
-        .show_download_progress(false)
-        .show_output(false)
-        .no_confirm(true)
-        // GitHub computes and serves a sha256 digest per release asset —
-        // same integrity check `publish::ensure_binary`/`update.rs` rely on.
-        .verify_release_digest(true)
-        .current_version("0.0.0");
-    let updater = builder.build().map_err(|e| Error::Voice(e.to_string()))?;
-    updater.update().map_err(|e| Error::Voice(e.to_string()))?;
-    Ok(cached)
+    #[cfg(feature = "self-update")]
+    {
+        std::fs::create_dir_all(cache_dir)?;
+        let target = release_asset_target()?;
+        let mut builder = self_update::backends::github::Update::configure();
+        builder
+            .repo_owner(WHISPER_OWNER)
+            .repo_name(WHISPER_REPO)
+            .bin_name(bin_file_name())
+            // The full asset filename as the target substring — `whisper-bin-x64.zip`
+            // uniquely matches the plain build and skips `whisper-blas-bin-x64.zip`/
+            // `whisper-cublas-*.zip`, which share the platform string.
+            .target(target)
+            .asset_identifier(if cfg!(windows) { ".zip" } else { ".tar.gz" })
+            .bin_path_in_archive(bin_file_name())
+            .bin_install_path(&cached)
+            .show_download_progress(false)
+            .show_output(false)
+            .no_confirm(true)
+            // GitHub computes and serves a sha256 digest per release asset —
+            // same integrity check `publish::ensure_binary`/`update.rs` rely on.
+            .verify_release_digest(true)
+            .current_version("0.0.0");
+        let updater = builder.build().map_err(|e| Error::Voice(e.to_string()))?;
+        updater.update().map_err(|e| Error::Voice(e.to_string()))?;
+        Ok(cached)
+    }
+    // Without the `self-update` feature (default-on for every existing
+    // consumer), there's no way to auto-fetch `whisper-cli` — same "clear
+    // error, not a silent no-op" contract every other missing-binary case in
+    // this crate already follows.
+    #[cfg(not(feature = "self-update"))]
+    {
+        Err(Error::Voice(
+            "whisper-cli isn't on $PATH and this build has no `self-update` \
+             feature to fetch it automatically"
+                .to_string(),
+        ))
+    }
 }
 
 /// Ensures `model` (e.g. `ggml-base.en.bin`) is present in `model_dir`,
@@ -472,6 +490,35 @@ pub fn transcribe(bin: &Path, model: &Path, wav: &Path) -> Result<String> {
 /// WAV, make sure `whisper-cli` + the model exist (fetching both on first
 /// use), transcribe, and return the transcript — which the caller then
 /// captures like any other text.
+/// A pluggable voice-capture capability — `NativeVoice` just calls the free
+/// functions below (which shell out to a recorder + `whisper-cli`); a
+/// future non-native consumer (e.g. one with no local microphone/process to
+/// spawn) can implement this instead. Purely additive: `recorder_available`/
+/// `whisper_available`/`capture_transcript` are untouched. Lower priority
+/// than the other ports here — `voice` has zero call sites in either GUI
+/// consumer today, it's a CLI-only feature (`shiki capture --voice`).
+pub trait VoiceCapture: Send + Sync {
+    fn recorder_available(&self) -> bool;
+    fn whisper_available(&self, cache_dir: &Path) -> bool;
+    fn capture_transcript(&self, cache_dir: &Path, seconds: u32, model: &str) -> Result<String>;
+}
+
+pub struct NativeVoice;
+
+impl VoiceCapture for NativeVoice {
+    fn recorder_available(&self) -> bool {
+        recorder_available()
+    }
+
+    fn whisper_available(&self, cache_dir: &Path) -> bool {
+        whisper_available(cache_dir)
+    }
+
+    fn capture_transcript(&self, cache_dir: &Path, seconds: u32, model: &str) -> Result<String> {
+        capture_transcript(cache_dir, seconds, model)
+    }
+}
+
 pub fn capture_transcript(cache_dir: &Path, seconds: u32, model: &str) -> Result<String> {
     let tmp = tempfile::tempdir()?;
     let wav = tmp.path().join("capture.wav");

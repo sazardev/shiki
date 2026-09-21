@@ -117,7 +117,7 @@ impl Note {
     /// `synthesize_frontmatter` and `from_file_in_notebook` for the
     /// notebook-aware variant. The only real failure mode left is I/O.
     pub fn from_file(path: &Path) -> Result<Self> {
-        Self::from_file_with_crypto(path, None)
+        Self::from_file_in_notebook_with_crypto_and_fs(path, None, None, &crate::fs::LocalFs)
     }
 
     /// Like `from_file`, but decrypts first when `crypto` is given and the
@@ -131,13 +131,7 @@ impl Note {
         path: &Path,
         crypto: Option<&crate::crypto::NotebookCrypto>,
     ) -> Result<Self> {
-        let contents = Self::read_and_decrypt(path, crypto)?;
-        let (frontmatter, body) = Self::split(path, &contents, None);
-        Ok(Self {
-            path: path.to_path_buf(),
-            frontmatter,
-            body,
-        })
+        Self::from_file_in_notebook_with_crypto_and_fs(path, None, crypto, &crate::fs::LocalFs)
     }
 
     /// Like `from_file`, but passes `notebook_name` through to
@@ -147,7 +141,12 @@ impl Note {
     /// from `path.parent().file_name()`, which would pick up an
     /// intermediate folder name instead of the notebook itself.
     pub fn from_file_in_notebook(path: &Path, notebook_name: &str) -> Result<Self> {
-        Self::from_file_in_notebook_with_crypto(path, notebook_name, None)
+        Self::from_file_in_notebook_with_crypto_and_fs(
+            path,
+            Some(notebook_name),
+            None,
+            &crate::fs::LocalFs,
+        )
     }
 
     /// `from_file_in_notebook`, decrypting first when `crypto` is given —
@@ -157,8 +156,29 @@ impl Note {
         notebook_name: &str,
         crypto: Option<&crate::crypto::NotebookCrypto>,
     ) -> Result<Self> {
-        let contents = Self::read_and_decrypt(path, crypto)?;
-        let (frontmatter, body) = Self::split(path, &contents, Some(notebook_name));
+        Self::from_file_in_notebook_with_crypto_and_fs(
+            path,
+            Some(notebook_name),
+            crypto,
+            &crate::fs::LocalFs,
+        )
+    }
+
+    /// The real implementation every constructor above funnels into — the
+    /// other four exist only because most callers don't care about the
+    /// notebook name, crypto, or a non-native `fs` backend, and defaulting
+    /// each independently reads better at the call site than threading
+    /// `None`/`&LocalFs` through by hand everywhere. `fs` is the one
+    /// consumer-facing seam a future non-native caller (no local disk)
+    /// actually needs — see `fs.rs`'s module doc.
+    pub fn from_file_in_notebook_with_crypto_and_fs(
+        path: &Path,
+        notebook_name: Option<&str>,
+        crypto: Option<&crate::crypto::NotebookCrypto>,
+        fs: &dyn crate::fs::FileStore,
+    ) -> Result<Self> {
+        let contents = Self::read_and_decrypt(path, crypto, fs)?;
+        let (frontmatter, body) = Self::split(path, &contents, notebook_name, fs);
         Ok(Self {
             path: path.to_path_buf(),
             frontmatter,
@@ -173,8 +193,9 @@ impl Note {
     fn read_and_decrypt(
         path: &Path,
         crypto: Option<&crate::crypto::NotebookCrypto>,
+        fs: &dyn crate::fs::FileStore,
     ) -> Result<String> {
-        let raw = normalize_line_endings(std::fs::read_to_string(path)?);
+        let raw = normalize_line_endings(fs.read_to_string(path)?);
         if crate::crypto::looks_encrypted(&raw) {
             match crypto {
                 Some(c) => c.decrypt(&raw),
@@ -188,10 +209,15 @@ impl Note {
         }
     }
 
-    fn split(path: &Path, contents: &str, notebook: Option<&str>) -> (Frontmatter, String) {
+    fn split(
+        path: &Path,
+        contents: &str,
+        notebook: Option<&str>,
+        fs: &dyn crate::fs::FileStore,
+    ) -> (Frontmatter, String) {
         Self::try_parse_frontmatter(contents).unwrap_or_else(|| {
             (
-                Self::synthesize_frontmatter(path, contents, notebook),
+                Self::synthesize_frontmatter(path, contents, notebook, fs),
                 contents.to_string(),
             )
         })
@@ -226,7 +252,12 @@ impl Note {
     /// its own. When `notebook` is `Some`, it's used as the `notebook` field
     /// directly; when `None`, falls back to `path.parent().file_name()` for
     /// backward compatibility with callers that don't know the notebook.
-    fn synthesize_frontmatter(path: &Path, contents: &str, notebook: Option<&str>) -> Frontmatter {
+    fn synthesize_frontmatter(
+        path: &Path,
+        contents: &str,
+        notebook: Option<&str>,
+        fs: &dyn crate::fs::FileStore,
+    ) -> Frontmatter {
         let title = contents
             .lines()
             .find_map(|line| line.strip_prefix("# "))
@@ -241,8 +272,8 @@ impl Note {
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default(),
         };
-        let date = std::fs::metadata(path)
-            .and_then(|m| m.modified())
+        let date = fs
+            .modified(path)
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .and_then(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, 0))
@@ -286,15 +317,26 @@ impl Note {
     /// this always encrypts when `crypto` is `Some` rather than trying to
     /// detect "was this file already encrypted" first.
     pub fn save_with_crypto(&self, crypto: Option<&crate::crypto::NotebookCrypto>) -> Result<()> {
+        self.save_with_crypto_and_fs(crypto, &crate::fs::LocalFs)
+    }
+
+    /// `save_with_crypto`, through an injected `fs` backend instead of
+    /// always `LocalFs` — the seam a future non-native caller (no local
+    /// disk) uses instead.
+    pub fn save_with_crypto_and_fs(
+        &self,
+        crypto: Option<&crate::crypto::NotebookCrypto>,
+        fs: &dyn crate::fs::FileStore,
+    ) -> Result<()> {
         if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent)?;
+            fs.create_dir_all(parent)?;
         }
         let plaintext = self.to_file_contents()?;
         let contents = match crypto {
             Some(c) => c.encrypt(&plaintext)?,
             None => plaintext,
         };
-        std::fs::write(&self.path, contents)?;
+        fs.write(&self.path, contents.as_bytes())?;
         Ok(())
     }
 }

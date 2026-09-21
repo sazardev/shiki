@@ -44,16 +44,28 @@ impl LastCapture {
     /// than a real error — a corrupt/missing record just means undo has
     /// nothing to do, not that something is broken.
     pub fn load(path: &Path) -> Option<Self> {
-        let contents = std::fs::read_to_string(path).ok()?;
+        Self::load_with_fs(path, &crate::fs::LocalFs)
+    }
+
+    /// `load`, through an injected `fs` backend instead of always
+    /// `LocalFs` — the seam a future non-native caller (no local disk)
+    /// uses instead.
+    pub fn load_with_fs(path: &Path, fs: &dyn crate::fs::FileStore) -> Option<Self> {
+        let contents = fs.read_to_string(path).ok()?;
         toml::from_str(&contents).ok()
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
+        self.save_with_fs(path, &crate::fs::LocalFs)
+    }
+
+    /// `save`, through an injected `fs` backend — see `load_with_fs`.
+    pub fn save_with_fs(&self, path: &Path, fs: &dyn crate::fs::FileStore) -> Result<()> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+            fs.create_dir_all(parent)?;
         }
         let contents = toml::to_string_pretty(self)?;
-        std::fs::write(path, contents)?;
+        fs.write(path, contents.as_bytes())?;
         Ok(())
     }
 
@@ -66,7 +78,12 @@ impl LastCapture {
     /// undo"). Best-effort: a failed removal doesn't fail the undo that
     /// already succeeded.
     pub fn clear(path: &Path) {
-        let _ = std::fs::remove_file(path);
+        Self::clear_with_fs(path, &crate::fs::LocalFs)
+    }
+
+    /// `clear`, through an injected `fs` backend — see `load_with_fs`.
+    pub fn clear_with_fs(path: &Path, fs: &dyn crate::fs::FileStore) {
+        let _ = fs.remove_file(path);
     }
 }
 

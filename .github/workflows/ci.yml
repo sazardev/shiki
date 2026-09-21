@@ -69,6 +69,35 @@ jobs:
       - run: cargo install cargo-audit --locked
       - run: cargo audit
 
+  # Guards the "shiki-core/shiki-config are portable to a non-native target"
+  # property that made `git2`/`self_update`/`libc`/`directories` Cargo
+  # features (default-on) and `comrak`'s `syntect-onig`/Oniguruma backend
+  # disabled by default in the first place — without a dedicated job like
+  # this, that property silently rots the next time someone adds a
+  # dependency or touches an OS-`cfg`-gated function (this repo has already
+  # been burned once by an unverified assumption quietly going stale, see
+  # the auto-tag/release.yml history in CLAUDE.md). Deliberately scoped to
+  # `-p shiki-core --no-default-features`/`-p shiki-config`, never
+  # `--workspace`/`--all-features`: the terminal crates (shiki-tui/
+  # shiki-cli/shiki-desktop/shiki-native-host) are native-only by design and
+  # were never meant to target wasm, and `--all-features` would
+  # (correctly) fail here since `git2`/`self_update`/`libc`/`directories`
+  # are inherently native. `cargo check`, not `cargo build`/`test` — wasm32
+  # code here has never been exercised at runtime (no wasm-bindgen glue, no
+  # JS host), only proven to type-check and link.
+  wasm-portability:
+    name: wasm32 portability check (shiki-core, shiki-config)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p shiki-core --no-default-features --target wasm32-unknown-unknown --locked
+      - run: cargo check -p shiki-config --target wasm32-unknown-unknown --locked
+
   # A single job, not separate `build`/`test` jobs — `cargo test --workspace`
   # already compiles every lib/bin target in the workspace (in test profile)
   # on its way to running the tests, so a prior version of this file that

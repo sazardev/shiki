@@ -141,6 +141,33 @@ pub fn suggestions(word: &str, lang: Option<&str>) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// A pluggable spell-checking capability — `NativeSpellChecker` just calls
+/// the free functions above (which shell out to `hunspell`); a future
+/// non-native consumer (e.g. one backed by a remote or in-process checker
+/// instead of a local binary) can implement this instead. Purely additive:
+/// `hunspell_available`/`check_text`/`suggestions` are untouched.
+pub trait SpellChecker: Send + Sync {
+    fn available(&self) -> bool;
+    fn check(&self, text: &str, lang: Option<&str>) -> crate::Result<Vec<Misspell>>;
+    fn suggestions(&self, word: &str, lang: Option<&str>) -> Vec<String>;
+}
+
+pub struct NativeSpellChecker;
+
+impl SpellChecker for NativeSpellChecker {
+    fn available(&self) -> bool {
+        hunspell_available()
+    }
+
+    fn check(&self, text: &str, lang: Option<&str>) -> crate::Result<Vec<Misspell>> {
+        check_text(text, lang)
+    }
+
+    fn suggestions(&self, word: &str, lang: Option<&str>) -> Vec<String> {
+        suggestions(word, lang)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

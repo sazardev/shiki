@@ -156,7 +156,18 @@ pub struct Toggled {
 /// leading `---` frontmatter block are never candidates, so YAML that
 /// happens to look like a checkbox can't shift the count.
 pub fn toggle(path: &Path, raw_line: &str, occurrence: usize) -> Result<Toggled> {
-    let contents = std::fs::read_to_string(path)?;
+    toggle_with_fs(path, raw_line, occurrence, &crate::fs::LocalFs)
+}
+
+/// `toggle`, through an injected `fs` backend instead of always `LocalFs` —
+/// the seam a future non-native caller (no local disk) uses instead.
+pub fn toggle_with_fs(
+    path: &Path,
+    raw_line: &str,
+    occurrence: usize,
+    fs: &dyn crate::fs::FileStore,
+) -> Result<Toggled> {
+    let contents = fs.read_to_string(path)?;
     let mut lines: Vec<String> = contents.split('\n').map(str::to_string).collect();
 
     // Skip the frontmatter block, if any — mirrors `Note::split`'s
@@ -233,7 +244,7 @@ pub fn toggle(path: &Path, raw_line: &str, occurrence: usize) -> Result<Toggled>
         .filter(|l| l.trim_end_matches('\r') == new_raw)
         .count();
 
-    std::fs::write(path, lines.join("\n"))?;
+    fs.write(path, lines.join("\n").as_bytes())?;
     Ok(Toggled {
         done: new_done,
         raw_line: new_raw,

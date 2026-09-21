@@ -28,7 +28,7 @@ pub fn save_image(
     std::fs::create_dir_all(&dir)?;
 
     let stem = format!("pasted-{}", chrono::Local::now().format("%Y%m%d-%H%M%S"));
-    let file = unique_file(&dir, &stem);
+    let file = shiki_core::attachments::unique_file(&dir, &stem);
 
     encode_png(&file, image)?;
 
@@ -37,21 +37,6 @@ pub fn save_image(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
     Ok((file, format!("![{stem}](attachments/{file_name})")))
-}
-
-/// `stem.png`, or `stem-2.png`/`stem-3.png`/… past the first collision.
-fn unique_file(dir: &Path, stem: &str) -> PathBuf {
-    let first = dir.join(format!("{stem}.png"));
-    if !first.exists() {
-        return first;
-    }
-    for n in 2.. {
-        let candidate = dir.join(format!("{stem}-{n}.png"));
-        if !candidate.exists() {
-            return candidate;
-        }
-    }
-    unreachable!()
 }
 
 /// RGBA8 → PNG on disk. png-crate errors funnel through `Io` via
@@ -95,22 +80,6 @@ mod tests {
         // Link text carries the file name, relative to the notebook root.
         let name = path.file_name().unwrap().to_string_lossy().to_string();
         assert_eq!(link, format!("![{stem}](attachments/{name})"));
-    }
-
-    #[test]
-    fn colliding_names_get_a_numeric_suffix_not_an_overwrite() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("pasted.png"), b"occupied").unwrap();
-
-        let second = unique_file(tmp.path(), "pasted");
-
-        assert_eq!(second, tmp.path().join("pasted-2.png"));
-        // And the chain keeps going.
-        std::fs::write(&second, b"occupied too").unwrap();
-        assert_eq!(
-            unique_file(tmp.path(), "pasted"),
-            tmp.path().join("pasted-3.png")
-        );
     }
 
     #[test]

@@ -1,12 +1,49 @@
+//! shiki-core: pure notebook/note/git/search/templates domain logic — see
+//! `IDEA.md`/`CLAUDE.md` at the repo root for the full design spec.
+//!
+//! **Every public function/method in this crate is synchronous and
+//! blocking — there is no async anywhere in `shiki-core`, on purpose (see
+//! `shiki-tui`'s own doc comments for why the terminal crates stay
+//! synchronous throughout).** It is safe to call any of them from any
+//! thread — nothing here is reentrant-unsafe or relies on thread-local
+//! state — so a consumer that itself runs on an async runtime (a future web
+//! backend, for instance) should wrap each call in that runtime's blocking
+//! adapter (e.g. Tokio's `spawn_blocking`) rather than expecting an
+//! `async fn` version to show up here; `shiki-tui`'s own background git
+//! operations (`App::spawn_git_op`, a plain `std::thread::spawn` + `mpsc`)
+//! are the existing example of this same pattern, just without an async
+//! runtime backing the call site.
+//!
+//! Portability seams for a future non-native consumer (no local git2, no
+//! local disk) live behind small traits rather than a bespoke config
+//! system: `vcs::VcsPort`/`fs::FileStore`, injected into
+//! `notebook::NotebookStore`/`notebook::Notebook` via
+//! `NotebookStore::new_with_backends`, and the process-capability traits in
+//! `editor`/`browser`/`spell`/`voice`/`update`/`publish` (each with a
+//! `Native*` default implementing it against the free functions those
+//! modules already exposed). `git2`/`self_update`/`libc` are genuine
+//! optional Cargo features (`git2-backend`/`self-update`/
+//! `unix-process-check`, all default-on) — `cargo check -p shiki-core
+//! --no-default-features` compiles clean. None of this has been exercised
+//! against an actual non-native target yet (e.g. `wasm32-unknown-unknown`)
+//! — `notebook::tests::notebook_store_works_entirely_through_injected_in_memory_backends`
+//! is the closest thing to a real second backend today, and it's still an
+//! in-process test double, not a different OS/target.
+
+pub mod attachments;
 pub mod browser;
 pub mod capture;
+pub mod clock;
 pub mod crypto;
 pub mod daily;
 pub mod editor;
 pub mod export;
+pub mod fs;
+#[cfg(feature = "git2-backend")]
 pub mod git;
 pub mod headings;
 pub mod last_capture;
+pub mod markdown;
 pub mod note;
 pub mod notebook;
 pub mod process;
@@ -18,7 +55,9 @@ pub mod tags;
 pub mod tasks;
 pub mod templates;
 pub mod trash;
+#[cfg(feature = "self-update")]
 pub mod update;
+pub mod vcs;
 pub mod voice;
 pub mod wikilinks;
 
@@ -38,6 +77,12 @@ pub enum Error {
     Yaml(#[from] serde_yaml::Error),
     #[error("toml error: {0}")]
     Toml(#[from] toml::ser::Error),
+    /// Gated with `git.rs` behind the `git2-backend` feature — no consumer
+    /// exhaustively `match`es this enum today (verified across `shiki-tui`/
+    /// `shiki-desktop`/`shiki-cli`/`shiki-native-host`, all propagate via
+    /// `?`/`.to_string()`/`Display`), so removing this variant under a
+    /// non-default feature set is safe for every existing consumer.
+    #[cfg(feature = "git2-backend")]
     #[error("git error: {0}")]
     Git(#[from] git2::Error),
     #[error("note not found: {0}")]

@@ -1,8 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "git2-backend")]
+use crate::git;
 use crate::note::{Frontmatter, Note};
-use crate::{git, Error, Result};
+use crate::{Error, Result};
 
 /// Slug for a new note in `dir`, guaranteed to not collide with an existing
 /// file there. Falls back to a timestamp-based slug when `title` slugifies
@@ -10,7 +12,7 @@ use crate::{git, Error, Result};
 /// etc. if that slug (or the timestamp fallback) is already taken — two
 /// titles that slugify the same, e.g. "Q3 Report" and "Q3, Report!", must
 /// not silently overwrite each other.
-fn unique_slug(dir: &Path, title: &str) -> String {
+fn unique_slug(dir: &Path, title: &str, fs: &dyn crate::fs::FileStore) -> String {
     let base = Note::slugify(title);
     let base = if base.is_empty() {
         format!("untitled-{}", chrono::Local::now().timestamp())
@@ -19,7 +21,7 @@ fn unique_slug(dir: &Path, title: &str) -> String {
     };
     let mut candidate = base.clone();
     let mut n = 2;
-    while dir.join(format!("{candidate}.md")).exists() {
+    while fs.exists(&dir.join(format!("{candidate}.md"))) {
         candidate = format!("{base}-{n}");
         n += 1;
     }
@@ -32,7 +34,13 @@ fn unique_slug(dir: &Path, title: &str) -> String {
 /// note's own extension (`rename_note_at` preserves it rather than always
 /// renaming onto `.md` — see there), so the collision check looks for the
 /// same file type the rename is actually producing.
-fn unique_slug_excluding(dir: &Path, title: &str, ignore: &Path, ext: &str) -> String {
+fn unique_slug_excluding(
+    dir: &Path,
+    title: &str,
+    ignore: &Path,
+    ext: &str,
+    fs: &dyn crate::fs::FileStore,
+) -> String {
     let base = Note::slugify(title);
     let base = if base.is_empty() {
         format!("untitled-{}", chrono::Local::now().timestamp())
@@ -43,7 +51,7 @@ fn unique_slug_excluding(dir: &Path, title: &str, ignore: &Path, ext: &str) -> S
     let mut n = 2;
     loop {
         let path = dir.join(format!("{candidate}.{ext}"));
-        if !path.exists() || path == *ignore {
+        if !fs.exists(&path) || path == *ignore {
             return candidate;
         }
         candidate = format!("{base}-{n}");
@@ -104,11 +112,32 @@ const NOTE_EXTENSIONS: [&str; 3] = ["md", "mdx", "txt"];
 /// `shiki-cli`, which see both crates, resolve that (`Config::encrypt_for`
 /// plus whatever passphrase is cached/typed) and attach it via
 /// `with_crypto` before using the notebook for any note I/O.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Notebook {
     pub name: String,
     pub path: PathBuf,
     pub crypto: Option<crate::crypto::NotebookCrypto>,
+    /// How this notebook's own methods (`list_dir`/`create_note_in`/
+    /// `delete_note_at`/…) read/write plain files. Defaults to
+    /// `fs::LocalFs` on every `Notebook` `Notebook::new` itself returns —
+    /// callers that got theirs from a `NotebookStore` instead inherit
+    /// whichever backend that store was built with (see
+    /// `NotebookStore::fs`); nothing outside `shiki-core` needs to touch
+    /// this field directly.
+    fs: std::sync::Arc<dyn crate::fs::FileStore>,
+}
+
+// Same reasoning as `NotebookStore`'s manual `Debug` impl: `dyn FileStore`
+// isn't `Debug` on its own.
+impl std::fmt::Debug for Notebook {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Notebook")
+            .field("name", &self.name)
+            .field("path", &self.path)
+            .field("crypto", &self.crypto)
+            .field("fs", &"<dyn FileStore>")
+            .finish()
+    }
 }
 
 impl Notebook {
@@ -117,6 +146,7 @@ impl Notebook {
             name: name.into(),
             path,
             crypto: None,
+            fs: std::sync::Arc::new(crate::fs::LocalFs),
         }
     }
 
@@ -125,6 +155,16 @@ impl Notebook {
     /// comment for why this can't be resolved inside `shiki-core` itself.
     pub fn with_crypto(mut self, crypto: Option<crate::crypto::NotebookCrypto>) -> Self {
         self.crypto = crypto;
+        self
+    }
+
+    /// Attaches a non-default `FileStore` — the seam a `NotebookStore`
+    /// built with `new_with_backends` uses to propagate its own backend to
+    /// every `Notebook` it hands out (`list`/`get`/`create`/`rename`), and
+    /// that a caller constructing a `Notebook` directly (bypassing a store
+    /// entirely) can use the same way.
+    pub fn with_fs_backend(mut self, fs: std::sync::Arc<dyn crate::fs::FileStore>) -> Self {
+        self.fs = fs;
         self
     }
 
@@ -141,19 +181,16 @@ impl Notebook {
     /// those rather than failing, so nothing here needs to skip them.
     pub fn list_dir(&self, relative: &Path) -> Result<(Vec<String>, Vec<Note>)> {
         let dir = self.path.join(relative);
-        if !dir.exists() {
+        if !self.fs.exists(&dir) {
             return Ok((Vec::new(), Vec::new()));
         }
-        let mut entries: Vec<PathBuf> = std::fs::read_dir(&dir)?
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .collect();
+        let mut entries: Vec<PathBuf> = self.fs.read_dir(&dir)?;
         entries.sort();
 
         let mut folders = Vec::new();
         let mut notes = Vec::new();
         for path in entries {
-            if path.is_dir() {
+            if self.fs.is_dir(&path) {
                 // Every dot-directory is invisible: `.git` is the original
                 // case, but an adopted Obsidian vault also brings
                 // `.obsidian/`, `.trash/`, `.smart-env/`… — none of those
@@ -173,10 +210,11 @@ impl Notebook {
                 .and_then(|ext| ext.to_str())
                 .is_some_and(|ext| NOTE_EXTENSIONS.contains(&ext))
             {
-                notes.push(Note::from_file_in_notebook_with_crypto(
+                notes.push(Note::from_file_in_notebook_with_crypto_and_fs(
                     &path,
-                    &self.name,
+                    Some(&self.name),
                     self.crypto.as_ref(),
+                    self.fs.as_ref(),
                 )?);
             }
         }
@@ -236,11 +274,11 @@ impl Notebook {
         body: impl Into<String>,
     ) -> Result<Note> {
         let dir = self.path.join(relative);
-        std::fs::create_dir_all(&dir)?;
-        let slug = unique_slug(&dir, title);
+        self.fs.create_dir_all(&dir)?;
+        let slug = unique_slug(&dir, title, self.fs.as_ref());
         let path = dir.join(format!("{slug}.md"));
         let note = Note::new(path, Frontmatter::new(title, &self.name), body.into());
-        note.save_with_crypto(self.crypto.as_ref())?;
+        note.save_with_crypto_and_fs(self.crypto.as_ref(), self.fs.as_ref())?;
         Ok(note)
     }
 
@@ -259,7 +297,7 @@ impl Notebook {
     pub fn create_folder_in(&self, relative: &Path, name: &str) -> Result<PathBuf> {
         validate_name(name)?;
         let dir = self.path.join(relative).join(name);
-        std::fs::create_dir_all(&dir)?;
+        self.fs.create_dir_all(&dir)?;
         Ok(dir)
     }
 
@@ -270,10 +308,10 @@ impl Notebook {
     /// Deletes the note at its actual path (wherever it lives — root or a
     /// nested folder), not a path reconstructed from a root-relative slug.
     pub fn delete_note_at(&self, path: &Path) -> Result<()> {
-        if !path.exists() {
+        if !self.fs.exists(path) {
             return Err(Error::NoteNotFound(path.display().to_string()));
         }
-        std::fs::remove_file(path)?;
+        self.fs.remove_file(path)?;
         Ok(())
     }
 
@@ -283,17 +321,21 @@ impl Notebook {
     /// being silently converted to `.md`, the one extension shiki itself
     /// ever creates new notes with.
     pub fn rename_note_at(&self, path: &Path, new_title: &str) -> Result<Note> {
-        let mut note =
-            Note::from_file_in_notebook_with_crypto(path, &self.name, self.crypto.as_ref())?;
+        let mut note = Note::from_file_in_notebook_with_crypto_and_fs(
+            path,
+            Some(&self.name),
+            self.crypto.as_ref(),
+            self.fs.as_ref(),
+        )?;
         let dir = path.parent().unwrap_or(&self.path);
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("md");
-        let slug = unique_slug_excluding(dir, new_title, path, ext);
+        let slug = unique_slug_excluding(dir, new_title, path, ext, self.fs.as_ref());
         let new_path = dir.join(format!("{slug}.{ext}"));
         note.frontmatter.title = new_title.to_string();
         note.path = new_path;
-        note.save_with_crypto(self.crypto.as_ref())?;
+        note.save_with_crypto_and_fs(self.crypto.as_ref(), self.fs.as_ref())?;
         if path != note.path {
-            std::fs::remove_file(path)?;
+            self.fs.remove_file(path)?;
         }
         Ok(note)
     }
@@ -304,10 +346,10 @@ impl Notebook {
     /// note/notebook delete.
     pub fn delete_folder_at(&self, relative: &Path) -> Result<()> {
         let dir = self.path.join(relative);
-        if !dir.is_dir() {
+        if !self.fs.is_dir(&dir) {
             return Err(Error::NoteNotFound(dir.display().to_string()));
         }
-        std::fs::remove_dir_all(&dir)?;
+        self.fs.remove_dir_all(&dir)?;
         Ok(())
     }
 
@@ -329,22 +371,26 @@ impl Notebook {
         // out of an encrypted notebook into a plain one, or vice versa),
         // and a note's ciphertext is only ever meaningful under the key of
         // whichever notebook it currently lives in.
-        let mut copy =
-            Note::from_file_in_notebook_with_crypto(path, &self.name, self.crypto.as_ref())?;
+        let mut copy = Note::from_file_in_notebook_with_crypto_and_fs(
+            path,
+            Some(&self.name),
+            self.crypto.as_ref(),
+            self.fs.as_ref(),
+        )?;
         let dest_dir = dest_notebook.path.join(dest_relative);
-        std::fs::create_dir_all(&dest_dir)?;
+        dest_notebook.fs.create_dir_all(&dest_dir)?;
         let file_name = path
             .file_name()
             .ok_or_else(|| Error::NoteNotFound(path.display().to_string()))?;
         let dest_path = dest_dir.join(file_name);
-        if dest_path.exists() {
+        if dest_notebook.fs.exists(&dest_path) {
             return Err(Error::DestinationExists(dest_path.display().to_string()));
         }
         copy.path = dest_path;
         if dest_notebook.name != self.name {
             copy.frontmatter.notebook = dest_notebook.name.clone();
         }
-        copy.save_with_crypto(dest_notebook.crypto.as_ref())?;
+        copy.save_with_crypto_and_fs(dest_notebook.crypto.as_ref(), dest_notebook.fs.as_ref())?;
         Ok(copy)
     }
 
@@ -358,7 +404,7 @@ impl Notebook {
         dest_relative: &Path,
     ) -> Result<Note> {
         let copy = self.copy_note_to(path, dest_notebook, dest_relative)?;
-        std::fs::remove_file(path)?;
+        self.fs.remove_file(path)?;
         Ok(copy)
     }
 
@@ -383,7 +429,7 @@ impl Notebook {
             .ok_or_else(|| Error::NoteNotFound(source_dir.display().to_string()))?;
         let dest_relative = dest_relative.join(folder_name);
         let dest_dir = dest_notebook.path.join(&dest_relative);
-        if dest_dir.exists() {
+        if dest_notebook.fs.exists(&dest_dir) {
             return Err(Error::DestinationExists(dest_dir.display().to_string()));
         }
         // A destination equal to (or nested inside) the source folder would
@@ -398,7 +444,7 @@ impl Notebook {
                 source_dir.display().to_string(),
             ));
         }
-        std::fs::create_dir_all(&dest_dir)?;
+        dest_notebook.fs.create_dir_all(&dest_dir)?;
         let (folders, notes) = self.list_dir(relative)?;
         for note in &notes {
             self.copy_note_to(&note.path, dest_notebook, &dest_relative)?;
@@ -418,7 +464,7 @@ impl Notebook {
         dest_relative: &Path,
     ) -> Result<()> {
         self.copy_folder_to(relative, dest_notebook, dest_relative)?;
-        std::fs::remove_dir_all(self.path.join(relative))?;
+        self.fs.remove_dir_all(&self.path.join(relative))?;
         Ok(())
     }
 }
@@ -427,12 +473,44 @@ impl Notebook {
 ///
 /// Notebooks can live either under `root` (the default data directory) or at
 /// custom absolute paths configured in `[notebooks.<name>] path = "..."`.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct NotebookStore {
     pub root: PathBuf,
     /// Custom absolute paths keyed by notebook name — these override the
     /// default `root/<name>` location for individual notebooks.
     pub custom_paths: HashMap<String, PathBuf>,
+    /// How this store detects/initializes a notebook's git repo
+    /// (`NotebookStore::create`/`list`). Defaults to `git::NativeVcs` —
+    /// every existing caller (`new`/`new_with_custom_paths`) gets that
+    /// default and never needs to know this field exists. A future
+    /// non-native consumer supplies its own `VcsPort` impl via
+    /// `new_with_vcs_backend`/`new_with_backends` instead, which is what
+    /// lets this crate's `git2` dependency become truly optional (Cargo
+    /// feature-gated) without breaking notebook creation/listing for
+    /// callers that don't need that.
+    vcs: std::sync::Arc<dyn crate::vcs::VcsPort>,
+    /// How this store (and every `Notebook` it hands out — see
+    /// `Notebook::fs`) reads/writes plain files. Defaults to
+    /// `fs::LocalFs`, same "every existing caller is unaffected" shape as
+    /// `vcs` above; a future non-native consumer (no local disk) supplies
+    /// its own `FileStore` via `new_with_backends`.
+    fs: std::sync::Arc<dyn crate::fs::FileStore>,
+}
+
+// `dyn VcsPort`/`dyn FileStore` don't implement `Debug` on their own (that
+// would force every implementor, including any future non-native one, to
+// derive it too) — this prints everything else and a fixed placeholder for
+// each, same as `NotebookStore`'s old derived `Debug` showed every other
+// field verbatim.
+impl std::fmt::Debug for NotebookStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NotebookStore")
+            .field("root", &self.root)
+            .field("custom_paths", &self.custom_paths)
+            .field("vcs", &"<dyn VcsPort>")
+            .field("fs", &"<dyn FileStore>")
+            .finish()
+    }
 }
 
 /// Rejects names that would escape `root` when joined as a path component —
@@ -528,15 +606,55 @@ mod routing_tests {
 }
 
 impl NotebookStore {
+    /// Requires the `git2-backend` feature (default-on — every existing
+    /// consumer gets this unchanged) since it defaults `vcs` to
+    /// `git::NativeVcs`. A consumer built without that feature (no local
+    /// git2) uses `new_with_vcs_backend` directly instead, supplying its own
+    /// `VcsPort`.
+    #[cfg(feature = "git2-backend")]
     pub fn new(root: PathBuf) -> Self {
-        Self {
-            root,
-            custom_paths: HashMap::new(),
-        }
+        Self::new_with_vcs_backend(root, HashMap::new(), std::sync::Arc::new(git::NativeVcs))
     }
 
+    /// Same feature requirement as `new` above, and for the same reason.
+    #[cfg(feature = "git2-backend")]
     pub fn new_with_custom_paths(root: PathBuf, custom_paths: HashMap<String, PathBuf>) -> Self {
-        Self { root, custom_paths }
+        Self::new_with_vcs_backend(root, custom_paths, std::sync::Arc::new(git::NativeVcs))
+    }
+
+    /// Same as `new_with_custom_paths`, but with an explicit `VcsPort`
+    /// instead of always defaulting to `git::NativeVcs` — the seam a future
+    /// non-native consumer (no local git2, but still a local disk) uses
+    /// instead of the two constructors above. Always available regardless
+    /// of `git2-backend`.
+    pub fn new_with_vcs_backend(
+        root: PathBuf,
+        custom_paths: HashMap<String, PathBuf>,
+        vcs: std::sync::Arc<dyn crate::vcs::VcsPort>,
+    ) -> Self {
+        Self::new_with_backends(
+            root,
+            custom_paths,
+            vcs,
+            std::sync::Arc::new(crate::fs::LocalFs),
+        )
+    }
+
+    /// Same as `new_with_vcs_backend`, with an explicit `FileStore` too
+    /// instead of always defaulting to `fs::LocalFs` — the full seam a
+    /// future non-native consumer (no local git2, no local disk) uses.
+    pub fn new_with_backends(
+        root: PathBuf,
+        custom_paths: HashMap<String, PathBuf>,
+        vcs: std::sync::Arc<dyn crate::vcs::VcsPort>,
+        fs: std::sync::Arc<dyn crate::fs::FileStore>,
+    ) -> Self {
+        Self {
+            root,
+            custom_paths,
+            vcs,
+            fs,
+        }
     }
 
     /// Returns the path for a notebook, checking custom paths first.
@@ -556,7 +674,9 @@ impl NotebookStore {
         for (name, path) in &self.custom_paths {
             if path.is_dir() {
                 seen.insert(name.clone());
-                notebooks.push(Notebook::new(name.clone(), path.clone()));
+                notebooks.push(
+                    Notebook::new(name.clone(), path.clone()).with_fs_backend(self.fs.clone()),
+                );
             }
         }
 
@@ -571,11 +691,9 @@ impl NotebookStore {
         // plain, non-git `templates/` folder living in the config dir) then ends up
         // sitting directly inside the data dir too, and used to get listed as a
         // notebook purely as a side effect of that OS-specific path collision.
-        if self.root.exists() {
-            for entry in std::fs::read_dir(&self.root)? {
-                let entry = entry?;
-                let path = entry.path();
-                if !path.is_dir() || !path.join(".git").is_dir() {
+        if self.fs.exists(&self.root) {
+            for path in self.fs.read_dir(&self.root)? {
+                if !self.fs.is_dir(&path) || !self.vcs.is_repo(&path) {
                     continue;
                 }
                 let name = path
@@ -584,7 +702,7 @@ impl NotebookStore {
                     .unwrap_or_default();
                 // Don't add a notebook twice if a custom path uses the same name
                 if seen.insert(name.clone()) {
-                    notebooks.push(Notebook::new(name, path));
+                    notebooks.push(Notebook::new(name, path).with_fs_backend(self.fs.clone()));
                 }
             }
         }
@@ -610,10 +728,10 @@ impl NotebookStore {
         let path = self
             .path_for(name)
             .ok_or_else(|| Error::NotebookNotFound(name.to_string()))?;
-        if !path.is_dir() {
+        if !self.fs.is_dir(&path) {
             return Err(Error::NotebookNotFound(name.to_string()));
         }
-        Ok(Notebook::new(name, path))
+        Ok(Notebook::new(name, path).with_fs_backend(self.fs.clone()))
     }
 
     /// Creates a new notebook with its own git repo.
@@ -624,12 +742,12 @@ impl NotebookStore {
         let path = self
             .path_for(name)
             .ok_or_else(|| Error::NotebookNotFound(name.to_string()))?;
-        if path.exists() {
+        if self.fs.exists(&path) {
             return Err(Error::NotebookExists(name.to_string()));
         }
-        std::fs::create_dir_all(&path)?;
-        git::init_repo(&path)?;
-        Ok(Notebook::new(name, path))
+        self.fs.create_dir_all(&path)?;
+        self.vcs.init_repo(&path)?;
+        Ok(Notebook::new(name, path).with_fs_backend(self.fs.clone()))
     }
 
     pub fn rename(&self, old_name: &str, new_name: &str) -> Result<Notebook> {
@@ -638,7 +756,7 @@ impl NotebookStore {
         let old_path = self
             .path_for(old_name)
             .ok_or_else(|| Error::NotebookNotFound(old_name.to_string()))?;
-        if !old_path.is_dir() {
+        if !self.fs.is_dir(&old_path) {
             return Err(Error::NotebookNotFound(old_name.to_string()));
         }
         // `new_name` might have its own configured custom path — honor that
@@ -655,11 +773,11 @@ impl NotebookStore {
                 .unwrap_or_else(|| self.root.join(new_name)),
             None => self.root.join(new_name),
         };
-        if new_path.exists() {
+        if self.fs.exists(&new_path) {
             return Err(Error::NotebookExists(new_name.to_string()));
         }
-        std::fs::rename(&old_path, &new_path)?;
-        Ok(Notebook::new(new_name, new_path))
+        self.fs.rename(&old_path, &new_path)?;
+        Ok(Notebook::new(new_name, new_path).with_fs_backend(self.fs.clone()))
     }
 
     pub fn delete(&self, name: &str) -> Result<()> {
@@ -667,10 +785,10 @@ impl NotebookStore {
         let path = self
             .path_for(name)
             .ok_or_else(|| Error::NotebookNotFound(name.to_string()))?;
-        if !path.is_dir() {
+        if !self.fs.is_dir(&path) {
             return Err(Error::NotebookNotFound(name.to_string()));
         }
-        std::fs::remove_dir_all(path)?;
+        self.fs.remove_dir_all(&path)?;
         Ok(())
     }
 }
@@ -994,5 +1112,172 @@ mod tests {
         // The same notebook with no crypto attached can't read it.
         let locked = Notebook::new("vault", nb.path.clone());
         assert!(locked.list_dir(Path::new("")).is_err());
+    }
+
+    /// A tiny in-memory `FileStore` — exists purely to prove the injected-
+    /// backend design actually works end-to-end for a non-native consumer,
+    /// not as a real general-purpose virtual filesystem (no permissions, no
+    /// symlinks, nothing beyond a plain mutex for concurrent access).
+    struct MemFs {
+        files: std::sync::Mutex<HashMap<PathBuf, Vec<u8>>>,
+        dirs: std::sync::Mutex<HashSet<PathBuf>>,
+    }
+
+    impl MemFs {
+        fn new() -> Self {
+            Self {
+                files: std::sync::Mutex::new(HashMap::new()),
+                dirs: std::sync::Mutex::new(HashSet::new()),
+            }
+        }
+    }
+
+    impl crate::fs::FileStore for MemFs {
+        fn read_to_string(&self, path: &Path) -> std::io::Result<String> {
+            self.files
+                .lock()
+                .unwrap()
+                .get(path)
+                .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "not found"))
+        }
+
+        fn write(&self, path: &Path, contents: &[u8]) -> std::io::Result<()> {
+            if let Some(parent) = path.parent() {
+                self.create_dir_all(parent)?;
+            }
+            self.files
+                .lock()
+                .unwrap()
+                .insert(path.to_path_buf(), contents.to_vec());
+            Ok(())
+        }
+
+        fn read_dir(&self, path: &Path) -> std::io::Result<Vec<PathBuf>> {
+            let mut out: HashSet<PathBuf> = HashSet::new();
+            for file in self.files.lock().unwrap().keys() {
+                if file.parent() == Some(path) {
+                    out.insert(file.clone());
+                }
+            }
+            for dir in self.dirs.lock().unwrap().iter() {
+                if dir.parent() == Some(path) {
+                    out.insert(dir.clone());
+                }
+            }
+            Ok(out.into_iter().collect())
+        }
+
+        fn create_dir_all(&self, path: &Path) -> std::io::Result<()> {
+            let mut dirs = self.dirs.lock().unwrap();
+            let mut current = PathBuf::new();
+            for component in path.components() {
+                current.push(component);
+                dirs.insert(current.clone());
+            }
+            Ok(())
+        }
+
+        fn remove_file(&self, path: &Path) -> std::io::Result<()> {
+            self.files.lock().unwrap().remove(path);
+            Ok(())
+        }
+
+        fn remove_dir_all(&self, path: &Path) -> std::io::Result<()> {
+            self.files
+                .lock()
+                .unwrap()
+                .retain(|p, _| !p.starts_with(path));
+            self.dirs.lock().unwrap().retain(|p| !p.starts_with(path));
+            Ok(())
+        }
+
+        fn rename(&self, from: &Path, to: &Path) -> std::io::Result<()> {
+            let mut files = self.files.lock().unwrap();
+            let moved: Vec<(PathBuf, Vec<u8>)> = files
+                .iter()
+                .filter(|(p, _)| p.starts_with(from))
+                .map(|(p, v)| (to.join(p.strip_prefix(from).unwrap()), v.clone()))
+                .collect();
+            files.retain(|p, _| !p.starts_with(from));
+            for (p, v) in moved {
+                files.insert(p, v);
+            }
+            drop(files);
+            let mut dirs = self.dirs.lock().unwrap();
+            if dirs.remove(from) {
+                dirs.insert(to.to_path_buf());
+            }
+            Ok(())
+        }
+
+        fn exists(&self, path: &Path) -> bool {
+            self.files.lock().unwrap().contains_key(path)
+                || self.dirs.lock().unwrap().contains(path)
+        }
+
+        fn is_dir(&self, path: &Path) -> bool {
+            self.dirs.lock().unwrap().contains(path)
+        }
+
+        fn modified(&self, _path: &Path) -> std::io::Result<std::time::SystemTime> {
+            Ok(std::time::SystemTime::now())
+        }
+    }
+
+    /// A tiny in-memory `VcsPort` — just tracks which paths were
+    /// "initialized" as a repo, no real git semantics whatsoever.
+    struct MemVcs {
+        inited: std::sync::Mutex<HashSet<PathBuf>>,
+    }
+
+    impl MemVcs {
+        fn new() -> Self {
+            Self {
+                inited: std::sync::Mutex::new(HashSet::new()),
+            }
+        }
+    }
+
+    impl crate::vcs::VcsPort for MemVcs {
+        fn init_repo(&self, path: &Path) -> Result<()> {
+            self.inited.lock().unwrap().insert(path.to_path_buf());
+            Ok(())
+        }
+
+        fn is_repo(&self, path: &Path) -> bool {
+            self.inited.lock().unwrap().contains(path)
+        }
+    }
+
+    /// Proves the `FileStore`/`VcsPort` seam actually works end-to-end for a
+    /// non-native backend, not just that it type-checks against
+    /// `LocalFs`/`NativeVcs` — no real disk or git2 touched anywhere here.
+    #[test]
+    fn notebook_store_works_entirely_through_injected_in_memory_backends() {
+        let store = NotebookStore::new_with_backends(
+            PathBuf::from("/virtual/root"),
+            HashMap::new(),
+            std::sync::Arc::new(MemVcs::new()),
+            std::sync::Arc::new(MemFs::new()),
+        );
+
+        let nb = store.create("personal").unwrap();
+        assert!(nb.path.starts_with("/virtual/root"));
+
+        let note = nb.create_note("Grocery list", "milk, eggs").unwrap();
+        assert_eq!(note.frontmatter.title, "Grocery list");
+
+        let (_, notes) = nb.list_dir(Path::new("")).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].body, "milk, eggs");
+
+        let listed = store.list().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].name, "personal");
+
+        nb.delete_note_at(&note.path).unwrap();
+        let (_, notes) = nb.list_dir(Path::new("")).unwrap();
+        assert!(notes.is_empty());
     }
 }

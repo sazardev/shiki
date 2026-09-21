@@ -5,23 +5,7 @@
 //! crate needed, and `shiki-tui` (a separate binary's dependency, not
 //! `shiki-desktop`'s) is never imported.
 
-use std::path::{Path, PathBuf};
-
 use crate::commands::AppState;
-
-fn unique_file(dir: &Path, stem: &str) -> PathBuf {
-    let first = dir.join(format!("{stem}.png"));
-    if !first.exists() {
-        return first;
-    }
-    for n in 2.. {
-        let candidate = dir.join(format!("{stem}-{n}.png"));
-        if !candidate.exists() {
-            return candidate;
-        }
-    }
-    unreachable!()
-}
 
 #[derive(Debug, serde::Serialize)]
 pub struct PastedImage {
@@ -47,7 +31,7 @@ pub fn save_pasted_image(
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
     let stem = format!("pasted-{}", chrono::Local::now().format("%Y%m%d-%H%M%S"));
-    let file = unique_file(&dir, &stem);
+    let file = shiki_core::attachments::unique_file(&dir, &stem);
     std::fs::write(&file, &bytes).map_err(|e| e.to_string())?;
 
     let file_name = file

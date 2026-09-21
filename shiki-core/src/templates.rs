@@ -12,11 +12,22 @@ pub struct Template {
 
 impl Template {
     pub fn load(templates_dir: &Path, name: &str) -> Result<Self> {
+        Self::load_with_fs(templates_dir, name, &crate::fs::LocalFs)
+    }
+
+    /// `load`, through an injected `fs` backend instead of always
+    /// `LocalFs` — the seam a future non-native caller (no local disk)
+    /// uses instead.
+    pub fn load_with_fs(
+        templates_dir: &Path,
+        name: &str,
+        fs: &dyn crate::fs::FileStore,
+    ) -> Result<Self> {
         let path = templates_dir.join(format!("{name}.md"));
-        if !path.exists() {
+        if !fs.exists(&path) {
             return Err(Error::TemplateNotFound(name.to_string()));
         }
-        let contents = std::fs::read_to_string(path)?;
+        let contents = fs.read_to_string(&path)?;
         Ok(Self {
             name: name.to_string(),
             contents,
@@ -81,7 +92,13 @@ pub const BRAINSTORM_TEMPLATE: &str = "# {{title}}\n\nDate: {{date}}\n\n## Probl
 /// `Context::load`) only ever fills in newly-added templates and never
 /// overwrites one a user has since customized.
 pub fn ensure_defaults(templates_dir: &Path) -> Result<()> {
-    std::fs::create_dir_all(templates_dir)?;
+    ensure_defaults_with_fs(templates_dir, &crate::fs::LocalFs)
+}
+
+/// `ensure_defaults`, through an injected `fs` backend — see
+/// `Template::load_with_fs`.
+pub fn ensure_defaults_with_fs(templates_dir: &Path, fs: &dyn crate::fs::FileStore) -> Result<()> {
+    fs.create_dir_all(templates_dir)?;
     let defaults = [
         ("default.md", DEFAULT_TEMPLATE),
         ("daily.md", DAILY_TEMPLATE),
@@ -98,8 +115,8 @@ pub fn ensure_defaults(templates_dir: &Path) -> Result<()> {
     ];
     for (filename, contents) in defaults {
         let path = templates_dir.join(filename);
-        if !path.exists() {
-            std::fs::write(path, contents)?;
+        if !fs.exists(&path) {
+            fs.write(&path, contents.as_bytes())?;
         }
     }
     Ok(())

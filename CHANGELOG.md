@@ -6,6 +6,23 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+### Changed
+
+- **`shiki-core`/`shiki-config` are now genuinely portable to a non-native target, not just
+  decoupled from `shiki-tui`.** `git2`, `self_update`, `libc`, and `directories` are real optional
+  Cargo features on `shiki-core` (`git2-backend`/`self-update`/`unix-process-check`/
+  `home-dir-expand`, all default-on — every existing consumer is unaffected). Filesystem access and
+  git-repo detection/init are injectable via new `fs::FileStore`/`vcs::VcsPort` traits
+  (`NotebookStore::new_with_backends`), with `LocalFs`/`NativeVcs` as the unchanged default; the
+  same seam was added to `shiki-config` (`ConfigFileStore`) independently, without adding a
+  cross-crate dependency between the two. `cargo check -p shiki-core --no-default-features` and
+  `-p shiki-config`, both `--target wasm32-unknown-unknown`, now compile clean and are enforced by a
+  dedicated CI job — fixed two real incompatibilities found getting there (`age`'s transitive
+  `getrandom` needing its `js` feature; `comrak`'s default `syntect-onig` pulling in Oniguruma, a C
+  library that can't cross-compile to wasm) and one real gap (`browser::open_url` had no fallback
+  branch for a platform that isn't Linux/macOS/Windows). Removed `shiki-tui`'s long-unused `comrak`
+  dependency in the process (never actually called from its source).
+
 ## [0.9.6] - 2026-09-20
 
 ### Added

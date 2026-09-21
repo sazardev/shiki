@@ -16,14 +16,49 @@ serde_yaml.workspace = true
 toml.workspace = true
 chrono.workspace = true
 regex.workspace = true
-git2.workspace = true
+git2 = { workspace = true, optional = true }
 nucleo-matcher.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-self_update.workspace = true
+self_update = { workspace = true, optional = true }
 tempfile.workspace = true
 pulldown-cmark.workspace = true
+# `markdown::note_to_html` only sets extension/render options — none of
+# comrak's own Cargo features (`cli`, `bon`, `syntect`/`syntect-onig`, all
+# default-on upstream, but disabled at the workspace-dependency level — see
+# root `Cargo.toml`) gate anything it actually uses.
+comrak.workspace = true
 age.workspace = true
+getrandom.workspace = true
 sha2.workspace = true
-libc.workspace = true
-directories.workspace = true
+libc = { workspace = true, optional = true }
+directories = { workspace = true, optional = true }
+
+[features]
+# Every existing consumer (shiki-tui, shiki-cli, shiki-desktop,
+# shiki-native-host) builds with default features and gets identical
+# behavior to before this table existed — none of them pass an explicit
+# `features = [...]`/`default-features = false`. These exist so a future
+# non-native consumer (no local git2/no ability to replace its own running
+# binary/no POSIX `kill`/no real home directory to resolve `~` against) can
+# build this crate with `--no-default-features` and only the capabilities
+# it actually has a backend for.
+default = ["git2-backend", "self-update", "unix-process-check", "home-dir-expand"]
+# `git.rs`'s ~28 functions (status/pull/push/commit/history/merge/…) plus
+# `NotebookStore`'s default `git::NativeVcs`-backed constructors (`new`/
+# `new_with_custom_paths` — `new_with_vcs_backend` stays available either
+# way, see `notebook.rs`/`vcs.rs`) and the `Error::Git` variant.
+git2-backend = ["dep:git2"]
+# Shiki's own in-place self-updater (`update.rs`) plus the "auto-fetch this
+# external binary from its GitHub release" path in `publish::ensure_binary`
+# and `voice::ensure_whisper` — same underlying `self_update` crate, so one
+# feature covers all three call sites.
+self-update = ["dep:self_update"]
+# `process::is_pid_alive`'s real `kill(pid, 0)` check on Unix; without it,
+# `is_pid_alive` falls back to the same conservative "assume alive" `true`
+# already used on Windows and other non-Unix targets.
+unix-process-check = ["dep:libc"]
+# `process::expand_home`'s real `~`-to-home-directory resolution; without
+# it, `expand_home` leaves a leading `~` untouched, same as its own existing
+# fallback for "no home directory found".
+home-dir-expand = ["dep:directories"]

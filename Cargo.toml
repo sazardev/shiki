@@ -27,7 +27,15 @@ shiki-tui = { path = "shiki-tui", version = "0.9.6" }
 ratatui = "0.30"
 crossterm = "0.29"
 git2 = { version = "0.21", features = ["ssh", "https", "vendored-libgit2", "vendored-openssl"] }
-comrak = "0.54"
+# `default-features = false`: neither current dependent needs comrak's
+# default `cli`/`syntect-onig` features (a whole CLI's own deps, and a C
+# regex engine that can't cross-compile to `wasm32-unknown-unknown` at all —
+# confirmed live, see `shiki-core/Cargo.toml`'s own comment on this). Cargo's
+# workspace-dependency inheritance only lets a member *narrow* via `features
+# = [...]`, never override `default-features` back to `true` once the root
+# says `false` — so this has to be the root's own default, not something
+# fixed per-member.
+comrak = { version = "0.54", default-features = false }
 syntect = "5"
 # Bundles ~150 extra syntect syntax definitions (from bat's asset collection)
 # on top of syntect's own bundled defaults — notably TypeScript/TSX, which
@@ -83,6 +91,16 @@ png = "0.18"
 # `armor` feature is required for ASCII-armored output (so ciphertext still
 # reads as text to git, not a binary blob).
 age = { version = "0.12", features = ["armor"] }
+# Not used directly anywhere — pulled in transitively via `age`'s crypto
+# stack (rand_core -> crypto-bigint/crypto-common -> age). Declared here
+# purely so Cargo's feature unification turns on its `js` feature crate-
+# wide: without it, `getrandom` 0.2's `compile_error!` refuses to build for
+# `wasm32-unknown-unknown` at all (verified live — `cargo check -p
+# shiki-core --no-default-features --target wasm32-unknown-unknown` failed
+# on exactly this before adding the line below). `js` only changes anything
+# under `target_arch = "wasm32"` + `target_os = "unknown"`, so this is a
+# no-op on every native target shiki already ships for.
+getrandom = { version = "0.2", features = ["js"] }
 # SHA-256 for `voice::ensure_model`'s download-integrity check against the
 # hash Hugging Face publishes for each whisper model (its git-lfs pointer).
 sha2 = "0.10"

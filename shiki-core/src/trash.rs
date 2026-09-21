@@ -16,12 +16,24 @@ use crate::{Error, Result};
 /// collide with each other in the trash. Returns the path it now lives at,
 /// for `restore` to move back later.
 pub fn move_to_trash(source: &Path, trash_root: &Path, unique_suffix: &str) -> Result<PathBuf> {
-    std::fs::create_dir_all(trash_root)?;
+    move_to_trash_with_fs(source, trash_root, unique_suffix, &crate::fs::LocalFs)
+}
+
+/// `move_to_trash`, through an injected `fs` backend instead of always
+/// `LocalFs` — the seam a future non-native caller (no local disk) uses
+/// instead.
+pub fn move_to_trash_with_fs(
+    source: &Path,
+    trash_root: &Path,
+    unique_suffix: &str,
+    fs: &dyn crate::fs::FileStore,
+) -> Result<PathBuf> {
+    fs.create_dir_all(trash_root)?;
     let name = source
         .file_name()
         .ok_or_else(|| Error::NoteNotFound(source.display().to_string()))?;
     let dest = trash_root.join(format!("{unique_suffix}-{}", name.to_string_lossy()));
-    std::fs::rename(source, &dest)?;
+    fs.rename(source, &dest)?;
     Ok(dest)
 }
 
@@ -29,10 +41,19 @@ pub fn move_to_trash(source: &Path, trash_root: &Path, unique_suffix: &str) -> R
 /// parent directories that no longer exist (e.g. the folder it used to live
 /// in was itself deleted or renamed in the meantime).
 pub fn restore(trash_path: &Path, original_path: &Path) -> Result<()> {
+    restore_with_fs(trash_path, original_path, &crate::fs::LocalFs)
+}
+
+/// `restore`, through an injected `fs` backend — see `move_to_trash_with_fs`.
+pub fn restore_with_fs(
+    trash_path: &Path,
+    original_path: &Path,
+    fs: &dyn crate::fs::FileStore,
+) -> Result<()> {
     if let Some(parent) = original_path.parent() {
-        std::fs::create_dir_all(parent)?;
+        fs.create_dir_all(parent)?;
     }
-    std::fs::rename(trash_path, original_path)?;
+    fs.rename(trash_path, original_path)?;
     Ok(())
 }
 
@@ -56,20 +77,30 @@ pub fn restore(trash_path: &Path, original_path: &Path) -> Result<()> {
 /// block launch over a single stray/permission-denied file. Returns how
 /// many items were actually removed, for an optional status message.
 pub fn purge_older_than(trash_root: &Path, days: u32) -> usize {
+    purge_older_than_with_fs(trash_root, days, &crate::fs::LocalFs)
+}
+
+/// `purge_older_than`, through an injected `fs` backend — see
+/// `move_to_trash_with_fs`.
+pub fn purge_older_than_with_fs(
+    trash_root: &Path,
+    days: u32,
+    fs: &dyn crate::fs::FileStore,
+) -> usize {
     if days == 0 {
         return 0;
     }
     let cutoff_millis = chrono::Local::now().timestamp_millis() - (days as i64) * 86_400_000;
-    let Ok(notebook_dirs) = std::fs::read_dir(trash_root) else {
+    let Ok(notebook_dirs) = fs.read_dir(trash_root) else {
         return 0;
     };
     let mut removed = 0;
-    for notebook_dir in notebook_dirs.flatten() {
-        let Ok(entries) = std::fs::read_dir(notebook_dir.path()) else {
+    for notebook_dir in notebook_dirs {
+        let Ok(entries) = fs.read_dir(&notebook_dir) else {
             continue;
         };
-        for entry in entries.flatten() {
-            let name = entry.file_name();
+        for path in entries {
+            let name = path.file_name().unwrap_or_default();
             let name = name.to_string_lossy();
             let Some((millis_str, _)) = name.split_once('-') else {
                 continue;
@@ -80,11 +111,10 @@ pub fn purge_older_than(trash_root: &Path, days: u32) -> usize {
             if millis > cutoff_millis {
                 continue;
             }
-            let path = entry.path();
-            let result = if path.is_dir() {
-                std::fs::remove_dir_all(&path)
+            let result = if fs.is_dir(&path) {
+                fs.remove_dir_all(&path)
             } else {
-                std::fs::remove_file(&path)
+                fs.remove_file(&path)
             };
             if result.is_ok() {
                 removed += 1;

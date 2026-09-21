@@ -992,6 +992,28 @@ pub fn status(path: &Path, remote: &str) -> GitStatus {
     }
 }
 
+/// The native (git2-backed) `VcsPort` implementation — the trait itself
+/// lives in `crate::vcs` instead of here, specifically so it stays
+/// available even when this whole module (and its `git2` dependency) is
+/// compiled out via the `git2-backend` Cargo feature being off; see
+/// `vcs.rs`'s module doc for why. Deliberately narrow: the rest of this
+/// module's ~28 functions (`status`, `pull`, `push`, `commit_all`, history,
+/// merge/conflict handling, …) stay plain free functions called directly —
+/// `shiki-tui` alone has ~74 call sites into them, so widening this trait
+/// to cover all of `git.rs` would be a much bigger, riskier surface change
+/// for no benefit yet.
+pub struct NativeVcs;
+
+impl crate::vcs::VcsPort for NativeVcs {
+    fn init_repo(&self, path: &Path) -> Result<()> {
+        init_repo(path).map(|_repo| ())
+    }
+
+    fn is_repo(&self, path: &Path) -> bool {
+        path.join(".git").is_dir()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

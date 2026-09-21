@@ -82,3 +82,27 @@ pub fn install_version(current_version: &str, target_version: &str) -> Result<St
     let status = updater.update().map_err(|e| Error::Update(e.to_string()))?;
     Ok(status.version().to_string())
 }
+
+/// A pluggable self-update capability — `NativeUpdater` just calls the free
+/// functions above (`self_update` against GitHub Releases); a future
+/// non-native consumer (e.g. one that can't replace its own running binary,
+/// or that updates through a different channel like an app store) can
+/// implement this instead. Purely additive: `check_latest`/`install_version`
+/// are untouched. Note `shiki-desktop` already uses a *different* mechanism
+/// entirely (`tauri_plugin_updater`) — this trait doesn't change that.
+pub trait Updater: Send + Sync {
+    fn check_latest(&self, current_version: &str) -> Result<Option<String>>;
+    fn install_version(&self, current_version: &str, target_version: &str) -> Result<String>;
+}
+
+pub struct NativeUpdater;
+
+impl Updater for NativeUpdater {
+    fn check_latest(&self, current_version: &str) -> Result<Option<String>> {
+        check_latest(current_version)
+    }
+
+    fn install_version(&self, current_version: &str, target_version: &str) -> Result<String> {
+        install_version(current_version, target_version)
+    }
+}

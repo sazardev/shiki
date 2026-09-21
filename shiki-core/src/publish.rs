@@ -11,7 +11,9 @@ use serde::Serialize;
 
 use crate::{Error, Note, Result};
 
+#[cfg(feature = "self-update")]
 const REPO_OWNER: &str = "sazardev";
+#[cfg(feature = "self-update")]
 const REPO_NAME: &str = "go-pretty-pdf";
 const BIN_NAME: &str = "pretty-pdf";
 
@@ -27,6 +29,7 @@ fn bin_file_name() -> &'static str {
 /// — plain `{os}_{arch}` strings, not Rust target triples — so this maps the
 /// current platform to the exact substring `self_update`'s asset matching
 /// needs to find (see `ensure_binary`'s `.target(...)`).
+#[cfg(feature = "self-update")]
 fn release_asset_target() -> Result<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("linux", "x86_64") => Ok("linux_amd64"),
@@ -57,41 +60,56 @@ pub fn ensure_binary(cache_dir: &Path) -> Result<PathBuf> {
         return Ok(cached);
     }
 
-    std::fs::create_dir_all(cache_dir)?;
-    let target = release_asset_target()?;
-    let mut builder = self_update::backends::github::Update::configure();
-    builder
-        .repo_owner(REPO_OWNER)
-        .repo_name(REPO_NAME)
-        .bin_name(BIN_NAME)
-        .target(target)
-        // go-pretty-pdf ships both a `.tar.gz` and a `.zip` per platform —
-        // without this, `target`'s substring match against the release's
-        // asset list is ambiguous (two assets contain the same target
-        // string).
-        .asset_identifier(if cfg!(windows) { ".zip" } else { ".tar.gz" })
-        .bin_path_in_archive(bin_file_name())
-        // The one option that makes this install *to our own cache file*
-        // instead of replacing `current_exe()`, unlike shiki's own
-        // self-updater (`update.rs`), which is intentionally replacing the
-        // running binary.
-        .bin_install_path(&cached)
-        .show_download_progress(false)
-        .show_output(false)
-        .no_confirm(true)
-        // GitHub computes and serves a sha256 digest per release asset —
-        // same integrity check `update.rs` already relies on for shiki's
-        // own releases, here applied to a different repo's releases.
-        .verify_release_digest(true)
-        // This path only runs when `cached` doesn't exist yet, so it should
-        // always fetch the latest release — there's no installed version to
-        // compare against.
-        .current_version("0.0.0");
-    let updater = builder.build().map_err(|e| Error::Publish(e.to_string()))?;
-    updater
-        .update()
-        .map_err(|e| Error::Publish(e.to_string()))?;
-    Ok(cached)
+    #[cfg(feature = "self-update")]
+    {
+        std::fs::create_dir_all(cache_dir)?;
+        let target = release_asset_target()?;
+        let mut builder = self_update::backends::github::Update::configure();
+        builder
+            .repo_owner(REPO_OWNER)
+            .repo_name(REPO_NAME)
+            .bin_name(BIN_NAME)
+            .target(target)
+            // go-pretty-pdf ships both a `.tar.gz` and a `.zip` per platform —
+            // without this, `target`'s substring match against the release's
+            // asset list is ambiguous (two assets contain the same target
+            // string).
+            .asset_identifier(if cfg!(windows) { ".zip" } else { ".tar.gz" })
+            .bin_path_in_archive(bin_file_name())
+            // The one option that makes this install *to our own cache file*
+            // instead of replacing `current_exe()`, unlike shiki's own
+            // self-updater (`update.rs`), which is intentionally replacing the
+            // running binary.
+            .bin_install_path(&cached)
+            .show_download_progress(false)
+            .show_output(false)
+            .no_confirm(true)
+            // GitHub computes and serves a sha256 digest per release asset —
+            // same integrity check `update.rs` already relies on for shiki's
+            // own releases, here applied to a different repo's releases.
+            .verify_release_digest(true)
+            // This path only runs when `cached` doesn't exist yet, so it should
+            // always fetch the latest release — there's no installed version to
+            // compare against.
+            .current_version("0.0.0");
+        let updater = builder.build().map_err(|e| Error::Publish(e.to_string()))?;
+        updater
+            .update()
+            .map_err(|e| Error::Publish(e.to_string()))?;
+        Ok(cached)
+    }
+    // Without the `self-update` feature (default-on for every existing
+    // consumer), there's no way to auto-fetch `pretty-pdf` — same "clear
+    // error, not a silent no-op" contract every other missing-binary case in
+    // this crate already follows.
+    #[cfg(not(feature = "self-update"))]
+    {
+        Err(Error::Publish(
+            "pretty-pdf isn't on $PATH and this build has no `self-update` \
+             feature to fetch it automatically"
+                .to_string(),
+        ))
+    }
 }
 
 /// Minimal frontmatter go-pretty-pdf actually requires — deliberately not
@@ -147,4 +165,26 @@ pub fn publish(notes: &[Note], theme: &str, cache_dir: &Path, out: &Path) -> Res
         )));
     }
     Ok(())
+}
+
+/// A pluggable PDF-publish capability — `NativePublisher` just calls the
+/// free functions above (which shell out to a downloaded `pretty-pdf`
+/// binary); a future non-native consumer (e.g. one that renders PDFs some
+/// other way, or not at all) can implement this instead. Purely additive:
+/// `ensure_binary`/`publish` are untouched.
+pub trait Publisher: Send + Sync {
+    fn ensure_binary(&self, cache_dir: &Path) -> Result<PathBuf>;
+    fn publish(&self, notes: &[Note], theme: &str, cache_dir: &Path, out: &Path) -> Result<()>;
+}
+
+pub struct NativePublisher;
+
+impl Publisher for NativePublisher {
+    fn ensure_binary(&self, cache_dir: &Path) -> Result<PathBuf> {
+        ensure_binary(cache_dir)
+    }
+
+    fn publish(&self, notes: &[Note], theme: &str, cache_dir: &Path, out: &Path) -> Result<()> {
+        publish(notes, theme, cache_dir, out)
+    }
 }
