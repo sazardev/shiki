@@ -35,7 +35,7 @@ git2 = { version = "0.21", features = ["ssh", "https", "vendored-libgit2", "vend
 # = [...]`, never override `default-features` back to `true` once the root
 # says `false` — so this has to be the root's own default, not something
 # fixed per-member.
-comrak = { version = "0.54", default-features = false }
+comrak = { version = "0.55", default-features = false }
 syntect = "5"
 # Bundles ~150 extra syntect syntax definitions (from bat's asset collection)
 # on top of syntect's own bundled defaults — notably TypeScript/TSX, which
@@ -103,7 +103,7 @@ age = { version = "0.12", features = ["armor"] }
 getrandom = { version = "0.2", features = ["js"] }
 # SHA-256 for `voice::ensure_model`'s download-integrity check against the
 # hash Hugging Face publishes for each whisper model (its git-lfs pointer).
-sha2 = "0.10"
+sha2 = "0.11"
 # Hidden passphrase input for `shiki notebook encrypt/decrypt` — the CLI
 # equivalent of the TUI's masked passphrase prompt.
 rpassword = "7"
