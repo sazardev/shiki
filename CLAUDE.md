@@ -934,6 +934,51 @@ not just the overrides: every slot is about to be explicitly overridden with `ba
 anyway, so leaving `theme.name` pointing at whatever was active before would make the command's
 own printed "removing a key falls back to `<base>`" guidance wrong the moment someone acts on it.
 
+**Per-notebook theme customization now covers everything a theme has — base name, all 19 color
+slots, and icons — not just the base theme name it started with.** `[notebooks.<name>]`
+(`NotebookGitOverride`, `shiki-config/src/config.rs` — already carrying non-git fields `path`/
+`hidden`/`encrypt`, hence the misleading name) gained `theme_name`/`theme_icons`/a flattened
+`theme_overrides: ThemeOverrides`, resolved through new `Config::theme_for`/`icons_for` methods
+rather than `ThemeConfig::resolve_for` directly — that one only ever knew about the global `name`/
+`overrides` plus the legacy `[theme.notebooks]` name-only map (kept only as a fallback read now;
+nothing writes there anymore). Every call site that used to do `config.theme.resolve_for(notebook)`
+switched to `config.theme_for(notebook)`. `icons::set_enabled` (`draw.rs`) now resolves
+`config.icons_for(selected_notebook)` fresh every single frame instead of the bare global
+`config.theme.icons`, so a per-notebook icons override needs no explicit cache refresh the way the
+cached `App.theme` does (`refresh_theme_for_selected_notebook`, called after anything that changes
+which notebook's colors are showing).
+
+The theme picker's `Enter` (`handlers/theme.rs`) writes the base name to `notebooks.<name>.
+theme_name` whenever a notebook is focused — since `App::selected_notebook()` is `Some` in
+virtually every real session, picking a theme from the TUI now almost always sets a per-notebook
+override, not the global default; the global `theme.name` is only reachable with no notebook
+selected at all, or by hand-editing config.toml / `shiki theme set <name>` with no `--notebook`.
+Resetting color overrides on a base-theme change was also fixed to reset the *right* scope while
+this was being built — the notebook's own `theme_overrides` when a notebook is focused, the global
+`[theme.overrides]` only when it isn't — the pre-existing code always wiped the global overrides
+regardless of scope, which would have blown away every notebook's shared colors the moment any
+single notebook's base theme changed.
+
+Settings → NOTEBOOKS → (notebook) gained `icons` (a 3-state unset/true/false cycle, same
+`cycle_notebook_bool_override` mechanism `auto_push`/`auto_sync` already use) and an informational
+`theme_overrides` row (mirrors THEME tab's own `overrides` row) pointing at `shiki theme create
+--from <name> --notebook <nb>` for editing the 19 colors — deliberately config.toml + CLI scaffold,
+not a 19-field interactive editor, same reasoning the *global* override already uses.
+`prune_empty_notebook_override` had to grow the same three new fields into its "is this override
+table now completely empty" check, or a notebook with only a theme customization (no git/hidden/
+encrypt override of its own) would get silently deleted the next time an unrelated field cycled
+back to "inherit".
+
+A new bulk action, "apply to all" (`A`, from that same drill-down, confirm-gated like every other
+bulk/irreversible Settings action), clones the focused notebook's fully-*resolved* theme — base
+name, all 19 colors, and icons, whichever it currently effectively shows, inherited or already
+customized — onto every *other* notebook's `[notebooks.<name>]` entry via
+`App::apply_theme_to_all_notebooks`. Resolving first, rather than copying whatever raw override
+fields happen to be set, is what makes it work uniformly whether the source notebook has nothing
+of its own configured (falls through to the global theme) or a fully hand-tuned palette — either
+way, `ThemeOverrides::from_theme` on the already-*resolved* `Theme` produces one complete,
+self-contained override for every target notebook.
+
 **The default theme on a fresh install is `gruvbox-dark`, not `catppuccin-mocha`** —
 `ThemeConfig::default()` (`shiki-config/src/config.rs`) is the single place this is set; the
 `[theme] name = "..."` example in `IDEA.md` was updated alongside it so the docs don't show a

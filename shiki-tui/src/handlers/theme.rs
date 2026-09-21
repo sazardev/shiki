@@ -86,28 +86,37 @@ impl App {
                 // used to silently wipe any hand-written custom colors.
                 let committed_base = self
                     .config
-                    .theme
-                    .resolve_for(self.selected_notebook().map(|nb| nb.name.as_str()))
+                    .theme_for(self.selected_notebook().map(|nb| nb.name.as_str()))
                     .name;
-                if committed_base != t.name {
-                    self.config.theme.overrides = Default::default();
-                }
-                // A focused notebook gets its own override entry; with no
-                // notebook selected (or a notebook that's not set up yet),
-                // the global `name` is what changes.
-                match self.selected_notebook() {
+                let base_changed = committed_base != t.name;
+                // A focused notebook gets its own `[notebooks.<name>]`
+                // entry (base name and this notebook's own color overrides
+                // reset together, since they're this notebook's state) —
+                // not the legacy `[theme.notebooks]` map, which nothing
+                // writes to anymore. With no notebook selected, the global
+                // `name`/`overrides` change instead.
+                let scope = match self.selected_notebook() {
                     Some(nb) => {
-                        self.config
-                            .theme
-                            .notebooks
-                            .insert(nb.name.clone(), t.name.clone());
+                        let name = nb.name.clone();
+                        let over = self.config.notebooks.entry(name.clone()).or_default();
+                        over.theme_name = Some(t.name.clone());
+                        if base_changed {
+                            over.theme_overrides = Default::default();
+                        }
+                        format!(" for notebook '{name}'")
                     }
-                    None => self.config.theme.name = t.name.clone(),
-                }
+                    None => {
+                        self.config.theme.name = t.name.clone();
+                        if base_changed {
+                            self.config.theme.overrides = Default::default();
+                        }
+                        String::new()
+                    }
+                };
                 if let Ok(path) = Config::default_path() {
                     let _ = self.config.save(&path);
                 }
-                self.set_status(format!("theme: {}", self.theme.name));
+                self.set_status(format!("theme: {}{scope}", self.theme.name));
                 self.close_theme_picker();
             }
             KeyCode::Char('j') | KeyCode::Down => self.preview_theme_at(1),

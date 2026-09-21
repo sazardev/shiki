@@ -796,6 +796,19 @@ impl App {
             KeyCode::Char('k') | KeyCode::Up => {
                 self.settings_field_selected = self.settings_field_selected.saturating_sub(1);
             }
+            // Clones this notebook's fully-resolved theme (base name, all 19
+            // color slots, icons) onto every *other* notebook — a bulk
+            // "maximum customization, applied everywhere" shortcut, confirmed
+            // first since it overwrites every other notebook's own theme
+            // fields. Available anywhere in this notebook's field list, not
+            // gated to the `ThemeOverrides` row, same as `a`/`d` in SNIPPETS
+            // aren't gated to any particular row either.
+            KeyCode::Char('A') => {
+                self.pending_apply_theme_all = Some(name.clone());
+                self.confirm = Some(crate::confirm::ConfirmDialog::new(format!(
+                    "apply '{name}'s theme to every other notebook?"
+                )));
+            }
             KeyCode::Enter => match NotebookField::ALL[self.settings_field_selected] {
                 NotebookField::Remote => {
                     let prefill = self
@@ -848,6 +861,16 @@ impl App {
                     self.settings_field_selected = 0;
                     self.set_status(format!("notebook '{name}' restored — it's listed again"));
                 }
+                NotebookField::Icons => {
+                    self.cycle_notebook_bool_override(&name, NotebookField::Icons);
+                    self.refresh_theme_for_selected_notebook();
+                }
+                NotebookField::ThemeOverrides => {
+                    self.set_status(format!(
+                        "customize this notebook's 19 colors with `shiki theme create --from <name> --notebook {name}`, \
+                         or press 'A' here to clone another notebook's look onto all of them"
+                    ));
+                }
             },
             _ => {}
         }
@@ -880,10 +903,19 @@ impl App {
                 };
                 ("auto_sync", over.auto_sync)
             }
+            NotebookField::Icons => {
+                over.theme_icons = match over.theme_icons {
+                    None => Some(true),
+                    Some(true) => Some(false),
+                    Some(false) => None,
+                };
+                ("icons", over.theme_icons)
+            }
             NotebookField::Remote
             | NotebookField::AutoSyncEvery
             | NotebookField::Encryption
-            | NotebookField::Hidden => return,
+            | NotebookField::Hidden
+            | NotebookField::ThemeOverrides => return,
         };
         self.prune_empty_notebook_override(name);
         self.save_config();
@@ -903,10 +935,44 @@ impl App {
                 && over.auto_sync_every.is_none()
                 && !over.hidden
                 && !over.encrypt
+                && over.theme_name.is_none()
+                && over.theme_icons.is_none()
+                && over.theme_overrides == Default::default()
             {
                 self.config.notebooks.remove(name);
             }
         }
+    }
+    /// Clones `source`'s fully-resolved theme (base name, all 19 color
+    /// slots, icons — whichever it currently effectively shows, inherited or
+    /// already customized) onto every *other* notebook's `[notebooks.<name>]`
+    /// entry, overwriting whatever theme fields they had. One mechanism
+    /// covers both "same simple theme everywhere" and "propagate my
+    /// hand-tuned palette everywhere" — `source` doesn't need anything
+    /// explicitly set of its own for this to work, since it clones the
+    /// *resolved* theme, not just whatever override fields happen to be set.
+    fn apply_theme_to_all_notebooks(&mut self, source: &str) {
+        let resolved = self.config.theme_for(Some(source));
+        let icons = self.config.icons_for(Some(source));
+        let overrides = shiki_config::config::ThemeOverrides::from_theme(&resolved);
+        let targets: Vec<String> = self
+            .notebooks
+            .iter()
+            .map(|nb| nb.name.clone())
+            .filter(|name| name != source)
+            .collect();
+        let count = targets.len();
+        for name in targets {
+            let over = self.config.notebooks.entry(name).or_default();
+            over.theme_name = Some(resolved.name.clone());
+            over.theme_icons = Some(icons);
+            over.theme_overrides = overrides.clone();
+        }
+        self.save_config();
+        self.refresh_theme_for_selected_notebook();
+        self.set_status(format!(
+            "applied '{source}'s theme to {count} other notebook(s)"
+        ));
     }
     pub(crate) fn save_config(&mut self) {
         if let Ok(path) = Config::default_path() {
@@ -5938,6 +6004,8 @@ impl App {
                     self.finish_merge_notebook(&notebook);
                 } else if let Some(notebook) = self.pending_abort_merge.take() {
                     self.abort_merge_notebook(&notebook);
+                } else if let Some(source) = self.pending_apply_theme_all.take() {
+                    self.apply_theme_to_all_notebooks(&source);
                 }
             }
             // The rename flow's third answer: rename, but leave every
@@ -5960,6 +6028,7 @@ impl App {
                 self.pending_rename_links = None;
                 self.pending_finish_merge = None;
                 self.pending_abort_merge = None;
+                self.pending_apply_theme_all = None;
             }
         }
         self.confirm = None;

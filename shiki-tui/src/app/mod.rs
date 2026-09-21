@@ -599,6 +599,11 @@ pub struct App {
     /// merge?" — same pattern, a separate field so `handle_confirm_key`
     /// can't confuse the two very different actions behind one shared `y`.
     pub(crate) pending_abort_merge: Option<String>,
+    /// Source notebook name staged while the `confirm` dialog asks "apply
+    /// this notebook's theme to every other notebook?" — same pattern,
+    /// `NotebookField::ThemeOverrides`'s apply-to-all action
+    /// (Settings → NOTEBOOKS drill, `A`).
+    pub(crate) pending_apply_theme_all: Option<String>,
     /// Passphrases proven correct this session, keyed by notebook name —
     /// **never persisted to disk**, cleared on every relaunch. This is the
     /// whole reason encryption uses a passphrase instead of a stored
@@ -832,9 +837,7 @@ impl App {
         let notebooks = crate::sync::visible_notebooks(&store, &config)?;
         // Resolve for the initially selected notebook so a per-notebook
         // override on it applies from the very first frame.
-        let theme = config
-            .theme
-            .resolve_for(notebooks.first().map(|nb| nb.name.as_str()));
+        let theme = config.theme_for(notebooks.first().map(|nb| nb.name.as_str()));
         let show_dates = config.general.show_dates;
         let note_sort = NoteSort::from_config_str(&config.general.default_note_sort);
         let keymaps = KeyMaps::from_config(&config.keybindings);
@@ -1046,6 +1049,7 @@ impl App {
             pending_finish_merge: None,
             pending_rename_links: None,
             pending_abort_merge: None,
+            pending_apply_theme_all: None,
             notebook_passphrases: std::collections::HashMap::new(),
             passphrase_prompt_notebook: None,
             passphrase_purpose: None,
@@ -1301,9 +1305,10 @@ impl App {
 
     /// Selects a notebook by index and, when the selection actually moves,
     /// re-resolves the active theme for it — per-notebook theme overrides
-    /// (`config.theme.notebooks`) take effect the moment you switch
-    /// notebooks, no restart. Every notebook switch funnels through here so
-    /// no call site can forget the theme re-resolve.
+    /// (`config.notebooks.<name>`, plus the legacy `config.theme.notebooks`)
+    /// take effect the moment you switch notebooks, no restart. Every
+    /// notebook switch funnels through here so no call site can forget the
+    /// theme re-resolve.
     pub fn set_selected_notebook(&mut self, idx: usize) {
         let moved = self.selected_notebook != idx;
         self.selected_notebook = idx;
@@ -1312,9 +1317,14 @@ impl App {
         }
     }
 
-    fn refresh_theme_for_selected_notebook(&mut self) {
+    /// Re-resolves `self.theme`/`self.theme_index` for whichever notebook is
+    /// currently selected — also called directly (not just from
+    /// `set_selected_notebook`) whenever a per-notebook theme override
+    /// changes without the selection itself moving, e.g. cycling the
+    /// NOTEBOOKS-tab `icons` override or running apply-to-all.
+    pub(crate) fn refresh_theme_for_selected_notebook(&mut self) {
         let notebook = self.selected_notebook().map(|nb| nb.name.clone());
-        self.theme = self.config.theme.resolve_for(notebook.as_deref());
+        self.theme = self.config.theme_for(notebook.as_deref());
         self.theme_index = self
             .available_themes
             .iter()
@@ -1794,7 +1804,7 @@ impl App {
 
     pub(crate) fn apply_config(&mut self, new_config: Config) {
         let notebook = self.selected_notebook().map(|nb| nb.name.clone());
-        self.theme = new_config.theme.resolve_for(notebook.as_deref());
+        self.theme = new_config.theme_for(notebook.as_deref());
         self.theme_index = self
             .available_themes
             .iter()

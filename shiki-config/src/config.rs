@@ -866,8 +866,11 @@ pub struct ThemeConfig {
     /// changes anything for someone who explicitly opts out.
     #[serde(default = "default_true")]
     pub icons: bool,
-    /// Per-notebook theme overrides: notebook name → built-in theme name.
-    /// `resolve_for(Some(nb))` uses the entry when present, else `name`.
+    /// Legacy per-notebook theme-name overrides: notebook name → built-in
+    /// theme name. Superseded by `[notebooks.<name>] theme_name` (see
+    /// `Config::theme_for`), which also covers per-notebook colors/icons —
+    /// nothing writes here anymore, but it's still read as a fallback so a
+    /// config written before `theme_name` existed keeps working unchanged.
     #[serde(default)]
     pub notebooks: std::collections::BTreeMap<String, String>,
     #[serde(flatten)]
@@ -887,7 +890,7 @@ fn default_theme_name() -> String {
 /// to specify the rest. `shiki theme create` (`shiki-cli`) scaffolds every
 /// field at once from a real palette instead of leaving them to be found
 /// and typed by hand one at a time.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ThemeOverrides {
     pub bg: Option<String>,
     pub fg: Option<String>,
@@ -938,6 +941,71 @@ impl ThemeOverrides {
         }
     }
 
+    /// Applies every set slot onto `theme` in place — the single 19-field
+    /// application shared by the global override step (`ThemeConfig::resolve_for`)
+    /// and the per-notebook override step (`Config::theme_for`), so the same
+    /// "layer whichever slots are set, leave the rest untouched" logic isn't
+    /// written out twice.
+    pub fn apply_to(&self, theme: &mut Theme) {
+        if let Some(v) = &self.bg {
+            theme.bg = v.clone();
+        }
+        if let Some(v) = &self.fg {
+            theme.fg = v.clone();
+        }
+        if let Some(v) = &self.accent {
+            theme.accent = v.clone();
+        }
+        if let Some(v) = &self.selection {
+            theme.selection = v.clone();
+        }
+        if let Some(v) = &self.border {
+            theme.border = v.clone();
+        }
+        if let Some(v) = &self.statusbar {
+            theme.statusbar = v.clone();
+        }
+        if let Some(v) = &self.highlight {
+            theme.highlight = v.clone();
+        }
+        if let Some(v) = &self.error {
+            theme.error = v.clone();
+        }
+        if let Some(v) = &self.warning {
+            theme.warning = v.clone();
+        }
+        if let Some(v) = &self.success {
+            theme.success = v.clone();
+        }
+        if let Some(v) = &self.inactive {
+            theme.inactive = v.clone();
+        }
+        if let Some(v) = &self.scrollbar {
+            theme.scrollbar = v.clone();
+        }
+        if let Some(v) = &self.tab_active {
+            theme.tab_active = v.clone();
+        }
+        if let Some(v) = &self.tab_inactive {
+            theme.tab_inactive = v.clone();
+        }
+        if let Some(v) = &self.panel_title {
+            theme.panel_title = v.clone();
+        }
+        if let Some(v) = &self.cursor {
+            theme.cursor = v.clone();
+        }
+        if let Some(v) = &self.link {
+            theme.link = v.clone();
+        }
+        if let Some(v) = &self.tag {
+            theme.tag = v.clone();
+        }
+        if let Some(v) = &self.muted {
+            theme.muted = v.clone();
+        }
+    }
+
     /// How many of the 19 slots are actually overridden — shown by the
     /// Settings screen's THEME tab (informational), which displays this count
     /// rather than dumping all 19 (`shiki theme create`'s job, and already
@@ -982,78 +1050,27 @@ impl Default for ThemeConfig {
 }
 
 impl ThemeConfig {
-    /// Resolves the built-in theme by name (or the focused notebook's
-    /// override, see `resolve_for`) and applies the configured overrides.
+    /// Resolves the global theme: the base theme named by `name`, with the
+    /// global `overrides` applied on top. Doesn't know about any
+    /// `[notebooks.<name>]` override — see `Config::theme_for` for the
+    /// notebook-aware resolution every UI/CLI call site actually wants.
     pub fn resolve(&self) -> Theme {
         self.resolve_for(None)
     }
 
-    /// `resolve()` for a specific notebook: its `notebooks` entry takes
-    /// precedence over the global `name` when present; slot overrides are
-    /// always global and apply on top of whichever base won.
+    /// `resolve()`, optionally checking the legacy `theme.notebooks`
+    /// name-only map first. Kept for the case of resolving from a bare
+    /// `ThemeConfig` with no access to the rest of `Config` (its own unit
+    /// tests, mainly) — anything with a full `Config` should call
+    /// `Config::theme_for` instead, which also layers `[notebooks.<name>]`'s
+    /// `theme_name`/`theme_overrides` on top of what this method alone can see.
     pub fn resolve_for(&self, notebook: Option<&str>) -> Theme {
         let base_name = notebook
             .and_then(|nb| self.notebooks.get(nb))
             .map(String::as_str)
             .unwrap_or(&self.name);
         let mut theme = crate::themes::by_name(base_name).unwrap_or_else(Theme::terminal_default);
-        if let Some(v) = &self.overrides.bg {
-            theme.bg = v.clone();
-        }
-        if let Some(v) = &self.overrides.fg {
-            theme.fg = v.clone();
-        }
-        if let Some(v) = &self.overrides.accent {
-            theme.accent = v.clone();
-        }
-        if let Some(v) = &self.overrides.selection {
-            theme.selection = v.clone();
-        }
-        if let Some(v) = &self.overrides.border {
-            theme.border = v.clone();
-        }
-        if let Some(v) = &self.overrides.statusbar {
-            theme.statusbar = v.clone();
-        }
-        if let Some(v) = &self.overrides.highlight {
-            theme.highlight = v.clone();
-        }
-        if let Some(v) = &self.overrides.error {
-            theme.error = v.clone();
-        }
-        if let Some(v) = &self.overrides.warning {
-            theme.warning = v.clone();
-        }
-        if let Some(v) = &self.overrides.success {
-            theme.success = v.clone();
-        }
-        if let Some(v) = &self.overrides.inactive {
-            theme.inactive = v.clone();
-        }
-        if let Some(v) = &self.overrides.scrollbar {
-            theme.scrollbar = v.clone();
-        }
-        if let Some(v) = &self.overrides.tab_active {
-            theme.tab_active = v.clone();
-        }
-        if let Some(v) = &self.overrides.tab_inactive {
-            theme.tab_inactive = v.clone();
-        }
-        if let Some(v) = &self.overrides.panel_title {
-            theme.panel_title = v.clone();
-        }
-        if let Some(v) = &self.overrides.cursor {
-            theme.cursor = v.clone();
-        }
-        if let Some(v) = &self.overrides.link {
-            theme.link = v.clone();
-        }
-        if let Some(v) = &self.overrides.tag {
-            theme.tag = v.clone();
-        }
-        if let Some(v) = &self.overrides.muted {
-            theme.muted = v.clone();
-        }
+        self.overrides.apply_to(&mut theme);
         theme
     }
 }
@@ -1344,6 +1361,13 @@ fn default_pdf_theme() -> String {
 /// `Config::sync_for`), so most notebooks need no `[notebooks.<name>]`
 /// table at all.
 ///
+/// Despite the name (kept for compatibility — every existing `[notebooks.*]`
+/// table in the wild is a `NotebookGitOverride`), this is really "any
+/// per-notebook override": `path`/`hidden`/`encrypt` below aren't git-related
+/// either, and `theme_name`/`theme_icons`/`theme_overrides` (see
+/// `Config::theme_for`/`icons_for`) extend that further to full per-notebook
+/// theme customization, not just sync policy.
+///
 /// A `path` field can also be set to point this notebook at an arbitrary
 /// directory on disk (e.g. an Obsidian vault subfolder) instead of the
 /// default location under the data directory.
@@ -1377,6 +1401,24 @@ pub struct NotebookGitOverride {
     /// decrypt`).
     #[serde(default)]
     pub encrypt: bool,
+    /// Base theme name for this notebook — takes precedence over both the
+    /// legacy `[theme.notebooks]` map (pre-dates this field; still read as a
+    /// fallback, see `Config::theme_for`) and the global `theme.name`. The
+    /// theme picker/CLI/apply-to-all all write here now; `[theme.notebooks]`
+    /// is never written to by new code, only read for old configs.
+    #[serde(default)]
+    pub theme_name: Option<String>,
+    /// Per-notebook icons override — unset inherits the global `theme.icons`.
+    /// See `Config::icons_for`.
+    #[serde(default)]
+    pub theme_icons: Option<bool>,
+    /// Per-notebook color-slot overrides, layered on top of the global
+    /// `[theme.overrides]` (this notebook's own set slots win; unset slots
+    /// fall back to the global override, then to the resolved base theme's
+    /// own value). Scaffolded via `shiki theme create --from <name>
+    /// --notebook <nb>`, same as the global override's own scaffold command.
+    #[serde(flatten)]
+    pub theme_overrides: ThemeOverrides,
 }
 
 /// `[git]` settings resolved for one specific notebook — see `Config::sync_for`.
@@ -1486,6 +1528,40 @@ impl Config {
     /// encryption is opt-in per notebook, so absent simply means off.
     pub fn encrypt_for(&self, notebook_name: &str) -> bool {
         self.notebooks.get(notebook_name).is_some_and(|o| o.encrypt)
+    }
+    /// Resolves the effective theme for `notebook` — the single method every
+    /// UI/CLI call site should use instead of `theme.resolve_for` directly
+    /// once a notebook is involved, since a per-notebook theme depends on
+    /// `self.notebooks` (its `[notebooks.<name>]` override), not just
+    /// `self.theme`. Layering, most to least specific: this notebook's own
+    /// `theme_overrides`, then the global `[theme.overrides]`, on top of
+    /// whichever base theme won — this notebook's `theme_name` (or, for a
+    /// config written before that field existed, the legacy
+    /// `theme.notebooks` map), or else the global `theme.name`.
+    pub fn theme_for(&self, notebook: Option<&str>) -> Theme {
+        let over = notebook.and_then(|nb| self.notebooks.get(nb));
+        let base_name = over
+            .and_then(|o| o.theme_name.as_deref())
+            .or_else(|| {
+                notebook
+                    .and_then(|nb| self.theme.notebooks.get(nb))
+                    .map(String::as_str)
+            })
+            .unwrap_or(self.theme.name.as_str());
+        let mut theme = crate::themes::by_name(base_name).unwrap_or_else(Theme::terminal_default);
+        self.theme.overrides.apply_to(&mut theme);
+        if let Some(o) = over {
+            o.theme_overrides.apply_to(&mut theme);
+        }
+        theme
+    }
+    /// Resolves whether icons are on for `notebook` — this notebook's own
+    /// `theme_icons` override if set, else the global `theme.icons`.
+    pub fn icons_for(&self, notebook: Option<&str>) -> bool {
+        notebook
+            .and_then(|nb| self.notebooks.get(nb))
+            .and_then(|o| o.theme_icons)
+            .unwrap_or(self.theme.icons)
     }
     /// Returns a map of notebook names to their custom absolute paths,
     /// as configured in `[notebooks.<name>] path = "..."`.
@@ -2081,6 +2157,99 @@ mod tests {
         assert_eq!(config.resolve().name, "nord");
         assert_eq!(config.resolve_for(Some("work")).name, "Matrix");
         assert_eq!(config.resolve_for(Some("personal")).name, "nord");
+    }
+
+    #[test]
+    fn theme_for_prefers_notebook_override_over_legacy_notebooks_map() {
+        let mut config = Config::default();
+        config.theme.name = "nord".into();
+        config
+            .theme
+            .notebooks
+            .insert("work".to_string(), "Matrix".to_string());
+        config.notebooks.insert(
+            "work".to_string(),
+            NotebookGitOverride {
+                theme_name: Some("dracula".into()),
+                ..Default::default()
+            },
+        );
+        // The new `[notebooks.<name>] theme_name` wins over the legacy
+        // name-only `[theme.notebooks]` map when both are set.
+        assert_eq!(config.theme_for(Some("work")).name, "dracula");
+    }
+
+    #[test]
+    fn theme_for_falls_back_to_legacy_notebooks_map_then_global_name() {
+        let mut config = Config::default();
+        config.theme.name = "nord".into();
+        config
+            .theme
+            .notebooks
+            .insert("work".to_string(), "Matrix".to_string());
+        // No `[notebooks.work]` entry at all — a config written before
+        // `theme_name` existed must still resolve via the legacy map.
+        assert_eq!(config.theme_for(Some("work")).name, "Matrix");
+        assert_eq!(config.theme_for(Some("personal")).name, "nord");
+        assert_eq!(config.theme_for(None).name, "nord");
+    }
+
+    #[test]
+    fn theme_for_layers_notebook_overrides_on_top_of_global_overrides() {
+        let mut config = Config::default();
+        config.theme.name = "nord".into();
+        config.theme.overrides = ThemeOverrides {
+            error: Some("#111111".into()),
+            fg: Some("#222222".into()),
+            ..Default::default()
+        };
+        config.notebooks.insert(
+            "work".to_string(),
+            NotebookGitOverride {
+                theme_overrides: ThemeOverrides {
+                    error: Some("#ff0000".into()), // wins over the global override
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        let base = crate::themes::by_name("nord").unwrap();
+        let resolved = config.theme_for(Some("work"));
+        assert_eq!(resolved.error, "#ff0000"); // per-notebook override wins
+        assert_eq!(resolved.fg, "#222222"); // global override still applies
+        assert_eq!(resolved.bg, base.bg); // untouched slot falls back to the base theme
+
+        // A notebook with no override of its own only ever sees the global override.
+        let resolved_other = config.theme_for(Some("personal"));
+        assert_eq!(resolved_other.error, "#111111");
+        assert_eq!(resolved_other.fg, "#222222");
+    }
+
+    #[test]
+    fn icons_for_resolves_per_notebook_override() {
+        let mut config = Config::default();
+        config.theme.icons = true;
+        config.notebooks.insert(
+            "work".to_string(),
+            NotebookGitOverride {
+                theme_icons: Some(false),
+                ..Default::default()
+            },
+        );
+        assert!(!config.icons_for(Some("work")));
+        assert!(config.icons_for(Some("personal")));
+        assert!(config.icons_for(None));
+    }
+
+    #[test]
+    fn old_config_toml_without_new_theme_fields_still_parses_and_resolves() {
+        let toml_str = "[notebooks.work]\nauto_push = true\n";
+        let config: Config = toml::from_str(toml_str).unwrap();
+        let over = config.notebooks.get("work").unwrap();
+        assert_eq!(over.theme_name, None);
+        assert_eq!(over.theme_icons, None);
+        assert_eq!(over.theme_overrides, ThemeOverrides::default());
+        assert_eq!(config.theme_for(Some("work")).name, config.theme.name);
     }
 
     #[test]

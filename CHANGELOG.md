@@ -6,6 +6,23 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- **Full per-notebook theme customization** — every notebook can now have its own base theme,
+  all 19 individual color-slot overrides, and its own icons toggle, not just the base theme name
+  (`[theme.notebooks]`, the only per-notebook thing that existed before). Set via the theme picker
+  (`leader` then `c`, while that notebook is selected), `shiki theme set <theme> --notebook <name>`,
+  or `shiki theme create --from <theme> --notebook <name>` (scaffolds all 19 color keys at once,
+  same as the existing global scaffold command); Settings → NOTEBOOKS → (notebook) gains an `icons`
+  3-state cycle (unset/on/off) and a `theme_overrides` row showing how many of the 19 slots are set.
+  A new "apply to all" action (`A`, from that same Settings drill-down) clones one notebook's
+  fully-resolved theme — base name, colors, and icons, whether inherited or already customized —
+  onto every other notebook in one shot, for broadcasting a look everywhere instead of repeating the
+  setup per notebook. Lives in the same `[notebooks.<name>]` table git/path/hidden/encrypt overrides
+  already use (new `theme_name`/`theme_icons`/color-slot fields), not a new table — the legacy
+  `[theme.notebooks]` name-only map is still read for configs written before this, just never
+  written to anymore.
+
 ### Changed
 
 - **`shiki-core`/`shiki-config` are now genuinely portable to a non-native target, not just

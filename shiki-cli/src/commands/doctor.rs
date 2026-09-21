@@ -656,7 +656,8 @@ fn check_unknown_config_keys(raw: &str, r: &mut Report) {
     // `None`-valued `Option<T>` — which `Config::default()` alone would be
     // for every one of these: `general.data_dir`, all 19
     // `ThemeOverrides` slots, `NotebookGitOverride`'s `auto_push`/
-    // `auto_sync`/`auto_sync_every`/`path`, and `SnippetConfig.label`. A
+    // `auto_sync`/`auto_sync_every`/`path`/`theme_name`/`theme_icons`/its own
+    // 19 `theme_overrides` slots, and `SnippetConfig.label`. A
     // canonical shape built straight from `Config::default()` would then
     // have *none* of those keys at all, so setting any single one of them
     // — every one a real, documented feature — got flagged as "unrecognized"
@@ -678,6 +679,11 @@ fn check_unknown_config_keys(raw: &str, r: &mut Report) {
         path: Some(String::new()),
         hidden: false,
         encrypt: false,
+        theme_name: Some(String::new()),
+        theme_icons: Some(false),
+        theme_overrides: shiki_config::config::ThemeOverrides::from_theme(
+            &shiki_config::Theme::terminal_default(),
+        ),
     })
     .ok();
     let snippet_shape = toml::Value::try_from(SnippetConfig {
@@ -750,6 +756,16 @@ fn collect_unknown_keys(
                     collect_unknown_keys(raw_val, shape, &full_path, None, None, out);
                 }
             }
+            // Legacy `[theme.notebooks]` per-notebook theme-name map: `key`
+            // is a user-chosen notebook name, its value a bare theme-name
+            // string with no further sub-keys — unlike `notebooks`/
+            // `snippets` above, there's no shape to recurse into, just a
+            // dynamic key to whitelist outright. `Config::default()`'s
+            // `theme.notebooks` is an empty-but-present table (unlike an
+            // `Option`, an empty `BTreeMap` still serializes), so this key
+            // is reached via the `Some(canon_val)` branch one level up —
+            // this arm only fires for the *entries* inside it.
+            None if path == "theme.notebooks" => {}
             None => out.push(full_path),
         }
     }
@@ -1097,10 +1113,16 @@ data_dir = "/some/custom/path"
 name = "gruvbox-dark"
 bg = "#123456"
 
+[theme.notebooks]
+archive = "Matrix"
+
 [notebooks.personal]
 auto_push = true
 auto_sync_every = 5
 path = "/some/notebook/path"
+theme_name = "nord"
+theme_icons = false
+accent = "#88c0d0"
 
 [snippets.todo]
 label = "Todo item"
@@ -1132,6 +1154,17 @@ remeber_last_session = true
         let raw = r#"
 [notebooks.work]
 auto_puush = true
+"#;
+        let mut r = Report::new();
+        check_unknown_config_keys(raw, &mut r);
+        assert_eq!(r.warn, 1);
+    }
+
+    #[test]
+    fn flags_a_typo_in_a_notebook_theme_field_too() {
+        let raw = r#"
+[notebooks.work]
+theme_naem = "nord"
 "#;
         let mut r = Report::new();
         check_unknown_config_keys(raw, &mut r);

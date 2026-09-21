@@ -1115,7 +1115,7 @@ Content in **markdown**.
         <tbody>
           <tr><td><code>name</code></td><td><code>"gruvbox-dark"</code></td><td>Which built-in theme to use as the base (<code>shiki theme list</code> shows every name)</td></tr>
           <tr><td><code>icons</code></td><td><code>true</code></td><td>When false, every Nerd Font glyph (notebook/note icons, git status, the list-selection marker, …) falls back to plain text — for a terminal font that isn't Nerd-Fonts-patched</td></tr>
-          <tr><td><code>notebooks</code></td><td>unset</td><td>Per-notebook theme overrides (<code>{ personal = "LoL (Jinx)", work = "Cyberpunk 2077" }</code>): a notebook's entry wins over <code>name</code> while it's focused. The theme picker writes here when a notebook is selected; the CLI sets it with <code>shiki theme set &lt;theme&gt; --notebook &lt;name&gt;</code></td></tr>
+          <tr><td><code>notebooks</code></td><td>unset</td><td>Legacy per-notebook base-theme-name map — superseded by <code>[notebooks.&lt;name&gt;] theme_name</code> below, which also covers colors and icons. Nothing writes here anymore; still read for a config saved before that field existed</td></tr>
           <tr><td><code>[theme.overrides]</code></td><td>all unset</td><td>Override any of the 19 color slots (see <a href="#themes-ref">Included themes</a>) individually — anything left unset falls back to <code>name</code>'s own value for that slot</td></tr>
         </tbody>
       </table>
@@ -1250,14 +1250,28 @@ pdf_theme = "default"
           <tr><td><code>path</code></td><td>unset (lives under the data directory)</td><td>An absolute path to an existing directory on disk — this notebook lives there instead of under <code>data_dir</code>/the default data directory. Must be absolute; a relative value is ignored (<code>shiki doctor</code> warns if one is found) rather than silently resolved against whatever directory the process happened to be launched from</td></tr>
           <tr><td><code>hidden</code></td><td>unset (<code>false</code>)</td><td>Set when "delete notebook" was answered with "just remove the reference" instead of "delete the files" — the directory on disk is left untouched, this only stops the notebook from being listed/tracked. Reversible in-app: Settings → NOTEBOOKS lists hidden notebooks (marked <code>(hidden)</code>) and drilling into one lets you clear the flag to restore it</td></tr>
           <tr><td><code>encrypt</code></td><td><code>false</code></td><td>Encrypts every note in this notebook at rest with a passphrase — no global default to inherit, opt-in per notebook. Managed via <code>shiki notebook encrypt/decrypt/rekey &lt;name&gt;</code> or Settings → NOTEBOOKS, not by hand-editing this value (the passphrase itself is never stored here or anywhere else — see <a href="#encryption">Encryption</a> above)</td></tr>
+          <tr><td><code>theme_name</code></td><td>inherits <code>[theme] name</code></td><td>This notebook's own base theme — wins the moment it's focused, no restart. Set via the theme picker (<code>leader</code> then <code>c</code>, while this notebook is selected) or <code>shiki theme set &lt;theme&gt; --notebook &lt;name&gt;</code></td></tr>
+          <tr><td><code>theme_icons</code></td><td>inherits <code>[theme] icons</code></td><td>This notebook's own icons override — a 3-state cycle (unset/on/off) from Settings → NOTEBOOKS → (notebook) → <code>icons</code></td></tr>
+          <tr><td>any of the 19 color slots</td><td>inherits <code>[theme.overrides]</code>/the base theme</td><td>Same 19 slots as <code>[theme.overrides]</code> (see above), scoped to just this notebook — layered on top of the global override, which is layered on top of the resolved base theme. Scaffold all 19 at once with <code>shiki theme create --from &lt;theme&gt; --notebook &lt;name&gt;</code></td></tr>
         </tbody>
       </table>
+      <p style="max-width:70ch;">
+        Settings → NOTEBOOKS → (notebook) also has an "apply to all" action (<code>A</code>) that
+        clones this notebook's fully-resolved theme — base name, all 19 colors, and icons, whether
+        inherited or already customized — onto every <em>other</em> notebook in one shot. Handy for
+        "maximum customization" in reverse: pick and tweak one notebook's look, then broadcast it
+        everywhere instead of repeating the setup per notebook.
+      </p>
       <pre class="code">[notebooks.work]
 auto_sync = true
 auto_sync_every = 3
 auto_push = true
 # encrypt = true
 # hidden = true  # set by "just remove the reference" on delete; un-hide from Settings → NOTEBOOKS
+theme_name = "nord"
+theme_icons = true
+# accent = "#88c0d0"
+# bg = "#2e3440"
 
 [notebooks.alcateia]
 path = "/Users/me/obsidian-vaults/alcateia"
@@ -1570,6 +1584,13 @@ auto_sync_every = 3
 auto_push = true
 # encrypt = true
 # hidden = true  # set by "just remove the reference" on delete; un-hide from Settings → NOTEBOOKS
+# Full per-notebook theme customization: base name, any of the 19 color
+# slots, and its own icons toggle — independent of the global [theme] and
+# of every other notebook. Settings → NOTEBOOKS → work → "apply to all"
+# clones this onto every other notebook in one shot.
+theme_name = "nord"
+theme_icons = true
+# accent = "#88c0d0"
 
 # Custom entries for the inline editor's `/`-menu, keyed by trigger. Empty by
 # default — the built-in commands (h1/h2/h3/bold/italic/code/math/table/check/

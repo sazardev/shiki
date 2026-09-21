@@ -17,8 +17,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// Sets the global icon toggle for this frame — called once, at the top of
-/// `draw()`, from `config.theme.icons`. `Relaxed` ordering is enough: this
-/// is a single-threaded render loop, not cross-thread synchronization.
+/// `draw()`, from `config.icons_for(selected_notebook)` (the focused
+/// notebook's own override if it has one, else the global `theme.icons`).
+/// `Relaxed` ordering is enough: this is a single-threaded render loop, not
+/// cross-thread synchronization.
 pub fn set_enabled(enabled: bool) {
     ENABLED.store(enabled, Ordering::Relaxed);
 }

@@ -16,7 +16,10 @@ use ratatui::widgets::{Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 
 pub fn draw(frame: &mut Frame, app: &App) {
-    icons::set_enabled(app.config.theme.icons);
+    icons::set_enabled(
+        app.config
+            .icons_for(app.selected_notebook().map(|nb| nb.name.as_str())),
+    );
     let background = ratatui::widgets::Block::default()
         .style(ratatui::style::Style::default().bg(hex_to_color(&app.theme.bg)));
     frame.render_widget(background, frame.area());

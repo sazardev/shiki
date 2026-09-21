@@ -1019,11 +1019,6 @@ metadata = "M"
 [theme]
 name = "gruvbox-dark"
 icons = true  # false falls back to plain text — no Nerd Font glyphs anywhere
-# Per-notebook theme overrides: a notebook name here wins over `name` while
-# that notebook is focused (the TUI re-resolves on notebook switch; the
-# theme picker writes here when a notebook is selected, and the CLI sets it
-# with `shiki theme set <theme> --notebook <name>`):
-# notebooks = { personal = "LoL (Jinx)", work = "Cyberpunk 2077" }
 # Every one of a theme's 19 color slots can be overridden individually —
 # accent, bg, fg, selection, border, statusbar, highlight, error, warning,
 # success, inactive, scrollbar, tab_active, tab_inactive, panel_title,
@@ -1038,6 +1033,11 @@ icons = true  # false falls back to plain text — no Nerd Font glyphs anywhere
 # copied from a real palette (defaulting to whichever theme is active) —
 # a starting point to edit slot-by-slot instead of hand-typing hex codes
 # from scratch with no example to copy from.
+#
+# Per-notebook theme customization — base theme, all 19 colors, and icons —
+# lives under `[notebooks.<name>]` instead (see below), not here: every
+# notebook can be fully, independently themed, not just given a different
+# base palette name.
 
 [git]
 auto_commit = true
@@ -1111,6 +1111,22 @@ auto_sync = true
 auto_sync = true
 auto_sync_every = 3
 auto_push = true
+# Full per-notebook theme customization — a base theme name, individual
+# color-slot overrides (any of the same 19 slots `[theme]` above supports),
+# and its own icons toggle, all independent of the global theme and of every
+# other notebook. Set via the theme picker (leader+`c`, while this notebook
+# is selected), `shiki theme set <theme> --notebook work`, or
+# `shiki theme create --from <theme> --notebook work` (scaffolds all 19
+# color keys at once, same as the global version). Settings → NOTEBOOKS →
+# work → `icons` cycles the icons override in place; unset falls back to
+# the global `[theme] icons`. Settings → NOTEBOOKS → work also has an
+# "apply to all" action (`A`) that clones this notebook's fully-resolved
+# theme — base name, colors, and icons — onto every other notebook at once,
+# for "maximum customization, everywhere" in one shot.
+theme_name = "nord"
+theme_icons = true
+# accent = "#88c0d0"
+# bg = "#2e3440"
 # Encrypts every note at rest with a passphrase (prompted, never stored here
 # or anywhere else — see "Encryption at rest" above). No global default to
 # inherit from; this is opt-in per notebook, managed via `shiki notebook

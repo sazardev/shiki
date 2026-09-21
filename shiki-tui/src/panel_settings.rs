@@ -290,16 +290,25 @@ pub enum NotebookField {
     /// `sorted_notebook_names`, which includes them precisely so this
     /// toggle exists.
     Hidden,
+    /// Per-notebook icons override — a 3-state cycle (unset/true/false),
+    /// same mechanism as `AutoPush`/`AutoSync` (`App::cycle_notebook_bool_override`).
+    Icons,
+    /// Informational, like THEME tab's own `overrides` row — 19 individual
+    /// color slots don't fit a single-row edit, so this just shows the count
+    /// and points at `shiki theme create --notebook <nb>` / leader+`A` here.
+    ThemeOverrides,
 }
 
 impl NotebookField {
-    pub const ALL: [NotebookField; 6] = [
+    pub const ALL: [NotebookField; 8] = [
         NotebookField::Remote,
         NotebookField::AutoPush,
         NotebookField::AutoSync,
         NotebookField::AutoSyncEvery,
         NotebookField::Encryption,
         NotebookField::Hidden,
+        NotebookField::Icons,
+        NotebookField::ThemeOverrides,
     ];
 }
 
@@ -469,23 +478,32 @@ pub(crate) fn general_rows(app: &App) -> Vec<Line<'static>> {
 pub(crate) fn theme_rows(app: &App) -> Vec<Line<'static>> {
     let cfg = &app.config;
     let set = cfg.theme.overrides.set_count();
+    let focused_name = app.selected_notebook().map(|nb| nb.name.as_str());
     // Show the theme actually active for the focused notebook — a
-    // per-notebook override wins over the global `name` there.
-    let effective = cfg
-        .theme
-        .resolve_for(app.selected_notebook().map(|nb| nb.name.as_str()));
-    let label = if app
-        .selected_notebook()
-        .map(|nb| cfg.theme.notebooks.contains_key(&nb.name))
-        .unwrap_or(false)
-    {
+    // per-notebook override (new `[notebooks.<name>] theme_name`, or the
+    // legacy `[theme.notebooks]` map) wins over the global `name` there.
+    let effective = cfg.theme_for(focused_name);
+    let has_name_override = focused_name.is_some_and(|nb| {
+        cfg.notebooks
+            .get(nb)
+            .is_some_and(|o| o.theme_name.is_some())
+            || cfg.theme.notebooks.contains_key(nb)
+    });
+    let name_label = if has_name_override {
         format!("{} (this notebook)", effective.name)
     } else {
         effective.name
     };
+    let icons_override = focused_name
+        .and_then(|nb| cfg.notebooks.get(nb))
+        .and_then(|o| o.theme_icons);
+    let icons_label = match icons_override {
+        Some(v) => format!("{v} (this notebook)"),
+        None => cfg.theme.icons.to_string(),
+    };
     vec![
-        row_line(app, "name", label),
-        row_line(app, "icons", cfg.theme.icons.to_string()),
+        row_line(app, "name", name_label),
+        row_line(app, "icons", icons_label),
         row_line(
             app,
             "overrides",
@@ -711,6 +729,19 @@ fn notebook_field_rows(app: &App, name: &str) -> Vec<Line<'static>> {
                 "false".to_string()
             },
         ),
+        row_line(
+            app,
+            "icons",
+            bool_cell(over.theme_icons, app.config.theme.icons),
+        ),
+        row_line(app, "theme_overrides", {
+            let set = over.theme_overrides.set_count();
+            if set == 0 {
+                "none (enter for how to customize)".to_string()
+            } else {
+                format!("{set} of 19 slots set")
+            }
+        }),
     ]
 }
 

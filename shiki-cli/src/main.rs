@@ -408,10 +408,13 @@ enum ThemeAction {
     /// Scaffolds every one of the 19 color slots as an explicit override in
     /// config.toml, copied from a real theme's values — a starting point to
     /// edit, not blank fields. Defaults to the currently active theme if
-    /// `--from` is omitted.
+    /// `--from` is omitted. With `--notebook <name>`, scaffolds that
+    /// notebook's own `[notebooks.<name>]` override instead of the global one.
     Create {
         #[arg(long)]
         from: Option<String>,
+        #[arg(long)]
+        notebook: Option<String>,
     },
 }
 
@@ -717,8 +720,8 @@ fn main() -> Result<()> {
             ThemeAction::Set { name, notebook } => {
                 commands::theme::set(&mut ctx.config, &name, notebook.as_deref())
             }
-            ThemeAction::Create { from } => {
-                commands::theme::create(&mut ctx.config, from.as_deref())
+            ThemeAction::Create { from, notebook } => {
+                commands::theme::create(&mut ctx.config, from.as_deref(), notebook.as_deref())
             }
         },
         Some(Commands::Extension { .. }) => unreachable!("handled before Context::load"),
