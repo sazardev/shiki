@@ -262,6 +262,31 @@ pub struct App {
     /// as the other. Shared by both NOTEBOOKS and SNIPPETS level 2, safely,
     /// since only one of the two drill fields above is ever `Some` at once.
     pub(crate) settings_field_selected: usize,
+    /// Whether Settings' `/` filter is actively accepting keystrokes —
+    /// distinguishes "typing a search query" from "browsing normally", since
+    /// normal Settings navigation reuses letters (`a`/`d`/`i`/`E`) that would
+    /// otherwise collide with filter text. Toggled on by `/` (level 1 only —
+    /// a drilled-into notebook/snippet's own field list is short enough that
+    /// filtering wouldn't earn its keep), off by `Esc` while filtering.
+    pub(crate) settings_filter_active: bool,
+    /// The live filter text for whichever tab is currently open — see
+    /// `panel_settings::filtered_indices`, which `settings_selected` indexes
+    /// into instead of `panel_settings::build`'s raw row order once this is
+    /// non-empty (same "selected index is a position in the *filtered*
+    /// list" convention `outline_query`/`which_key_input` already use for
+    /// their own modals). Reset to empty everywhere `settings_selected`
+    /// itself resets (opening Settings, switching tabs, drilling in) so a
+    /// stale query from a different list can't silently carry over.
+    pub(crate) settings_query: String,
+    /// Whether Settings should reopen once the in-flight `SettingsGeneralText`/
+    /// `SettingsGitText`/`SettingsExportText` prompt resolves — captured as
+    /// `self.show_settings` right before each of those handlers forces it to
+    /// `false` to open the prompt, so it's `true` for a prompt opened from
+    /// inside the Settings modal itself and `false` for one opened directly
+    /// from which-key's config-field rows (`App::activate_config_field`),
+    /// which never had Settings open to begin with — same "remember where
+    /// this came from" shape as `reopen_settings_after_theme_picker`.
+    pub(crate) settings_reopen_after_prompt: bool,
     /// True while `self.editor` holds `config.toml`'s contents rather than
     /// a note's body — `save_and_exit_edit` checks this to decide whether
     /// to write+reload the config or save a note, since both share the same
@@ -926,6 +951,9 @@ impl App {
             settings_notebook_drill: None,
             settings_snippet_drill: None,
             settings_field_selected: 0,
+            settings_filter_active: false,
+            settings_query: String::new(),
+            settings_reopen_after_prompt: true,
             editing_config: false,
             editing_snippet: None,
             editing_scratchpad: false,

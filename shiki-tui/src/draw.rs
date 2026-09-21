@@ -105,7 +105,12 @@ pub fn draw(frame: &mut Frame, app: &App) {
             let highlight_symbol = format!("{}", icons::ARROW);
             let list_title = format!(" {}Quick template ", icons::CALENDAR);
             let list = List::new(items)
-                .block(panel_block(Line::from(list_title), true, &app.theme))
+                .block(panel_block(
+                    Line::from(list_title),
+                    true,
+                    &app.theme,
+                    app.config.general.show_borders,
+                ))
                 .highlight_style(
                     Style::default()
                         .bg(app.selection_bg())
@@ -148,7 +153,12 @@ pub fn draw(frame: &mut Frame, app: &App) {
                 format!(" {}Suggestions ", icons::TAG)
             };
             let list = List::new(items)
-                .block(panel_block(Line::from(list_title), true, &app.theme))
+                .block(panel_block(
+                    Line::from(list_title),
+                    true,
+                    &app.theme,
+                    app.config.general.show_borders,
+                ))
                 .highlight_style(
                     Style::default()
                         .bg(app.selection_bg())
@@ -432,7 +442,12 @@ fn render_theme_picker(frame: &mut Frame, frame_area: Rect, app: &App) {
         app.available_themes.len()
     );
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())
@@ -465,7 +480,12 @@ fn render_template_picker(frame: &mut Frame, frame_area: Rect, app: &App) {
     let highlight_symbol = format!("{}", icons::ARROW);
     let title = format!(" {}Pick a template ", icons::NOTE);
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())
@@ -519,7 +539,12 @@ fn render_global_search(frame: &mut Frame, frame_area: Rect, app: &App) {
     let count = app.global_search_results.len();
     let title = format!(" Results [{count}] ");
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())
@@ -600,7 +625,12 @@ fn render_update(frame: &mut Frame, frame_area: Rect, app: &App) {
 
     let paragraph = ratatui::widgets::Paragraph::new(body)
         .wrap(ratatui::widgets::Wrap { trim: false })
-        .block(panel_block(Line::from(title), true, &app.theme));
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ));
     frame.render_widget(paragraph, popup_area);
 }
 
@@ -627,7 +657,12 @@ fn render_logs(frame: &mut Frame, frame_area: Rect, app: &App) {
         app.log_history.len()
     );
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())
@@ -678,7 +713,12 @@ fn render_tree(frame: &mut Frame, frame_area: Rect, app: &App) {
         app.tree_note_count()
     );
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())
@@ -744,7 +784,12 @@ fn render_links(frame: &mut Frame, frame_area: Rect, app: &App) {
         icons::LINK
     );
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())
@@ -797,7 +842,12 @@ fn render_working_diff(
         })
         .collect();
     let paragraph = ratatui::widgets::Paragraph::new(diff_lines)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .wrap(ratatui::widgets::Wrap { trim: false });
     frame.render_widget(paragraph, popup_area);
 }
@@ -830,7 +880,12 @@ fn render_history(frame: &mut Frame, frame_area: Rect, app: &App) {
             })
             .collect();
         let paragraph = ratatui::widgets::Paragraph::new(diff_lines)
-            .block(panel_block(Line::from(title), true, &app.theme))
+            .block(panel_block(
+                Line::from(title),
+                true,
+                &app.theme,
+                app.config.general.show_borders,
+            ))
             .wrap(ratatui::widgets::Wrap { trim: false });
         frame.render_widget(paragraph, popup_area);
         return;
@@ -843,7 +898,12 @@ fn render_history(frame: &mut Frame, frame_area: Rect, app: &App) {
             icons::HISTORY
         );
         let paragraph = ratatui::widgets::Paragraph::new(content.as_str())
-            .block(panel_block(Line::from(title), true, &app.theme))
+            .block(panel_block(
+                Line::from(title),
+                true,
+                &app.theme,
+                app.config.general.show_borders,
+            ))
             .wrap(ratatui::widgets::Wrap { trim: false });
         frame.render_widget(paragraph, popup_area);
         return;
@@ -871,7 +931,12 @@ fn render_history(frame: &mut Frame, frame_area: Rect, app: &App) {
         app.history_entries.len()
     );
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())
@@ -921,11 +986,21 @@ fn render_conflicts(frame: &mut Frame, frame_area: Rect, app: &App) {
         let ours_title = format!(" {}OURS  \u{2014}  {hint} ", icons::GIT);
         let theirs_title = format!(" {}THEIRS  \u{2014}  {hint} ", icons::GIT);
         let ours_paragraph = ratatui::widgets::Paragraph::new(to_lines(&view.ours))
-            .block(panel_block(Line::from(ours_title), true, &app.theme))
+            .block(panel_block(
+                Line::from(ours_title),
+                true,
+                &app.theme,
+                app.config.general.show_borders,
+            ))
             .scroll((view.scroll, 0))
             .wrap(ratatui::widgets::Wrap { trim: false });
         let theirs_paragraph = ratatui::widgets::Paragraph::new(to_lines(&view.theirs))
-            .block(panel_block(Line::from(theirs_title), true, &app.theme))
+            .block(panel_block(
+                Line::from(theirs_title),
+                true,
+                &app.theme,
+                app.config.general.show_borders,
+            ))
             .scroll((view.scroll, 0))
             .wrap(ratatui::widgets::Wrap { trim: false });
         frame.render_widget(ours_paragraph, ours_area);
@@ -947,7 +1022,12 @@ fn render_conflicts(frame: &mut Frame, frame_area: Rect, app: &App) {
         if app.conflict_files.len() == 1 { "" } else { "s" }
     );
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())
@@ -1006,7 +1086,12 @@ fn render_slash_menu(
     let highlight_symbol = format!("{}", icons::ARROW);
     let title = format!(" {}Slash menu ", icons::PENCIL);
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())
@@ -1087,7 +1172,12 @@ fn render_wikilink_menu(
     let highlight_symbol = format!("{}", icons::ARROW);
     let title = format!(" {}Link to note ", icons::LINK);
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())

@@ -77,9 +77,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         (None, None) => Line::from(format!(" {}Preview ", icons::EYE)),
     };
     let block = if focused && app.selected_note().is_some() {
-        panel_block_reading(title, &app.theme)
+        panel_block_reading(title, &app.theme, app.config.general.show_borders)
     } else {
-        panel_block(title, focused, &app.theme)
+        panel_block(title, focused, &app.theme, app.config.general.show_borders)
     };
 
     let mut lines = match (app.selected_note(), app.selected_folder()) {

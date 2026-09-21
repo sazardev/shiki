@@ -16,9 +16,12 @@ behavior (layout, CLI commands, config schema, etc).
 ```sh
 cargo build --workspace              # build everything
 cargo check --workspace              # fast type-check (use this while iterating)
-cargo clippy --workspace --all-targets   # lint; keep this clean before considering work done
+cargo clippy --workspace --all-targets -- -D warnings   # lint; CI enforces -D warnings, so match it locally
 cargo fmt --all                      # format (run after editing, before checking clippy)
 cargo run -p shiki-cli -- <args>     # run the binary, e.g. `-- new "titulo"`, `-- daily`, no args launches the TUI
+cargo test -p shiki-tui panel_drawer::tests   # single module, e.g. while iterating on one file
+cargo test -p shiki-tui clicking_the_button_row   # single test by (substring of) name
+cargo audit                          # CI runs this too; ignore list is .cargo/audit.toml
 ```
 
 There are 398 `#[test]`s: 180 in `shiki-core`, 20 in `shiki-config`, 176 in `shiki-tui`, 16 in
@@ -373,7 +376,7 @@ at AI assistants/crawlers that check for it directly, the same way search engine
 
 ## Architecture
 
-Cargo workspace. The four terminal crates form a strict one-way dependency chain:
+Cargo workspace, six members. The four terminal crates form a strict one-way dependency chain:
 
 ```
 shiki-core   (pure domain logic, no TUI, no config crate dependency)
@@ -381,6 +384,17 @@ shiki-config (TOML config + themes, no ratatui dependency)
 shiki-tui    (ratatui UI, depends on shiki-core + shiki-config)
 shiki-cli    (clap entrypoint, depends on all three; binary name is `shiki`)
 ```
+
+Two more members sit outside that chain — both depend on `shiki-core`/`shiki-config` but not on
+`shiki-tui`/`shiki-cli`, and neither of the terminal crates depends on them:
+
+- **`shiki-native-host`** — a native-messaging host binary bridging the Chrome/Firefox browser
+  extension to the TUI's capture daemon (same TCP transport `shiki capture`/`shiki daemon` use;
+  see the capture-daemon section below).
+- **`shiki-desktop`** — a Tauri 2 + Svelte desktop GUI (`shiki-desktop/ui/`, a separate Vite/npm
+  frontend) wrapping the same note/notebook/git core. It's the only workspace member that pulls in
+  `tokio`/async at all — the terminal crates stay synchronous (`std::thread` + `mpsc`) throughout,
+  don't introduce async there for a new feature.
 
 **shiki-config is deliberately decoupled from ratatui.** `Theme` (`shiki-config/src/theme.rs`)
 stores every color slot as a string — `#rrggbb` hex, a terminal-native ANSI name
@@ -1218,6 +1232,36 @@ Typed characters go to the filter (not `j`/`k` navigation, since `j`/`k` are the
 user might type to search for "jump"/"key") — navigation is arrows + PageUp/PageDown/Home/End only,
 matching the convention global search already established for the same reason. Don't revert this to
 `on_key`'s blanket "any key closes it," and don't add `j`/`k` as navigation shortcuts here.
+
+**Which-key's palette now also surfaces config fields, not just bound actions/notes** —
+`WhichKeyRow::ConfigField { section, index, text }` (`keybindings.rs`), appended by
+`App::config_field_rows` only while the filter is non-empty (same "don't show hundreds of rows by
+default" reasoning `NoteHit` already follows), covering GENERAL/GIT/EDITOR/EXPORT fields plus
+THEME's `icons`. `section`/`index` are exactly the `(SettingsSection, usize)` pair
+`settings_section`/`settings_selected` already hold while browsing that field inside Settings
+itself, so `Enter` on a `ConfigField` row (`App::activate_config_field`) reuses
+`App::dispatch_settings_enter` verbatim instead of a second copy of every toggle/prompt case — the
+palette is a shortcut into the exact same code path Settings itself uses, not a parallel one.
+`App::settings_reopen_after_prompt` distinguishes a prompt opened *from inside* Settings (reopen it
+once the prompt resolves) from one opened directly via the palette (Settings was never open, so
+don't open it now either).
+
+**Settings itself gained a `/` filter at level 1 of each tab** (`App::settings_filter_active`/
+`settings_query`, toggled on by `/`, off by `Esc`) — `panel_settings::filtered_indices` returns
+real indices into `build(app)`'s row list whose label or value (case-insensitive substring)
+matches, and `settings_selected` indexes into *that* filtered list instead of `build`'s raw order
+the moment a query is non-empty, the same "selected index is a position in the filtered list"
+convention `outline_query`/`which_key_input` already established for their own modals. Deliberately
+level-1-only: a drilled-into notebook/snippet's own field list is already short enough that
+filtering wouldn't earn its keep.
+
+**`general.show_borders` (default `true`) makes every panel/popup's themed border optional** —
+`render::panel_block`/`panel_block_reading` take a `show_borders: bool` now (threaded through from
+`app.config.general.show_borders` at every call site), swapping `Borders::ALL` for `Borders::NONE`
+when off. The title still renders either way — a `Block`'s title reserves its own row independent
+of whether a border is actually drawn (verified against ratatui's own `Block::inner`) — so turning
+borders off still leaves every panel/popup legible, just without the box-drawing chars, useful on a
+cramped terminal or for anyone who prefers a borderless look.
 
 **Tree view (notes-scope `T`, `shiki-tui/src/tree.rs` + `App::open_tree`/`handle_tree_key`) is a
 read-only modal, not a persistent alternate mode for the Notes panel.** `tree::build(nb)` walks the

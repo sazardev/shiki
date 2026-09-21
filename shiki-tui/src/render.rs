@@ -161,7 +161,12 @@ fn rgb_slot(value: &str, fallback: Option<Color>) -> Option<(u8, u8, u8)> {
 /// border when focused and a plain square one otherwise. Shared by every
 /// panel and popup so the whole UI reads as one consistent surface instead of
 /// bare unstyled borders on the terminal's default background.
-pub fn panel_block<'a>(title: impl Into<Line<'a>>, focused: bool, theme: &Theme) -> Block<'a> {
+pub fn panel_block<'a>(
+    title: impl Into<Line<'a>>,
+    focused: bool,
+    theme: &Theme,
+    show_borders: bool,
+) -> Block<'a> {
     let border_color = if focused {
         hex_to_color(&theme.accent)
     } else {
@@ -172,7 +177,7 @@ pub fn panel_block<'a>(title: impl Into<Line<'a>>, focused: bool, theme: &Theme)
     } else {
         BorderType::Plain
     };
-    styled_block(title, border_color, border_type, theme)
+    styled_block(title, border_color, border_type, theme, show_borders)
 }
 
 /// Same themed surface as `panel_block`, but always a plain (thin) border,
@@ -181,15 +186,31 @@ pub fn panel_block<'a>(title: impl Into<Line<'a>>, focused: bool, theme: &Theme)
 /// large block of body text otherwise reads as visually loud/shouty in a way
 /// the same border on a narrow list (Notebooks/Notes) doesn't; every other
 /// focused panel/popup keeps the regular `Thick` emphasis from `panel_block`.
-pub fn panel_block_reading<'a>(title: impl Into<Line<'a>>, theme: &Theme) -> Block<'a> {
-    styled_block(title, hex_to_color(&theme.accent), BorderType::Plain, theme)
+pub fn panel_block_reading<'a>(
+    title: impl Into<Line<'a>>,
+    theme: &Theme,
+    show_borders: bool,
+) -> Block<'a> {
+    styled_block(
+        title,
+        hex_to_color(&theme.accent),
+        BorderType::Plain,
+        theme,
+        show_borders,
+    )
 }
 
+/// `show_borders` swaps `Borders::ALL` for `Borders::NONE` — the title still
+/// renders either way, since a `Block`'s title reserves its own row
+/// independent of whether any border is actually drawn (verified against
+/// ratatui's own `Block::inner`, which checks `has_title_at_position`
+/// separately from the border bits).
 fn styled_block<'a>(
     title: impl Into<Line<'a>>,
     border_color: Color,
     border_type: BorderType,
     theme: &Theme,
+    show_borders: bool,
 ) -> Block<'a> {
     Block::default()
         .title(title)
@@ -198,7 +219,11 @@ fn styled_block<'a>(
                 .fg(hex_to_color(&theme.panel_title))
                 .add_modifier(Modifier::BOLD),
         )
-        .borders(Borders::ALL)
+        .borders(if show_borders {
+            Borders::ALL
+        } else {
+            Borders::NONE
+        })
         .border_type(border_type)
         .border_style(Style::default().fg(border_color))
         .style(

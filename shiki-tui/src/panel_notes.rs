@@ -94,7 +94,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     );
     let highlight_symbol = format!("{}", icons::ARROW);
     let list = List::new(items)
-        .block(panel_block(Line::from(title), focused, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            focused,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())

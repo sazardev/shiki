@@ -908,6 +908,11 @@ daily_agenda = true
 # Hides char/word count, reading time, and note-count detail from the
 # footer, leaving just the essentials — notebook, git status, editor mode.
 compact_footer = false
+# When true (default), every panel/popup draws its themed border. Off
+# switches every one of them to no border at all — titles still show, since
+# a panel's title reserves its own row independent of whether a border is
+# actually drawn.
+show_borders = true
 # How long a footer status message stays visible before clearing itself.
 status_message_timeout_secs = 2
 # Width in columns of the notebook drawer (leader+`b`). Clamped against

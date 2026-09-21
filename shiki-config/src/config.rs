@@ -150,6 +150,15 @@ pub struct General {
     /// this is a visible reduction, not a pure addition.
     #[serde(default)]
     pub compact_footer: bool,
+    /// When true (the default), every panel/popup draws its themed border
+    /// (`render::panel_block`/`panel_block_reading`). Off switches every one
+    /// of those to `Borders::NONE` instead — the title still renders (a
+    /// `Block`'s title reserves its own row independent of whether any
+    /// border is actually drawn), so panels still read as distinct regions,
+    /// just without the box-drawing chars around them; useful on a cramped
+    /// terminal or for anyone who just prefers a borderless look.
+    #[serde(default = "default_true")]
+    pub show_borders: bool,
     /// How long a footer status message stays visible before clearing
     /// itself (`App::expire_status_message`), in seconds. Defaults to `2`.
     /// The full message is always in the logs modal (leader+`l`) regardless
@@ -246,6 +255,7 @@ impl Default for General {
             wikilink_autocomplete: true,
             daily_agenda: true,
             compact_footer: false,
+            show_borders: true,
             status_message_timeout_secs: default_status_message_timeout_secs(),
             drawer_width: default_drawer_width(),
             tasks_show_done_default: false,
@@ -1710,6 +1720,8 @@ fn section_comment(line: &str) -> Option<&'static str> {
 #   pending tasks across every notebook. Defaults to true.
 # - compact_footer: hides char/word count, reading time, and note-count
 #   detail from the footer, leaving just the essentials.
+# - show_borders: when true (default), every panel/popup draws its themed
+#   border. Off removes the box-drawing chars everywhere (titles still show).
 # - status_message_timeout_secs: how long a footer status message stays
 #   visible before clearing itself. Defaults to 2.
 # - drawer_width: width in columns of the notebook drawer (leader+`b`).

@@ -52,7 +52,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             ),
         ])
     };
-    let query = Paragraph::new(query_line).block(panel_block("Filter", false, &app.theme));
+    let query = Paragraph::new(query_line).block(panel_block(
+        "Filter",
+        false,
+        &app.theme,
+        app.config.general.show_borders,
+    ));
     frame.render_widget(query, query_area);
 
     let items: Vec<ListItem> = if filtered.is_empty() {
@@ -75,7 +80,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let title = format!(" {}Outline [{}] ", icons::TREE, filtered.len());
     let highlight_symbol = format!("{}", icons::ARROW);
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())

@@ -78,6 +78,7 @@ pub enum GeneralField {
     WikilinkAutocomplete,
     DailyAgenda,
     CompactFooter,
+    ShowBorders,
     StatusMessageTimeoutSecs,
     DrawerWidth,
     TasksShowDoneDefault,
@@ -93,7 +94,7 @@ pub enum GeneralField {
 }
 
 impl GeneralField {
-    pub const ALL: [GeneralField; 26] = [
+    pub const ALL: [GeneralField; 27] = [
         GeneralField::DefaultNotebook,
         GeneralField::Editor,
         GeneralField::DailyTemplate,
@@ -108,6 +109,7 @@ impl GeneralField {
         GeneralField::WikilinkAutocomplete,
         GeneralField::DailyAgenda,
         GeneralField::CompactFooter,
+        GeneralField::ShowBorders,
         GeneralField::StatusMessageTimeoutSecs,
         GeneralField::DrawerWidth,
         GeneralField::TasksShowDoneDefault,
@@ -355,7 +357,7 @@ fn row_line(app: &App, label: &str, value: String) -> Line<'static> {
     ])
 }
 
-fn general_rows(app: &App) -> Vec<Line<'static>> {
+pub(crate) fn general_rows(app: &App) -> Vec<Line<'static>> {
     let cfg = &app.config;
     vec![
         row_line(
@@ -408,6 +410,7 @@ fn general_rows(app: &App) -> Vec<Line<'static>> {
             "compact_footer",
             cfg.general.compact_footer.to_string(),
         ),
+        row_line(app, "show_borders", cfg.general.show_borders.to_string()),
         row_line(
             app,
             "status_message_timeout_secs",
@@ -463,7 +466,7 @@ fn general_rows(app: &App) -> Vec<Line<'static>> {
     ]
 }
 
-fn theme_rows(app: &App) -> Vec<Line<'static>> {
+pub(crate) fn theme_rows(app: &App) -> Vec<Line<'static>> {
     let cfg = &app.config;
     let set = cfg.theme.overrides.set_count();
     // Show the theme actually active for the focused notebook — a
@@ -495,7 +498,7 @@ fn theme_rows(app: &App) -> Vec<Line<'static>> {
     ]
 }
 
-fn git_rows(app: &App) -> Vec<Line<'static>> {
+pub(crate) fn git_rows(app: &App) -> Vec<Line<'static>> {
     let cfg = &app.config;
     vec![
         row_line(app, "auto_commit", cfg.git.auto_commit.to_string()),
@@ -518,7 +521,7 @@ fn git_rows(app: &App) -> Vec<Line<'static>> {
     ]
 }
 
-fn editor_rows(app: &App) -> Vec<Line<'static>> {
+pub(crate) fn editor_rows(app: &App) -> Vec<Line<'static>> {
     let cfg = &app.config;
     vec![
         row_line(
@@ -596,7 +599,7 @@ fn editor_rows(app: &App) -> Vec<Line<'static>> {
     ]
 }
 
-fn export_rows(app: &App) -> Vec<Line<'static>> {
+pub(crate) fn export_rows(app: &App) -> Vec<Line<'static>> {
     let export_dir = if app.config.export.export_dir.trim().is_empty() {
         format!("(default) {}", app.resolved_export_dir().to_string_lossy())
     } else {
@@ -786,6 +789,45 @@ pub fn build(app: &App) -> Vec<Line<'static>> {
     }
 }
 
+/// Real indices into `build(app)`'s row list whose rendered text (label and
+/// value both) contains `query` (case-insensitive substring), in original
+/// order — every index when `query` is empty. `App::settings_selected`
+/// indexes into *this* list instead of `build`'s raw order once a `/` filter
+/// is active, the same "selected index is a position in the filtered list"
+/// convention `filtered_headings`/`which_key_filtered_entries` already use
+/// for their own modals.
+pub fn filtered_indices(app: &App, query: &str) -> Vec<usize> {
+    let query = query.to_lowercase();
+    build(app)
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| query.is_empty() || line_text(line).to_lowercase().contains(&query))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// A row `Line`'s plain text, spans concatenated — used both to filter
+/// (`filtered_indices`) and, via `App::config_field_rows`, to give
+/// which-key's config-field entries the exact same "label + current value"
+/// text Settings itself renders, so the two can't drift apart.
+pub(crate) fn line_text(line: &Line) -> String {
+    line.spans.iter().map(|s| s.content.as_ref()).collect()
+}
+
+/// The real `build(app)` row `App.settings_selected` currently points at,
+/// resolved through the active `/` filter (`None` when the filter matches
+/// nothing at all) — every level-1 `X::ALL[...]`/`sorted_notebook_names`/
+/// `sorted_snippet_triggers` lookup in `App`'s Settings handlers goes
+/// through this instead of `settings_selected` directly, so a query that
+/// hides earlier rows can't silently shift which field `Enter` acts on.
+/// Level 2 (a drilled-into notebook/snippet) doesn't filter — its own
+/// `settings_field_selected` is always a real index already.
+pub fn selected_real_index(app: &App) -> Option<usize> {
+    filtered_indices(app, &app.settings_query)
+        .get(app.settings_selected)
+        .copied()
+}
+
 fn tab_bar(app: &App) -> Line<'static> {
     let accent = hex_to_color(&app.theme.accent);
     let muted = hex_to_color(&app.theme.muted);
@@ -828,26 +870,92 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     };
     let hint = if drilled {
         "j/k move · enter edit/toggle · esc/h back"
+    } else if app.settings_filter_active {
+        "type to filter · enter edit/toggle · esc clear filter"
     } else if app.settings_section == SettingsSection::Snippets {
-        "←/→ section · j/k move · enter open · a new · d delete · esc/q close"
+        "←/→ section · j/k move · / filter · enter open · a new · d delete · esc/q close"
     } else {
-        "←/→ section · j/k move · enter edit/toggle · esc/q close"
+        "←/→ section · j/k move · / filter · enter edit/toggle · esc/q close"
     };
     let title = format!(" {}Settings{breadcrumb} — {hint} ", icons::GEAR);
 
-    let block = panel_block(Line::from(title), true, &app.theme);
+    let block = panel_block(
+        Line::from(title),
+        true,
+        &app.theme,
+        app.config.general.show_borders,
+    );
     let inner = block.inner(popup_area);
     frame.render_widget(block, popup_area);
 
+    // The filter row (level 1 only) only takes up space while actively
+    // being typed into — same "reserve nothing until it's needed" shape as
+    // the drawer's own conditional layout, rather than always showing an
+    // empty filter box.
+    let show_filter = !drilled && app.settings_filter_active;
+    let constraints = if show_filter {
+        vec![
+            Constraint::Length(1),
+            Constraint::Length(3),
+            Constraint::Min(0),
+        ]
+    } else {
+        vec![Constraint::Length(1), Constraint::Min(0)]
+    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .constraints(constraints)
         .split(inner);
 
     frame.render_widget(Paragraph::new(tab_bar(app)), chunks[0]);
 
-    let lines = build(app);
-    let items: Vec<ListItem> = lines.into_iter().map(ListItem::new).collect();
+    let muted = hex_to_color(&app.theme.muted);
+    let accent = hex_to_color(&app.theme.accent);
+
+    let list_area = if show_filter {
+        let query_line = if app.settings_query.is_empty() {
+            Line::from(vec![
+                Span::styled("  ", Style::default().fg(muted)),
+                Span::styled("filter this tab…", Style::default().fg(muted)),
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled("  ", Style::default().fg(muted)),
+                Span::styled(
+                    format!("{}▌", app.settings_query),
+                    Style::default().fg(accent).add_modifier(Modifier::BOLD),
+                ),
+            ])
+        };
+        let query = Paragraph::new(query_line).block(panel_block(
+            "Filter",
+            false,
+            &app.theme,
+            app.config.general.show_borders,
+        ));
+        frame.render_widget(query, chunks[1]);
+        chunks[2]
+    } else {
+        chunks[1]
+    };
+
+    // Drilled-in levels never filter (see `App.settings_filter_active`'s
+    // doc comment) — an empty query there is always every row, unfiltered.
+    let items: Vec<ListItem> = if drilled {
+        build(app).into_iter().map(ListItem::new).collect()
+    } else {
+        let all = build(app);
+        let filtered = filtered_indices(app, &app.settings_query);
+        if filtered.is_empty() {
+            vec![ListItem::new("  no matching settings").style(Style::default().fg(muted))]
+        } else {
+            filtered
+                .iter()
+                .map(|&i| ListItem::new(all[i].clone()))
+                .collect()
+        }
+    };
+    let item_count = items.len();
     let list = List::new(items).highlight_style(
         Style::default()
             .bg(app.selection_bg())
@@ -860,6 +968,6 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         app.settings_selected
     };
     let mut state = ListState::default();
-    state.select(Some(selected));
-    frame.render_stateful_widget(list, chunks[1], &mut state);
+    state.select(Some(selected.min(item_count.saturating_sub(1))));
+    frame.render_stateful_widget(list, list_area, &mut state);
 }

@@ -193,7 +193,12 @@ pub fn render(frame: &mut Frame, frame_area: ratatui::layout::Rect, app: &App) {
         selectable_count(&app.git_dash_rows)
     );
     let list = ratatui::widgets::List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())

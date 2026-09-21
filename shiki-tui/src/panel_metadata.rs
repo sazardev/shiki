@@ -36,7 +36,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         None => format!(" {}Metadata ", icons::TAG),
     };
 
-    let block = panel_block(Line::from(title), true, &app.theme);
+    let block = panel_block(
+        Line::from(title),
+        true,
+        &app.theme,
+        app.config.general.show_borders,
+    );
     let inner = block.inner(area);
     frame.render_widget(block, area);
 

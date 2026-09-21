@@ -56,7 +56,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     // A plain `▸` — universal in every terminal font — rather than the
     // Nerd Font arrow, so the selected-word cursor is always visible.
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())
@@ -102,7 +107,12 @@ pub fn render_suggestions(frame: &mut Frame, area: Rect, app: &App) {
 
     let title = format!(" {}Replace '{}' with ", icons::CHECK, miss.word);
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())

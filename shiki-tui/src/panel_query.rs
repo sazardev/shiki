@@ -101,7 +101,12 @@ pub(crate) fn render_result_table(
             .map(|s| ListItem::new(s.display.as_str()))
             .collect();
         let list = List::new(items)
-            .block(panel_block(Line::from(title), true, &app.theme))
+            .block(panel_block(
+                Line::from(title),
+                true,
+                &app.theme,
+                app.config.general.show_borders,
+            ))
             .highlight_style(
                 Style::default()
                     .bg(app.selection_bg())
@@ -116,7 +121,12 @@ pub(crate) fn render_result_table(
     }
 
     if let Some(err) = error {
-        let block = panel_block(Line::from(" Query "), true, &app.theme);
+        let block = panel_block(
+            Line::from(" Query "),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        );
         let mut lines = vec![Line::from(Span::styled(
             err.to_string(),
             Style::default().fg(error_color),
@@ -180,7 +190,12 @@ pub(crate) fn render_result_table(
 
     let table = Table::new(table_rows, widths)
         .header(header)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .row_highlight_style(
             Style::default()
                 .bg(app.selection_bg())

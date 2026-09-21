@@ -341,6 +341,21 @@ pub enum WhichKeyRow {
     /// by `App::jump_to_global_hit` on `Enter`, the same jump global
     /// search's own `Enter` uses.
     NoteHit { pool_index: usize, label: String },
+    /// A GENERAL/GIT/EDITOR/EXPORT field (plus THEME's `icons`) — lets a
+    /// config value be found and changed straight from the palette instead
+    /// of opening Settings and hunting through tabs. Only ever appended
+    /// while the filter is non-empty, same reasoning as `NoteHit`,
+    /// built by `App::config_field_rows`. `section`/`index` are exactly
+    /// what `App::activate_config_field` needs to act on it — the same
+    /// `(SettingsSection, usize)` pair `settings_section`/`settings_selected`
+    /// hold while browsing that field inside Settings itself, so `Enter`
+    /// here can reuse `App::dispatch_settings_enter` verbatim rather than a
+    /// second copy of every toggle/prompt case.
+    ConfigField {
+        section: crate::panel_settings::SettingsSection,
+        index: usize,
+        text: String,
+    },
 }
 
 impl WhichKeyRow {
@@ -348,13 +363,14 @@ impl WhichKeyRow {
         match self {
             WhichKeyRow::Bound { scope, .. } | WhichKeyRow::Nav { scope, .. } => scope,
             WhichKeyRow::NoteHit { .. } => "notes",
+            WhichKeyRow::ConfigField { .. } => "config",
         }
     }
 
     pub fn key(&self) -> &str {
         match self {
             WhichKeyRow::Bound { key, .. } | WhichKeyRow::Nav { key, .. } => key,
-            WhichKeyRow::NoteHit { .. } => "",
+            WhichKeyRow::NoteHit { .. } | WhichKeyRow::ConfigField { .. } => "",
         }
     }
 
@@ -363,6 +379,7 @@ impl WhichKeyRow {
             WhichKeyRow::Bound { action, .. } => action_label(*action),
             WhichKeyRow::Nav { label, .. } => label,
             WhichKeyRow::NoteHit { label, .. } => label,
+            WhichKeyRow::ConfigField { text, .. } => text,
         }
     }
 
@@ -371,6 +388,7 @@ impl WhichKeyRow {
             WhichKeyRow::Bound { action, .. } => action_icon(*action),
             WhichKeyRow::Nav { .. } => crate::icons::ARROW,
             WhichKeyRow::NoteHit { .. } => crate::icons::NOTE,
+            WhichKeyRow::ConfigField { .. } => crate::icons::GEAR,
         }
     }
 }

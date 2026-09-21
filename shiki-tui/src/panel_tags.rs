@@ -38,7 +38,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             .collect();
         let title = format!(" {}Tags [{}] ", icons::TAG, tags.len());
 
-        let block = panel_block(Line::from(title), true, &app.theme);
+        let block = panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        );
         let inner = block.inner(area);
         frame.render_widget(block, area);
         let [list_area, hint_area] =
@@ -91,7 +96,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let title = format!(" {}{tag} [{}]  (h/esc back) ", icons::TAG, notes.len());
 
     let list = List::new(items)
-        .block(panel_block(Line::from(title), true, &app.theme))
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
         .highlight_style(
             Style::default()
                 .bg(app.selection_bg())
