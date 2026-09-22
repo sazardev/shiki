@@ -471,6 +471,46 @@ enum Commands {
         #[command(subcommand)]
         action: ImportAction,
     },
+    /// Connects shiki-mcp (and its usage guidance) to agentic coding
+    /// tools — Claude Code, Claude Desktop, OpenCode, Cursor, Windsurf,
+    /// Continue — with one command per tool. See `shiki agent status`.
+    Agent {
+        #[command(subcommand)]
+        action: AgentAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum AgentAction {
+    /// Shows which agentic tools are connected today, and whether
+    /// shiki-mcp itself is resolvable on $PATH.
+    Status {
+        /// Check project scope instead of each client's own default
+        /// scope (user/global for everyone except Continue).
+        #[arg(long)]
+        project: bool,
+    },
+    /// Registers shiki-mcp + usage guidance with one client, or every
+    /// supported client with --all. `generic` prints a copy-pasteable
+    /// snippet instead and writes nothing.
+    Connect {
+        client: Option<String>,
+        #[arg(long)]
+        all: bool,
+        /// Write to this project's own config instead of the client's
+        /// default (usually user/global) scope.
+        #[arg(long)]
+        project: bool,
+    },
+    /// Reverses `connect` — removes the shiki MCP entry and its usage
+    /// guidance (Skill file / AGENTS.md section).
+    Disconnect {
+        client: Option<String>,
+        #[arg(long)]
+        all: bool,
+        #[arg(long)]
+        project: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -694,6 +734,32 @@ fn main() -> Result<()> {
     }
     if matches!(cli.command, Some(Commands::Doctor)) {
         return commands::doctor::run();
+    }
+    // Same treatment as Doctor/Extension above: connecting an agentic
+    // tool needs none of shiki's own config to be valid, so it shouldn't
+    // require it either.
+    if matches!(cli.command, Some(Commands::Agent { .. })) {
+        if let Some(Commands::Agent { action }) = cli.command.take() {
+            return match action {
+                AgentAction::Status { project } => commands::agent::status(project),
+                AgentAction::Connect {
+                    client,
+                    all,
+                    project,
+                } => {
+                    if client.as_deref() == Some("generic") {
+                        commands::agent::generic()
+                    } else {
+                        commands::agent::connect(client, all, project)
+                    }
+                }
+                AgentAction::Disconnect {
+                    client,
+                    all,
+                    project,
+                } => commands::agent::disconnect(client, all, project),
+            };
+        }
     }
 
     let mut ctx = Context::load()?;
@@ -1144,6 +1210,7 @@ fn main() -> Result<()> {
             }
         },
         Some(Commands::Extension { .. }) => unreachable!("handled before Context::load"),
+        Some(Commands::Agent { .. }) => unreachable!("handled before Context::load"),
         Some(Commands::Import { action }) => match action {
             ImportAction::Obsidian {
                 path,

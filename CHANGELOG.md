@@ -8,6 +8,24 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ### Added
 
+- **`shiki agent status`/`connect <client|--all>`/`disconnect`** — one-command auto-connect for
+  agentic coding tools. Registers `shiki-mcp` (see below) straight into **Claude Code**, **Claude
+  Desktop**, **OpenCode**, **Cursor**, **Windsurf**, and **Continue**'s own MCP config, plus
+  `connect generic` for anything else (prints the plain snippet, writes nothing). Every config
+  merge only ever touches the one JSON key it owns (`mcpServers.shiki`, or `mcp.shiki` for
+  OpenCode) — every other key round-trips untouched — and refuses to touch a file at all if it
+  doesn't parse as clean JSON, printing the exact snippet to paste by hand instead; Continue gets
+  its own dedicated `.continue/mcpServers/shiki.yaml` file rather than a merge, since that's a
+  YAML config that could carry comments/anchors this has no business parsing. Usage guidance
+  travels with the connection — a real Claude Code Skill, or an idempotent marked section appended
+  to `AGENTS.md` for everyone else — covering pagination, calling `sync_notebook` after a batch of
+  changes, and the encrypted-notebook passphrase env vars, so a newly-connected agent discovers how
+  to use the tools well, not just that they exist. Each client defaults to its user/global config
+  scope (shiki notebooks aren't bound to any one project) except Continue, which is project-only by
+  its own convention; `--project` opts into project scope where a client supports it. `shiki-mcp`
+  itself is now published to crates.io alongside the other four crates, so `cargo install
+  shiki-mcp` actually works.
+
 - **`shiki-mcp` — a real MCP (Model Context Protocol) server**, a new workspace member (sibling to
   `shiki-native-host`/`shiki-desktop`, depends on `shiki-core`/`shiki-config` only, not
   `shiki-cli`). Exposes **28 typed tools** over stdio, so an MCP client (Claude Desktop, Claude

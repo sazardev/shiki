@@ -562,6 +562,12 @@ shiki import notion ~/Downloads/Export-....zip   # UUID-stripped, links -> wikil
 shiki import notion ~/Downloads/export --name work
 shiki extension install   # install the browser-extension native host (also status/uninstall/pack)
 shiki doctor              # environment check: config, data dir, git, editor, terminal, keybindings, snippets
+shiki agent status                    # which agentic tools (Claude Code, Cursor, ...) are connected
+shiki agent connect cursor            # registers shiki-mcp + usage guidance with one client
+shiki agent connect --all             # every supported client in one go
+shiki agent connect cursor --project  # this project's own config instead of the user/global one
+shiki agent connect generic           # prints a copy-pasteable MCP snippet, writes nothing
+shiki agent disconnect cursor         # reverses connect — removes the MCP entry + guidance
 ```
 
 `shiki publish` (leader+`P` in the TUI) renders a notebook to a themed PDF through
@@ -642,6 +648,9 @@ to manage:
 }
 ```
 
+Or skip hand-writing that entirely — see `shiki agent connect` below, which writes it (plus usage
+guidance) straight into a specific client's own config.
+
 **28 tools**, one per operation, each with a real parameter schema (types, required/optional
 fields, per-field descriptions) instead of CLI flags to construct by hand:
 
@@ -670,6 +679,44 @@ environment — the *only* source available here, since an MCP server is spawned
 client and never has a TTY to fall back to a prompt on, unlike the interactive CLI.
 `encrypt_notebook`/`rekey_notebook` additionally read `SHIKI_NEW_PASSPHRASE` for the passphrase
 being *set*, mirroring the CLI's own env-var scheme exactly.
+
+### Agent auto-connect (`shiki agent`)
+
+`shiki agent status` / `connect <client|--all>` / `disconnect <client|--all>` register `shiki-mcp`
+with a specific agentic tool's own MCP config *and* drop in usage guidance, in one command — the
+point being that connecting shiki to whichever AI tool someone already uses should be "run one
+command," not "find the right config file format and hand-write it."
+
+Supported clients (`shiki agent status` lists all of them with their live connection state):
+**Claude Code**, **Claude Desktop**, **OpenCode**, **Cursor**, **Windsurf**, **Continue** — plus
+`connect generic`, which prints the plain MCP snippet above and writes nothing, for any client not
+explicitly supported yet. Each client defaults to its user/global config scope (shiki notebooks
+aren't bound to any one project) except Continue, whose own MCP convention is project-only;
+`--project` overrides this to the current directory's own config where that client supports it
+(errors clearly where it doesn't, e.g. `windsurf --project`).
+
+Usage guidance travels with the connection, not just the bare MCP registration: **Claude Code**
+gets a real Skill (`~/.claude/skills/shiki/SKILL.md`, or the project-local equivalent with
+`--project`); every other client gets a marked, idempotent section appended to the current
+directory's `AGENTS.md` (`<!-- shiki:agent-section -->...<!-- /shiki:agent-section -->` —
+re-running `connect` replaces it in place rather than duplicating it) — `AGENTS.md` being the one
+convention all of them already read. Both surfaces render the exact same guidance text (call
+`index` first, paginate, call `sync_notebook` after a batch of changes, the passphrase env vars),
+so it can't drift between the two.
+
+**Every config merge only ever touches the one JSON key it owns**
+(`mcpServers.shiki`/`mcp.shiki` — OpenCode alone uses `mcp`, everyone else `mcpServers`) — every
+other key in the file, at any depth, is round-tripped untouched. If an existing file doesn't parse
+as clean JSON, it's never touched at all: `connect` aborts and prints the exact snippet to paste in
+by hand instead of guessing. `continue` doesn't merge into anything — Continue's own MCP config is
+a `.continue/mcpServers/shiki.yaml` directory of one-server-per-file YAML, so it just gets a fresh
+dedicated file, side-stepping the "is this JSON even safe to parse" question entirely.
+`shiki-mcp`'s own binary is resolved from `$PATH` at connect time and embedded as an absolute path
+when found (GUI-launched clients commonly inherit a minimal `$PATH`, so a bare command name isn't
+reliable there) — when it isn't found yet, the config is still written with the bare command name
+`shiki-mcp` and a warning to `cargo install shiki-mcp` is printed; nothing is auto-installed.
+`disconnect` reverses both halves — the MCP entry and the guidance (Skill file or `AGENTS.md`
+section) — leaving every unrelated key/section untouched.
 
 ---
 

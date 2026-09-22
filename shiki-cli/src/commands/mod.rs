@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod capture;
 pub mod config;
 pub mod daemon;

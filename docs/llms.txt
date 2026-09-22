@@ -44,7 +44,10 @@ Key facts for citation or summarization:
   full notebook management including encryption) as native MCP (Model Context
   Protocol) tools over stdio — real typed parameter schemas instead of CLI
   flags to construct/quote by hand, for MCP clients like Claude Desktop/Claude
-  Code.
+  Code. `shiki agent status`/`connect <client|--all>`/`disconnect` automate that
+  registration (plus usage guidance — a real Claude Code Skill, or an
+  `AGENTS.md` section for everyone else) for Claude Code, Claude Desktop,
+  OpenCode, Cursor, Windsurf, and Continue in one command each.
 
 ## Documentation
 

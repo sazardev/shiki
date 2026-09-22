@@ -24,7 +24,7 @@ cargo test -p shiki-tui clicking_the_button_row   # single test by (substring of
 cargo audit                          # CI runs this too; ignore list is .cargo/audit.toml
 ```
 
-There are 474 `#[test]`s: 212 in `shiki-core`, 27 in `shiki-config`, 196 in `shiki-tui`, 33 in
+There are 498 `#[test]`s: 236 in `shiki-core`, 27 in `shiki-config`, 196 in `shiki-tui`, 33 in
 `shiki-cli`, plus 1 in `shiki-native-host` and 5 in `shiki-desktop` (`shiki-mcp` has none yet — its
 tool bodies are thin wrappers over already-tested `shiki-core` logic, verified instead by a manual
 stdio protocol smoke test) — `cargo test --workspace` is green. They're all inline `#[cfg(test)]`
@@ -412,6 +412,30 @@ piece that stays CLI-only, since `shiki-mcp` never has a TTY to prompt on; it re
 `SHIKI_PASSPHRASE` directly instead, see `shiki-mcp/src/helpers.rs::get_and_unlock`). If you add a
 new note-listing/lookup operation to `shiki-cli`, check whether `shiki-mcp` needs the equivalent
 tool too, and put any genuinely shared logic in `shiki-core`, not in `shiki-cli/src/commands/`.
+
+**`shiki agent status`/`connect <client|--all>`/`disconnect` (`shiki_core::agent_connect`,
+`shiki-cli/src/commands/agent.rs`) auto-registers `shiki-mcp` with an agentic tool's own config —
+Claude Code, Claude Desktop, OpenCode, Cursor, Windsurf, Continue — plus a `generic` fallback that
+only prints the snippet.** This module is the one place in `shiki-core` that writes to files
+*outside* shiki's own config/data dirs, so it earns its own safety rule: every merge parses the
+target file as real JSON and only ever touches the one nested key it owns (`mcpServers.shiki`, or
+`mcp.shiki` for OpenCode, the one client whose own docs use a different top-level key) — every
+other key, at any depth, round-trips byte-for-byte. A file that doesn't parse as clean JSON is
+never touched at all; `connect` aborts and prints the exact snippet to paste in by hand instead of
+attempting a textual patch. This is also why `Continue` doesn't go through that merge path — its
+own MCP convention is a `.continue/mcpServers/` directory of one-server-per-file YAML, so it gets a
+brand-new dedicated `shiki.yaml` there instead, sidestepping "is this YAML (which can carry
+comments/anchors) even safe to parse" entirely. `AgentClient::uses_skill_file()` (Claude Code only)
+picks between writing a real Skill (`~/.claude/skills/shiki/SKILL.md`) and appending an idempotent
+`<!-- shiki:agent-section -->`-marked block to `AGENTS.md` (every other client, since that's the
+one convention they all already read) — both render from the same `agent_usage_guide()` string, so
+the guidance can't drift between the two. `find_shiki_mcp_on_path` resolves the binary from `$PATH`
+at connect time; found → embed the absolute path (GUI-launched clients are known to inherit a
+minimal `$PATH`), not found → still write the bare command name `shiki-mcp` plus a warning, never
+attempt to build/install it. Adding a new supported client is adding one `AgentClient` variant plus
+its `config_path`/`entry_value`/`supports_scope` arms — verify its actual current MCP config
+format live (web search, not assumed from training data) before wiring it in; this module's own
+client table was built that way, not from memory, since these tools' config schemas change.
 
 **shiki-config is deliberately decoupled from ratatui.** `Theme` (`shiki-config/src/theme.rs`)
 stores every color slot as a string — `#rrggbb` hex, a terminal-native ANSI name

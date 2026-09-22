@@ -30,6 +30,7 @@
 //! is the closest thing to a real second backend today, and it's still an
 //! in-process test double, not a different OS/target.
 
+pub mod agent_connect;
 pub mod attachments;
 pub mod browser;
 pub mod capture;
@@ -142,6 +143,12 @@ pub enum Error {
     /// failure, or whisper-cli errored while transcribing.
     #[error("voice capture error: {0}")]
     Voice(String),
+    /// An `agent_connect::` failure — an existing client config file that
+    /// doesn't parse as clean JSON (never partially merged into in that
+    /// case, see `agent_connect`'s own doc comment), or an unsupported
+    /// client/scope combination.
+    #[error("{0}")]
+    AgentConnect(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

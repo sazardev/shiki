@@ -567,7 +567,13 @@ shiki query --saved due-soon                        # run a query saved under [q
 shiki theme list          # list built-in themes, marking the active one
 shiki theme set &lt;name&gt;    # switch theme (persisted to config.toml)
 shiki theme create [--from &lt;name&gt;]  # scaffold all 19 color overrides from a real palette
-shiki doctor              # environment check: config, data dir, git, editor, terminal, keybindings, snippets</pre>
+shiki doctor              # environment check: config, data dir, git, editor, terminal, keybindings, snippets
+shiki agent status                    # which agentic tools (Claude Code, Cursor, ...) are connected
+shiki agent connect cursor            # registers shiki-mcp + usage guidance with one client
+shiki agent connect --all             # every supported client in one go
+shiki agent connect cursor --project  # this project's own config instead of the user/global one
+shiki agent connect generic           # prints a copy-pasteable MCP snippet, writes nothing
+shiki agent disconnect cursor         # reverses connect — removes the MCP entry + guidance</pre>
       <div class="doc-shot-grid">
         <figure class="doc-shot-card">
           <img src="assets/screenshots/gallery/cli/graph.png" width="1260" height="760" loading="lazy" alt="shiki graph's output: a force-directed wikilink graph drawn in the terminal, with hubs, edges, and orphans" />
@@ -674,6 +680,28 @@ shiki doctor              # environment check: config, data dir, git, editor, te
         <code>encrypt_notebook</code>/<code>rekey_notebook</code>) in the server's own environment
         — the only source available, since an MCP server has no TTY to ever fall back to a prompt
         on.
+      </p>
+      <h3>Agent auto-connect (<code>shiki agent</code>)</h3>
+      <p style="max-width:70ch;">
+        <code>shiki agent status</code> / <code>connect &lt;client|--all&gt;</code> /
+        <code>disconnect &lt;client|--all&gt;</code> register <code>shiki-mcp</code> with a
+        specific agentic tool's own config <em>and</em> drop in usage guidance, in one command —
+        <strong>Claude Code</strong>, <strong>Claude Desktop</strong>, <strong>OpenCode</strong>,
+        <strong>Cursor</strong>, <strong>Windsurf</strong>, and <strong>Continue</strong> today,
+        plus <code>connect generic</code> for anything else (prints the plain snippet above,
+        writes nothing). Each client defaults to its user/global config scope — shiki notebooks
+        aren't bound to any one project — except Continue, which is project-only by its own
+        convention; <code>--project</code> switches to the current directory's config where a
+        client supports it.
+      </p>
+      <p style="max-width:70ch;">
+        Usage guidance travels with the connection: Claude Code gets a real Skill
+        (<code>~/.claude/skills/shiki/SKILL.md</code>), every other client gets a marked,
+        idempotent section appended to the current directory's <code>AGENTS.md</code> — the one
+        convention they all already read. Every config merge only ever touches the one JSON key it
+        owns (<code>mcpServers.shiki</code>, or <code>mcp.shiki</code> for OpenCode); if an
+        existing file doesn't parse as clean JSON, nothing is touched at all — the exact snippet to
+        paste by hand is printed instead. <code>disconnect</code> reverses both halves.
       </p>
     </div>
   </section>

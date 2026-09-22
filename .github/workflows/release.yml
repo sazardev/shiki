@@ -804,7 +804,7 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           set -euo pipefail
-          for crate in shiki-core shiki-config shiki-tui shiki-cli; do
+          for crate in shiki-core shiki-config shiki-tui shiki-cli shiki-mcp; do
             cargo publish -p "$crate"
             echo "Waiting for $crate to become available on the index..."
             sleep 30
