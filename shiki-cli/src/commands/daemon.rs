@@ -36,12 +36,30 @@ pub fn run(store: &NotebookStore, config: &Config) -> Result<()> {
     let (tx, rx) = std::sync::mpsc::channel();
     let _handle = spawn_capture_daemon(tx)?;
 
+    // Fire-and-forget: unlike the capture daemon, the reminder checker
+    // needs no channel back into this process at all — it scans, notifies,
+    // and persists its own dedup state independently. See
+    // `shiki_core::reminders` for why it can be spawned identically here
+    // and from the in-TUI daemon (`shiki-tui`'s `App::new`).
+    let _reminder_handle = if config.general.enable_reminders {
+        Some(shiki_core::reminders::spawn_reminder_checker(
+            store.clone(),
+            Config::default_reminders_state_path()?,
+            config.general.reminder_check_interval_secs,
+        ))
+    } else {
+        None
+    };
+
     let port = Config::default_capture_port_path()
         .ok()
         .and_then(|p| std::fs::read_to_string(p).ok())
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|| "?".to_string());
-    eprintln!("shiki daemon: capture daemon listening on 127.0.0.1:{port} \u{2014} Ctrl+C to stop");
+    eprintln!(
+        "shiki daemon: capture daemon listening on 127.0.0.1:{port}, reminders: {} \u{2014} Ctrl+C to stop",
+        if config.general.enable_reminders { "on" } else { "off" }
+    );
 
     // `rx.recv()` blocks; it only returns `Err` if every sender is gone,
     // which can't happen while the accept-loop thread owns its clone. So

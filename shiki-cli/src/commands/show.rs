@@ -1,10 +1,18 @@
 use anyhow::Result;
+use shiki_config::Config;
 use shiki_core::NotebookStore;
 
-use super::find_note;
+use super::{find_note, get_notebook, unlock_if_encrypted};
 
-pub fn run(store: &NotebookStore, notebook: &str, note: &str, json: bool) -> Result<()> {
-    let note = find_note(store, notebook, note)?;
+pub fn run(
+    store: &NotebookStore,
+    config: &Config,
+    notebook: &str,
+    note: &str,
+    json: bool,
+) -> Result<()> {
+    let nb = unlock_if_encrypted(config, get_notebook(store, notebook)?)?;
+    let note = find_note(&nb, note)?;
 
     if json {
         let value = serde_json::json!({
@@ -15,7 +23,7 @@ pub fn run(store: &NotebookStore, notebook: &str, note: &str, json: bool) -> Res
             "path": note.path,
             "body": note.body,
         });
-        println!("{}", serde_json::to_string_pretty(&value)?);
+        println!("{}", serde_json::to_string(&value)?);
         return Ok(());
     }
 

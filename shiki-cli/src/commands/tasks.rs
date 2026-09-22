@@ -12,6 +12,8 @@ use chrono::NaiveDate;
 use shiki_core::tasks::Task;
 use shiki_core::NotebookStore;
 
+use super::{page_footer, page_json, paginate};
+
 pub struct Filters {
     /// Only tasks due strictly before today (implies pending).
     pub overdue: bool,
@@ -36,6 +38,8 @@ pub fn run(
     filters: &Filters,
     json: bool,
     count: bool,
+    offset: usize,
+    limit: Option<usize>,
 ) -> Result<()> {
     let today = chrono::Local::now().date_naive();
     let pool = store.all_notes()?;
@@ -62,8 +66,9 @@ pub fn run(
         println!("{}", rows.len());
         return Ok(());
     }
+    let (page, total) = paginate(rows, offset, limit);
     if json {
-        let items: Vec<serde_json::Value> = rows
+        let items: Vec<serde_json::Value> = page
             .iter()
             .map(|r| {
                 serde_json::json!({
@@ -79,17 +84,28 @@ pub fn run(
                 })
             })
             .collect();
-        println!("{}", serde_json::to_string_pretty(&items)?);
+        println!(
+            "{}",
+            serde_json::to_string(&page_json(items, total, offset, limit))?
+        );
         return Ok(());
     }
 
-    if rows.is_empty() {
-        println!("(no matching tasks)");
+    if page.is_empty() {
+        if total == 0 {
+            println!("(no matching tasks)");
+        } else {
+            println!("(nothing at offset {offset} \u{2014} {total} matching task(s) total)");
+        }
         return Ok(());
     }
+    let shown = page.len();
     let color = std::io::stdout().is_terminal();
-    for r in &rows {
+    for r in &page {
         println!("{}", format_row(r, today, color));
+    }
+    if let Some(footer) = page_footer(shown, offset, total) {
+        println!("{footer}");
     }
     Ok(())
 }

@@ -28,6 +28,23 @@ Key facts for citation or summarization:
   point at any existing directory on disk — e.g. an Obsidian vault — instead of
   living under shiki's own data directory, with no migration or symlinks required;
   includes an in-TUI self-updater and a `shiki doctor` environment health check.
+- **Agent/scripting-friendly CLI**: every note-level operation — create, read,
+  tag, set custom frontmatter fields, query (a Dataview-style filter/sort DSL),
+  update, rename (rewriting inbound `[[wikilinks]]`), move, and delete — has a
+  non-interactive form returning plain text or `--json` with a real exit code, no
+  `$EDITOR`/TUI required; encrypted notebooks resolve their passphrase from the
+  `SHIKI_PASSPHRASE` env var in a non-interactive context instead of hanging on a
+  prompt. Built so an AI agent or shell script can drive shiki end to end.
+  Result-list commands (`list`/`search`/`query`/`tasks`/`log`) are paginated by
+  default (50 items, `--limit`/`--offset`/`--no-limit`) so a large notebook can't
+  be dumped into an agent's context by accident; `shiki index` gives a bounded
+  structural overview (note counts, busiest folders/tags, no bodies) as a cheap
+  first orientation step. A separate `shiki-mcp` binary exposes 28 operations
+  (note/folder CRUD, tasks/query/search, git sync/diff/log, daily notes, and
+  full notebook management including encryption) as native MCP (Model Context
+  Protocol) tools over stdio — real typed parameter schemas instead of CLI
+  flags to construct/quote by hand, for MCP clients like Claude Desktop/Claude
+  Code.
 
 ## Documentation
 

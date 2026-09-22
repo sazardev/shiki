@@ -7,6 +7,7 @@ members = [
     "shiki-cli",
     "shiki-native-host",
     "shiki-desktop",
+    "shiki-mcp",
 ]
 
 [workspace.package]
@@ -107,6 +108,18 @@ sha2 = "0.11"
 # Hidden passphrase input for `shiki notebook encrypt/decrypt` — the CLI
 # equivalent of the TUI's masked passphrase prompt.
 rpassword = "7"
+# Real OS desktop notifications for task due-date reminders
+# (`general.enable_reminders`) — a typed API call, not a shelled-out
+# `notify-send`/`osascript` string, so arbitrary user-typed task text can
+# never break out of a quoted shell/AppleScript argument. Each platform
+# backend is a small, purpose-built crate for exactly this "plain CLI/TUI
+# binary, not an app bundle" case: `zbus` (pure Rust D-Bus, no libdbus-sys
+# build dependency) on Linux/BSD, `mac-notification-sys` on macOS,
+# `tauri-winrt-notification` on Windows (already trusted here via
+# shiki-desktop's own Tauri dependency above). `default-features = false` +
+# `z` drops features shiki has no use for (the reminder checker is a plain
+# `std::thread`, not async).
+notify-rust = { version = "4", default-features = false, features = ["z"] }
 # Desktop GUI (shiki-desktop): Tauri 2 wraps shiki-core in a native window
 # (WebView2/WebKitGTK). Only this crate touches it — the TUI/CLI stay
 # terminal-only, and the workspace-wide tokio invariant is untouched (our

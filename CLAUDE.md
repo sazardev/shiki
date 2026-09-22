@@ -24,9 +24,11 @@ cargo test -p shiki-tui clicking_the_button_row   # single test by (substring of
 cargo audit                          # CI runs this too; ignore list is .cargo/audit.toml
 ```
 
-There are 398 `#[test]`s: 180 in `shiki-core`, 20 in `shiki-config`, 176 in `shiki-tui`, 16 in
-`shiki-cli`, plus 1 in `shiki-native-host` and 5 in `shiki-desktop` — `cargo test --workspace` is
-green. They're all inline `#[cfg(test)]` modules inside
+There are 474 `#[test]`s: 212 in `shiki-core`, 27 in `shiki-config`, 196 in `shiki-tui`, 33 in
+`shiki-cli`, plus 1 in `shiki-native-host` and 5 in `shiki-desktop` (`shiki-mcp` has none yet — its
+tool bodies are thin wrappers over already-tested `shiki-core` logic, verified instead by a manual
+stdio protocol smoke test) — `cargo test --workspace` is green. They're all inline `#[cfg(test)]`
+modules inside
 the source files (no `tests/` dirs, no `#[ignore]`, no fixture setup), so the pattern set by
 `panel_drawer::tests` (`shiki-tui/src/panel_drawer.rs`) — covering `drawer_hit_at`'s mouse
 coordinate math as a plain function of numbers, not `&App` — is the norm. When adding tests,
@@ -385,16 +387,31 @@ shiki-tui    (ratatui UI, depends on shiki-core + shiki-config)
 shiki-cli    (clap entrypoint, depends on all three; binary name is `shiki`)
 ```
 
-Two more members sit outside that chain — both depend on `shiki-core`/`shiki-config` but not on
+Three more members sit outside that chain — all depend on `shiki-core`/`shiki-config` but not on
 `shiki-tui`/`shiki-cli`, and neither of the terminal crates depends on them:
 
 - **`shiki-native-host`** — a native-messaging host binary bridging the Chrome/Firefox browser
   extension to the TUI's capture daemon (same TCP transport `shiki capture`/`shiki daemon` use;
   see the capture-daemon section below).
 - **`shiki-desktop`** — a Tauri 2 + Svelte desktop GUI (`shiki-desktop/ui/`, a separate Vite/npm
-  frontend) wrapping the same note/notebook/git core. It's the only workspace member that pulls in
-  `tokio`/async at all — the terminal crates stay synchronous (`std::thread` + `mpsc`) throughout,
-  don't introduce async there for a new feature.
+  frontend) wrapping the same note/notebook/git core.
+- **`shiki-mcp`** — an MCP (Model Context Protocol) server binary exposing note/notebook operations
+  as 28 typed tools over stdio (`rmcp`, the official Rust SDK), for AI clients (Claude Desktop,
+  Claude Code, etc.) to call directly with structured JSON arguments instead of shelling out to
+  the CLI. Calls straight into `shiki-core`/`shiki-config`, never the `shiki` binary. See the
+  "MCP server" section of `IDEA.md` for the full tool list and setup.
+
+`shiki-desktop`/`shiki-mcp` are the only workspace members that pull in `tokio`/async at all — the
+terminal crates (`shiki-core`/`shiki-config`/`shiki-tui`/`shiki-cli`) stay synchronous (`std::thread`
++ `mpsc`) throughout; don't introduce async there for a new feature. `shiki_core::notebook::
+find_note`/`get_notebook` and `shiki_core::pagination::{paginate, page_json, page_footer,
+effective_limit, DEFAULT_PAGE_LIMIT}` exist specifically so `shiki-cli` and `shiki-mcp` share one
+implementation of note lookup/pagination instead of two parallel copies — `shiki-cli/src/commands/
+mod.rs` just re-exports them (`unlock_if_encrypted`'s interactive-TTY-prompt branch is the one
+piece that stays CLI-only, since `shiki-mcp` never has a TTY to prompt on; it resolves
+`SHIKI_PASSPHRASE` directly instead, see `shiki-mcp/src/helpers.rs::get_and_unlock`). If you add a
+new note-listing/lookup operation to `shiki-cli`, check whether `shiki-mcp` needs the equivalent
+tool too, and put any genuinely shared logic in `shiki-core`, not in `shiki-cli/src/commands/`.
 
 **shiki-config is deliberately decoupled from ratatui.** `Theme` (`shiki-config/src/theme.rs`)
 stores every color slot as a string — `#rrggbb` hex, a terminal-native ANSI name

@@ -1,7 +1,53 @@
+use std::io::IsTerminal;
+
 use anyhow::{Context as _, Result};
 use shiki_config::Config;
 use shiki_core::crypto::{canary_blob, verify_canary, NotebookCrypto, CANARY_FILE};
 use shiki_core::NotebookStore;
+
+/// Reads the *current* passphrase for `decrypt`/`rekey`'s first step
+/// (verified against the canary): `SHIKI_PASSPHRASE` first — for
+/// non-interactive/scripted use — else an interactive hidden prompt, but
+/// only when stdin is actually a TTY; otherwise a clear error rather than
+/// `rpassword` blocking forever on a non-interactive stream. Same
+/// three-branch shape as `commands::unlock_if_encrypted`, just returning
+/// the raw string (needed to verify against the canary) instead of a
+/// ready-made `NotebookCrypto`.
+fn read_current_passphrase(prompt: &str) -> Result<String> {
+    if let Ok(env) = std::env::var("SHIKI_PASSPHRASE") {
+        return Ok(env);
+    }
+    if std::io::stdin().is_terminal() {
+        return Ok(rpassword::prompt_password(prompt)?);
+    }
+    anyhow::bail!("set SHIKI_PASSPHRASE or run interactively");
+}
+
+/// Reads a *new* passphrase (`encrypt`'s initial one, `rekey`'s
+/// replacement): `SHIKI_NEW_PASSPHRASE` first, taken as-is with no re-type
+/// confirmation (there's no typo risk in a value that came from a
+/// variable, not a keyboard) — else prompts twice interactively to catch
+/// a typo, else the same non-interactive error as `read_current_passphrase`.
+fn read_new_passphrase(prompt: &str, confirm_prompt: &str) -> Result<String> {
+    if let Ok(env) = std::env::var("SHIKI_NEW_PASSPHRASE") {
+        if env.is_empty() {
+            anyhow::bail!("passphrase must not be empty");
+        }
+        return Ok(env);
+    }
+    if !std::io::stdin().is_terminal() {
+        anyhow::bail!("set SHIKI_NEW_PASSPHRASE or run interactively");
+    }
+    let passphrase = rpassword::prompt_password(prompt)?;
+    if passphrase.is_empty() {
+        anyhow::bail!("passphrase must not be empty");
+    }
+    let confirm = rpassword::prompt_password(confirm_prompt)?;
+    if passphrase != confirm {
+        anyhow::bail!("passphrases did not match");
+    }
+    Ok(passphrase)
+}
 
 /// Creates a notebook, optionally pointing its `origin` at `--remote` —
 /// one command from "nothing" to "ready to sync", mirroring the TUI's
@@ -78,7 +124,7 @@ pub fn list(store: &NotebookStore, config: &Config, json: bool, all: bool) -> Re
                 }),
             })
             .collect();
-        println!("{}", serde_json::to_string_pretty(&items)?);
+        println!("{}", serde_json::to_string(&items)?);
         return Ok(());
     }
 
@@ -136,14 +182,7 @@ pub fn encrypt(store: &NotebookStore, config: &mut Config, name: &str) -> Result
         .get(name)
         .with_context(|| format!("notebook '{name}' not found"))?;
 
-    let passphrase = rpassword::prompt_password("Passphrase: ")?;
-    if passphrase.is_empty() {
-        anyhow::bail!("passphrase must not be empty");
-    }
-    let confirm = rpassword::prompt_password("Confirm passphrase: ")?;
-    if passphrase != confirm {
-        anyhow::bail!("passphrases did not match");
-    }
+    let passphrase = read_new_passphrase("Passphrase: ", "Confirm passphrase: ")?;
     let crypto = NotebookCrypto::new(passphrase);
 
     let canary = canary_blob(&crypto)?;
@@ -190,7 +229,7 @@ pub fn decrypt(store: &NotebookStore, config: &mut Config, name: &str) -> Result
         .get(name)
         .with_context(|| format!("notebook '{name}' not found"))?;
 
-    let passphrase = rpassword::prompt_password("Passphrase: ")?;
+    let passphrase = read_current_passphrase("Passphrase: ")?;
     let crypto = NotebookCrypto::new(passphrase);
 
     let canary_path = nb.path.join(CANARY_FILE);
@@ -246,7 +285,7 @@ pub fn rekey(store: &NotebookStore, config: &mut Config, name: &str) -> Result<(
         .get(name)
         .with_context(|| format!("notebook '{name}' not found"))?;
 
-    let old = rpassword::prompt_password("Current passphrase: ")?;
+    let old = read_current_passphrase("Current passphrase: ")?;
     let old_crypto = NotebookCrypto::new(old);
 
     let canary_path = nb.path.join(CANARY_FILE);
@@ -259,14 +298,7 @@ pub fn rekey(store: &NotebookStore, config: &mut Config, name: &str) -> Result<(
         Err(e) => anyhow::bail!("wrong passphrase: {e}"),
     }
 
-    let passphrase = rpassword::prompt_password("New passphrase: ")?;
-    if passphrase.is_empty() {
-        anyhow::bail!("passphrase must not be empty");
-    }
-    let confirm = rpassword::prompt_password("Confirm new passphrase: ")?;
-    if passphrase != confirm {
-        anyhow::bail!("passphrases did not match");
-    }
+    let passphrase = read_new_passphrase("New passphrase: ", "Confirm new passphrase: ")?;
     let new_crypto = NotebookCrypto::new(passphrase);
 
     let old_unlocked = nb.clone().with_crypto(Some(old_crypto));

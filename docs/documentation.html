@@ -509,9 +509,22 @@ shiki new "title" --stdin --tags work,idea  # body piped in, tags attached, stil
 shiki daily               # create/open today's daily note
 shiki list                # list notes in the default notebook
 shiki list -n work        # list notes in "work"
-shiki list --json         # list/search/show all take --json for scripting (list/search: array, show: object)
+shiki list --json         # list/search/query/tasks/log: {total,offset,limit,returned,has_more,items}; show: one object
+shiki list --limit 100 --offset 200  # page through a large notebook, 100 at a time
+shiki index                # every notebook's note count + busiest folders/tags — no bodies, no titles
+shiki index -n work --json # same, scoped to one notebook — the first call for an agent exploring a setup
 shiki show &lt;note&gt;         # show rendered content (ANSI)
 shiki edit &lt;note&gt;         # edit with $EDITOR
+shiki edit &lt;note&gt; --body "text"           # replace the body non-interactively, no $EDITOR
+shiki edit &lt;note&gt; --append "one more line" --json  # append instead of replace; emits {"path":..,"title":..}
+shiki delete &lt;note&gt; --yes                 # trash-first delete (recoverable from the trash dir)
+shiki rename &lt;note&gt; "New title"           # renames + rewrites every inbound [[wikilink]] to it
+shiki move &lt;note&gt; work/meetings           # moves to notebook/path/within, any depth, any notebook
+shiki move &lt;note&gt; personal --copy         # copies instead of moving
+shiki tag &lt;note&gt; --add work,idea --remove idea   # adds/removes tags (dedupes)
+shiki field &lt;note&gt; --set priority=3 --set status=pending  # custom frontmatter, same map `shiki query` reads
+shiki folder create work/meetings/2026    # empty folder, any depth
+shiki folder delete work/meetings/2026 --yes
 shiki search &lt;query&gt;      # search and show results
 shiki capture "quick idea"       # near-instant note capture, no $EDITOR, no TUI drawn
 shiki capture "text" -n work     # capture into a specific notebook instead of default_notebook
@@ -527,6 +540,7 @@ shiki daemon                          # headless capture daemon (no TUI) — for
 shiki tasks               # every pending checkbox task across notebooks, urgency-sorted
 shiki tasks --overdue --count  # just the number — made for waybar/polybar/tmux status modules
 shiki tasks --today --json     # machine-readable, with due/overdue/location per task
+shiki tasks --no-limit          # every matching task, no 50-item cap (--all instead means "include done")
 shiki graph               # [[wikilink]] connection graph, force-directed, drawn in the terminal
 shiki graph -n work --json     # nodes/edges/orphans as JSON, for graphviz/d3/gephi
 shiki graph --width 120        # custom canvas width in columns (default: the terminal's own width)
@@ -537,7 +551,7 @@ shiki publish -n work --out report.pdf --theme dark   # custom path/theme; theme
 shiki sync                # git commit+push default notebook
 shiki sync -n work        # git sync in "work"
 shiki diff                # pending working-tree changes (also `shiki diff &lt;note&gt;` / `-n work`)
-shiki log                 # recent commits (also `shiki log &lt;note&gt;` / `-n work`)
+shiki log                 # recent commits (also `shiki log &lt;note&gt;` / `-n work`); --json/--limit/--offset/--no-limit too
 shiki config              # show config path
 shiki notebook create &lt;name&gt;
 shiki notebook list --json
@@ -590,6 +604,77 @@ shiki doctor              # environment check: config, data dir, git, editor, te
           signing key configured.
         </p>
       </div>
+      <div class="doc-callout">
+        <strong>Built for scripts and AI agents, not just humans at a keyboard.</strong>
+        <p>
+          Every note-level operation — create, read, tag, set custom frontmatter fields, query,
+          update, rename, move, and delete — has a non-interactive CLI form that returns plain
+          text or <code>--json</code> and a real exit code, with no <code>$EDITOR</code> or TUI
+          required at any step. That's the same primitives the TUI itself uses
+          (<code>shiki-core</code>), so an agent-driven change behaves identically to one made by
+          hand. <code>shiki rename</code> rewrites inbound <code>[[wikilinks]]</code> by default
+          (there's no confirm dialog to ask on the command line); <code>shiki field</code> writes
+          into the same per-note frontmatter map <code>shiki query</code> filters and sorts on, so
+          a value set with <code>--set priority=3</code> keeps its real type when queried back.
+          An encrypted notebook never blocks forever on an interactive passphrase prompt in a
+          non-TTY context: set <code>SHIKI_PASSPHRASE</code> (and <code>SHIKI_NEW_PASSPHRASE</code>
+          for <code>notebook encrypt</code>/<code>rekey</code>) and it's read straight from the
+          environment instead — otherwise you get a clear error, never a hang. Run
+          <code>shiki doctor</code> first in any automated environment to confirm the config and
+          data directory actually resolve before relying on it.
+        </p>
+        <p>
+          <code>list</code>/<code>search</code>/<code>query</code>/<code>tasks</code>/<code>log</code>
+          are all paginated by default (50 items) — a large notebook or a wide cross-notebook query
+          can't accidentally get dumped into an agent's context in one call. Page through with
+          <code>--limit</code>/<code>--offset</code>, or use <code>--no-limit</code> when everything
+          really is wanted; <code>--json</code> for these wraps the array as
+          <code>{"total", "offset", "limit", "returned", "has_more", "items"}</code> so a caller
+          always knows whether to keep paging. <code>shiki index [-n &lt;notebook&gt;]</code> is the
+          companion command — a structural overview (note counts, busiest folders, busiest tags,
+          never bodies or titles) meant as the very first call when orienting in an unfamiliar
+          shiki setup, capped to the busiest 25 folders/tags each so the index itself always stays
+          small too.
+        </p>
+      </div>
+      <h3>MCP server (<code>shiki-mcp</code>)</h3>
+      <p style="max-width:70ch;">
+        A separate binary, <code>shiki-mcp</code>, exposes the same operations as typed MCP (Model
+        Context Protocol) tools — an AI client calls them directly with structured,
+        schema-validated JSON arguments over stdio, instead of shelling out to <code>shiki</code>
+        and quoting/parsing text. It calls straight into <code>shiki-core</code>, never the
+        <code>shiki</code> binary itself. Register it with any MCP client by pointing at the built
+        binary — no port or daemon to manage:
+      </p>
+      <pre class="code">{
+  "mcpServers": {
+    "shiki": { "command": "/path/to/shiki-mcp" }
+  }
+}</pre>
+      <p style="max-width:70ch;">
+        28 tools, one per operation — reading (<code>list_notes</code>, <code>show_note</code>,
+        <code>search_notes</code>, <code>query_notes</code>, <code>list_tasks</code>,
+        <code>index</code>, <code>list_notebooks</code>, <code>diff_notebook</code>,
+        <code>log_notebook</code>, <code>doctor</code>), writing (<code>new_note</code>,
+        <code>edit_note</code>, <code>delete_note</code>, <code>rename_note</code>,
+        <code>move_note</code>, <code>tag_note</code>, <code>set_field</code>,
+        <code>create_folder</code>, <code>delete_folder</code>, <code>move_folder</code>,
+        <code>daily_note</code>), git (<code>sync_notebook</code>), and notebook management
+        (<code>create_notebook</code>, <code>rename_notebook</code>, <code>delete_notebook</code>,
+        <code>encrypt_notebook</code>, <code>decrypt_notebook</code>, <code>rekey_notebook</code>)
+        — each with a real parameter schema instead of CLI flags to construct by hand. Pagination
+        and the <code>{total, offset, limit, returned, has_more, items}</code> response shape match
+        the CLI's own exactly; <code>delete_note</code>/<code>delete_folder</code>/
+        <code>delete_notebook</code> require an explicit <code>confirm: true</code> argument, the
+        tool-call equivalent of <code>--yes</code>. <strong>Writes are never auto-committed</strong>
+        — call <code>sync_notebook</code> after a batch of changes to actually commit (and push, if
+        enabled) them, same as the CLI's own <code>shiki sync</code>; the server's tool
+        descriptions tell the calling AI this directly. Encrypted notebooks resolve their
+        passphrase from <code>SHIKI_PASSPHRASE</code> (and <code>SHIKI_NEW_PASSPHRASE</code> for
+        <code>encrypt_notebook</code>/<code>rekey_notebook</code>) in the server's own environment
+        — the only source available, since an MCP server has no TTY to ever fall back to a prompt
+        on.
+      </p>
     </div>
   </section>
 

@@ -1,0 +1,33 @@
+[package]
+name = "shiki-mcp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../README.md"
+description = "shiki: MCP server exposing note/notebook operations as typed tools for AI agents"
+
+[[bin]]
+name = "shiki-mcp"
+path = "src/main.rs"
+
+[dependencies]
+shiki-core = { workspace = true }
+shiki-config = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+# Not a workspace dependency — `shiki-desktop` is the only other member
+# that needs an async runtime at all (see its own `Cargo.toml`), and for
+# the same reason this crate does: it sits outside the synchronous
+# TUI/CLI chain (`shiki-core -> shiki-config -> shiki-tui -> shiki-cli`),
+# so it's free to pull tokio in without breaking that chain's own
+# "stay synchronous" convention.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
+rmcp = { version = "3", features = ["server", "transport-io"] }
+schemars = "0.8"

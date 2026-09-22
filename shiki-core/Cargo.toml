@@ -12,6 +12,7 @@ description = "shiki: pure logic (notebooks, notes, git, search, templates)"
 
 [dependencies]
 serde.workspace = true
+serde_json.workspace = true
 serde_yaml.workspace = true
 toml.workspace = true
 chrono.workspace = true
@@ -33,6 +34,7 @@ getrandom.workspace = true
 sha2.workspace = true
 libc = { workspace = true, optional = true }
 directories = { workspace = true, optional = true }
+notify-rust = { workspace = true, optional = true }
 
 [features]
 # Every existing consumer (shiki-tui, shiki-cli, shiki-desktop,
@@ -43,7 +45,13 @@ directories = { workspace = true, optional = true }
 # binary/no POSIX `kill`/no real home directory to resolve `~` against) can
 # build this crate with `--no-default-features` and only the capabilities
 # it actually has a backend for.
-default = ["git2-backend", "self-update", "unix-process-check", "home-dir-expand"]
+default = [
+    "git2-backend",
+    "self-update",
+    "unix-process-check",
+    "home-dir-expand",
+    "desktop-notify",
+]
 # `git.rs`'s ~28 functions (status/pull/push/commit/history/merge/…) plus
 # `NotebookStore`'s default `git::NativeVcs`-backed constructors (`new`/
 # `new_with_custom_paths` — `new_with_vcs_backend` stays available either
@@ -62,3 +70,8 @@ unix-process-check = ["dep:libc"]
 # it, `expand_home` leaves a leading `~` untouched, same as its own existing
 # fallback for "no home directory found".
 home-dir-expand = ["dep:directories"]
+# `reminders::send_notification`'s real OS-notification path; without it,
+# `send_notification` always returns `Error::Notify("...not compiled in")`,
+# same "gracefully absent, not a hard requirement" shape as the features
+# above.
+desktop-notify = ["dep:notify-rust"]

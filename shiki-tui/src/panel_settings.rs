@@ -76,6 +76,7 @@ pub enum GeneralField {
     SkipDeleteConfirm,
     ShowDates,
     WikilinkAutocomplete,
+    DueDateAutocomplete,
     DailyAgenda,
     CompactFooter,
     ShowBorders,
@@ -92,10 +93,12 @@ pub enum GeneralField {
     PreviewImageScale,
     AttachmentsDir,
     AutoPullOnSwitch,
+    EnableReminders,
+    ReminderCheckIntervalSecs,
 }
 
 impl GeneralField {
-    pub const ALL: [GeneralField; 28] = [
+    pub const ALL: [GeneralField; 31] = [
         GeneralField::DefaultNotebook,
         GeneralField::Editor,
         GeneralField::DailyTemplate,
@@ -108,6 +111,7 @@ impl GeneralField {
         GeneralField::SkipDeleteConfirm,
         GeneralField::ShowDates,
         GeneralField::WikilinkAutocomplete,
+        GeneralField::DueDateAutocomplete,
         GeneralField::DailyAgenda,
         GeneralField::CompactFooter,
         GeneralField::ShowBorders,
@@ -124,6 +128,8 @@ impl GeneralField {
         GeneralField::PreviewImageScale,
         GeneralField::AttachmentsDir,
         GeneralField::AutoPullOnSwitch,
+        GeneralField::EnableReminders,
+        GeneralField::ReminderCheckIntervalSecs,
     ];
 }
 
@@ -415,6 +421,11 @@ pub(crate) fn general_rows(app: &App) -> Vec<Line<'static>> {
             "wikilink_autocomplete",
             cfg.general.wikilink_autocomplete.to_string(),
         ),
+        row_line(
+            app,
+            "due_date_autocomplete",
+            cfg.general.due_date_autocomplete.to_string(),
+        ),
         row_line(app, "daily_agenda", cfg.general.daily_agenda.to_string()),
         row_line(
             app,
@@ -478,6 +489,16 @@ pub(crate) fn general_rows(app: &App) -> Vec<Line<'static>> {
             app,
             "auto_pull_on_switch",
             cfg.general.auto_pull_on_switch.to_string(),
+        ),
+        row_line(
+            app,
+            "enable_reminders",
+            cfg.general.enable_reminders.to_string(),
+        ),
+        row_line(
+            app,
+            "reminder_check_interval_secs",
+            cfg.general.reminder_check_interval_secs.to_string(),
         ),
     ]
 }

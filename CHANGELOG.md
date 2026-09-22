@@ -6,6 +6,76 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- **`shiki-mcp` — a real MCP (Model Context Protocol) server**, a new workspace member (sibling to
+  `shiki-native-host`/`shiki-desktop`, depends on `shiki-core`/`shiki-config` only, not
+  `shiki-cli`). Exposes **28 typed tools** over stdio, so an MCP client (Claude Desktop, Claude
+  Code, etc.) calls shiki directly with structured, schema-validated JSON arguments instead of
+  shelling out to the CLI and quoting/parsing text — full parity with the CLI's own command set:
+  note/folder CRUD (`list_notes`, `show_note`, `search_notes`, `query_notes`, `new_note`,
+  `edit_note`, `delete_note`, `rename_note`, `move_note`, `tag_note`, `set_field`,
+  `create_folder`/`delete_folder`/`move_folder`), `list_tasks`, `index`, `daily_note`, git
+  (`sync_notebook`, `diff_notebook`, `log_notebook`), notebook management (`list_notebooks`,
+  `create_notebook`, `rename_notebook`, `delete_notebook`, `encrypt_notebook`, `decrypt_notebook`,
+  `rekey_notebook`), and `doctor`. Calls straight into `shiki-core`, never the `shiki` binary. Same
+  pagination (`limit`/`offset`/`no_limit`, default 50) and `{total, offset, limit, returned,
+  has_more, items}` response shape as the CLI's own paginated commands; destructive tools require
+  an explicit `confirm: true` argument. **Writes are never auto-committed to git** (same as the
+  CLI) — `sync_notebook` is what actually commits/pushes, and the server's own tool descriptions
+  tell the calling AI to call it after a batch of changes. Encrypted notebooks resolve their
+  passphrase from `SHIKI_PASSPHRASE`/`SHIKI_NEW_PASSPHRASE` in the server's environment (no TTY
+  ever available to a headless MCP server); the server holds its config behind an `RwLock` so
+  `encrypt_notebook`/`decrypt_notebook`/`rekey_notebook` (which persist to `config.toml`) are
+  immediately visible to every other tool call in the same running server, not just after a
+  restart. `find_note`/`get_notebook`/the pagination helpers were promoted from `shiki-cli` down
+  into `shiki-core` (`shiki_core::notebook`/`shiki_core::pagination`) so both the CLI and the MCP
+  server share one implementation instead of parallel copies.
+
+- **Full non-interactive note/folder CRUD at the CLI** — `shiki edit --body/--stdin/--append/
+  --append-stdin`, `shiki delete`, `shiki rename` (rewrites inbound `[[wikilinks]]` by default),
+  `shiki move`/`shiki folder move` (with `--copy`), `shiki tag --add/--remove`, `shiki field
+  --set/--unset` (custom frontmatter, the same map `shiki query` reads), and `shiki folder
+  create/delete`. Closes the gap where the CLI could create and read notes non-interactively but
+  every update/delete/rename/move/tag operation required either `$EDITOR` or the TUI — the explicit
+  goal being that a script or an AI agent can now drive shiki end to end. Encrypted notebooks no
+  longer block forever on an interactive passphrase prompt in a non-TTY context: `SHIKI_PASSPHRASE`
+  (and `SHIKI_NEW_PASSPHRASE` for `notebook encrypt`/`rekey`) are read first, falling back to an
+  interactive prompt only when stdin is genuinely a TTY, else a clear error. Also fixes a
+  pre-existing bug where `list`/`show`/`search`/`edit`/`log`/`diff` silently mishandled encrypted
+  notebooks (no crypto ever attached, so ciphertext got parsed as a plain-body note instead of
+  being decrypted or erroring). Every `--json` output across the CLI (existing commands included)
+  is now compact, single-line JSON instead of pretty-printed — no functional change, just fewer
+  tokens for a script or agent parsing it (~30% smaller on multi-item output like `shiki list
+  --json`). See `IDEA.md`'s CLI commands section or `shiki <command> --help` for the full reference.
+
+- **Result-list CLI commands are paginated by default** — `shiki list`/`search`/`query`/`tasks`/
+  `log` now cap at 50 items unless `--limit <N>`/`--offset <N>`/`--no-limit` say otherwise, so a
+  large notebook or a wide cross-notebook query can't dump everything into a script's or an AI
+  agent's context by accident. Their `--json` output now wraps the array as `{"total", "offset",
+  "limit", "returned", "has_more", "items"}` instead of a bare array, so a caller always knows
+  whether to page further; plain-text output prints a `— showing 1–50 of 532 — continue with
+  --offset 50 …` footer under a truncated page. `shiki log` also gained `--json` (it had none
+  before). New: `shiki index [-n <notebook>]` — a structural overview (note count, busiest folders,
+  busiest tags; never bodies or titles) meant as the first call for an agent orienting itself in an
+  unfamiliar shiki setup, itself bounded (top 25 folders/tags) so it can never become the thing
+  that needs paginating.
+
+- **Task due-date reminders** — a background thread (`general.enable_reminders`, on by default)
+  periodically scans every notebook for `@due(...)` checkbox tasks that are due today or overdue
+  and fires a real OS desktop notification for each, once per calendar day. Works in an
+  already-running TUI and headless via `shiki daemon` alike, so it doesn't depend on the TUI being
+  open. `reminder_check_interval_secs` (default 300s) controls the scan frequency and applies live
+  to an already-running checker with no restart; `shiki doctor` reports whether OS notification
+  delivery is likely to work on the current machine.
+
+- **`@` in the inline editor opens a due-date/recurrence suggestion menu** (`general.
+  due_date_autocomplete`, on by default) — 14 curated entries (`@due(today)`, `@due(tomorrow)`,
+  every weekday, `@due(+1w)`, and `@every(day/week/month/year)`), anchored under the cursor the
+  same way `[[wikilink]]` autocomplete and the `/`-menu already are. The same 14 entries are also
+  regular `/`-menu commands, searchable and overridable via `[snippets.<trigger>]` like any other
+  snippet — so `/due` finds them too, not just `@`.
+
 ## [0.9.7] - 2026-09-21
 
 ### Added

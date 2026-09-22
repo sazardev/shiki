@@ -211,6 +211,18 @@ pub struct App {
     pub(crate) wikilink_menu_selected: usize,
     pub(crate) wikilink_candidates: Vec<Note>,
     pub(crate) wikilink_results: Vec<SearchHit>,
+    /// The inline editor's `@` due-date/recurrence suggestion menu — opens
+    /// the instant `@` is typed anywhere in the line (like `[[`, not
+    /// restricted to line-start like `/`, since `@due(...)` normally
+    /// appears mid-line after a checkbox prefix), gated by
+    /// `general.due_date_autocomplete`. Unlike the wikilink menu there's no
+    /// candidate pool to snapshot — it just filters the fixed
+    /// `slash_menu::date_builtins()` set (via `all_commands`, so a user's
+    /// own `[snippets.due-tomorrow]` override is reflected too) fresh per
+    /// keystroke, the same cheap-to-recompute shape `slash_menu_filtered`
+    /// already has.
+    pub(crate) show_at_menu: bool,
+    pub(crate) at_menu_selected: usize,
     /// Path + editor command to launch externally, picked up by `run()`
     /// between draw calls. The editor is resolved per-invocation (either the
     /// configured `general.editor` for `E`, or the detected OS favorite for
@@ -791,6 +803,12 @@ pub struct App {
     /// The sender half handed to the listener thread's clone the moment the
     /// daemon is actually spawned (see `set_capture_daemon_enabled`).
     pub(crate) capture_tx: std::sync::mpsc::Sender<crate::capture::CaptureRequest>,
+    /// `Some` once `general.enable_reminders` has been turned on at least
+    /// once this session — same "never torn down, just flip the atomic"
+    /// shape as `capture_daemon`. Unlike the capture daemon, this thread
+    /// needs no channel back to `App` at all (fire-and-forget: it scans,
+    /// notifies, and persists its own dedup state independently).
+    pub(crate) reminder_checker: Option<shiki_core::reminders::ReminderCheckerHandle>,
 }
 
 /// State of the update modal (leader+`U`), across its whole lifecycle: a
@@ -981,6 +999,8 @@ impl App {
             wikilink_menu_selected: 0,
             wikilink_candidates: Vec::new(),
             wikilink_results: Vec::new(),
+            show_at_menu: false,
+            at_menu_selected: 0,
             want_external_edit: None,
             want_external_edit_config: false,
             show_theme_picker: false,
@@ -1121,10 +1141,15 @@ impl App {
             capture_daemon: None,
             capture_rx,
             capture_tx,
+            reminder_checker: None,
         };
 
         if app.config.general.enable_capture_daemon {
             app.ensure_capture_daemon_spawned();
+        }
+
+        if app.config.general.enable_reminders {
+            app.ensure_reminder_checker_spawned();
         }
 
         if app.config.general.remember_last_session {
@@ -1199,6 +1224,58 @@ impl App {
         self.config.general.enable_capture_daemon = enabled;
         self.save_config();
         self.set_status(format!("enable_capture_daemon -> {enabled}"));
+    }
+
+    /// Spawns the reminder-checker thread if it isn't already running —
+    /// same no-op-if-already-`Some` guard as `ensure_capture_daemon_spawned`,
+    /// safe to call from both `new` and `set_reminders_enabled`. Unlike the
+    /// capture daemon there's no socket to bind, so the only failure mode is
+    /// resolving where the dedup-state file lives; on that failure, reminders
+    /// are turned back off and reported the same way a capture-daemon bind
+    /// failure is.
+    pub(crate) fn ensure_reminder_checker_spawned(&mut self) {
+        if self.reminder_checker.is_some() {
+            return;
+        }
+        let state_path = match Config::default_reminders_state_path() {
+            Ok(p) => p,
+            Err(e) => {
+                self.set_status(format!("could not start reminder checker: {e}"));
+                self.config.general.enable_reminders = false;
+                self.save_config();
+                return;
+            }
+        };
+        let handle = shiki_core::reminders::spawn_reminder_checker(
+            self.store.clone(),
+            state_path,
+            self.config.general.reminder_check_interval_secs,
+        );
+        self.reminder_checker = Some(handle);
+    }
+
+    /// Backs the GENERAL settings toggle (`GeneralField::EnableReminders`) —
+    /// same "flip the atomic, never tear the thread down" shape as
+    /// `set_capture_daemon_enabled`.
+    pub(crate) fn set_reminders_enabled(&mut self, enabled: bool) {
+        if enabled {
+            self.ensure_reminder_checker_spawned();
+            match &self.reminder_checker {
+                Some(handle) => handle
+                    .enabled
+                    .store(true, std::sync::atomic::Ordering::Relaxed),
+                // Spawn failed — `ensure_reminder_checker_spawned` already
+                // reverted the config and reported why.
+                None => return,
+            }
+        } else if let Some(handle) = &self.reminder_checker {
+            handle
+                .enabled
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+        }
+        self.config.general.enable_reminders = enabled;
+        self.save_config();
+        self.set_status(format!("enable_reminders -> {enabled}"));
     }
 
     /// Applies a previously saved `SessionState` (`general.remember_last_session`)
@@ -2321,24 +2398,16 @@ impl App {
         }
     }
 
-    /// First segment is always a notebook name — it must already exist
-    /// (never auto-created; a notebook is a new git repo, so creating one
-    /// from a typo would be surprising). Everything after it is the
-    /// destination folder within that notebook, auto-created as needed
-    /// (same as `create_note_in`/`create_folder_in` already do) — not
-    /// checked for existence up front, since creating it is always fine.
+    /// Thin wrapper over `shiki_core::notebook::parse_address` — see its
+    /// own doc comment for the address format. Shared with the CLI's
+    /// `move`/`folder move` commands, which need the exact same parsing;
+    /// this method only exists to keep `App` callers' existing
+    /// `Result<_, String>` (status-message-ready) error shape.
     pub(crate) fn parse_move_target(
         &self,
         value: &str,
     ) -> Result<(Notebook, std::path::PathBuf), String> {
-        let mut parts = value.split('/').filter(|s| !s.is_empty());
-        let notebook_name = parts.next().ok_or_else(|| "empty target".to_string())?;
-        let dest_notebook = self
-            .store
-            .get(notebook_name)
-            .map_err(|_| format!("notebook '{notebook_name}' not found"))?;
-        let rest: std::path::PathBuf = parts.collect();
-        Ok((dest_notebook, rest))
+        shiki_core::notebook::parse_address(&self.store, value).map_err(|e| e.to_string())
     }
 
     pub fn keymaps(&self) -> &KeyMaps {

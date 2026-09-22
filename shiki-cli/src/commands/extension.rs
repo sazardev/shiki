@@ -400,7 +400,7 @@ pub fn run(action: ExtensionAction) -> Result<()> {
                     "windows_manifest": win_manifest,
                     "state_saved": state_path,
                 });
-                println!("{}", serde_json::to_string_pretty(&out).unwrap());
+                println!("{}", serde_json::to_string(&out).unwrap());
             } else {
                 println!("Shiki extension status");
                 println!(

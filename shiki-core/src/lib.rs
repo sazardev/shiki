@@ -46,9 +46,11 @@ pub mod last_capture;
 pub mod markdown;
 pub mod note;
 pub mod notebook;
+pub mod pagination;
 pub mod process;
 pub mod publish;
 pub mod query;
+pub mod reminders;
 pub mod search;
 pub mod spell;
 pub mod tags;
@@ -87,6 +89,10 @@ pub enum Error {
     Git(#[from] git2::Error),
     #[error("note not found: {0}")]
     NoteNotFound(String),
+    /// A note lookup by slug/title (`notebook::find_note`) matched more
+    /// than one note — e.g. two same-titled notes in different folders.
+    #[error("{0}")]
+    AmbiguousNote(String),
     #[error("notebook not found: {0}")]
     NotebookNotFound(String),
     #[error("notebook '{0}' already exists")]
@@ -99,6 +105,11 @@ pub enum Error {
     Update(String),
     #[error("publish error: {0}")]
     Publish(String),
+    /// A failed/unavailable OS desktop-notification attempt
+    /// (`reminders::send_notification`) — always non-fatal to the caller,
+    /// which only ever logs this, never propagates it as a hard failure.
+    #[error("notification error: {0}")]
+    Notify(String),
     /// A move/copy target that already has something at that path — moves
     /// and copies error here rather than silently overwriting whatever's
     /// already there.

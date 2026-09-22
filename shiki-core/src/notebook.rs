@@ -569,6 +569,82 @@ pub fn route_by_prefix<'a>(
     Some((matched.clone(), rest.trim_start()))
 }
 
+/// Splits `"notebook/path/within/it"` into an existing notebook plus a
+/// destination-relative path inside it — the address format the TUI's `m`
+/// (move/copy) prompt (`App::parse_move_target`, which now delegates here
+/// instead of duplicating this logic) and the CLI's `move`/`folder move`
+/// commands both use. The first segment must already name a real notebook
+/// — never auto-created, since a notebook is a new git repo and creating
+/// one from a typo would be surprising; everything after it is the
+/// destination folder, not checked for existence up front since
+/// `copy_note_to`/`copy_folder_to` create it as needed, same as
+/// `create_note_in`/`create_folder_in` already do. Always splits on a
+/// literal `/`, regardless of platform — callers must join addresses with
+/// `/`, not `PathBuf`'s `Display` (which uses `\` on Windows).
+pub fn parse_address(store: &NotebookStore, value: &str) -> Result<(Notebook, PathBuf)> {
+    let mut parts = value.split('/').filter(|s| !s.is_empty());
+    let notebook_name = parts
+        .next()
+        .ok_or_else(|| Error::NotebookNotFound("(empty target)".to_string()))?;
+    let dest_notebook = store
+        .get(notebook_name)
+        .map_err(|_| Error::NotebookNotFound(notebook_name.to_string()))?;
+    let rest: PathBuf = parts.collect();
+    Ok((dest_notebook, rest))
+}
+
+/// Resolves a notebook by name with a clear "not found" message — shared
+/// by every caller (CLI, MCP server) that needs to turn a bare name into a
+/// real `Notebook` before doing anything else with it.
+pub fn get_notebook(store: &NotebookStore, name: &str) -> Result<Notebook> {
+    store
+        .get(name)
+        .map_err(|_| Error::NotebookNotFound(format!("{name} \u{2014} see the notebook list")))
+}
+
+/// Resolves a note by slug or by (case-insensitive) title match within an
+/// already-resolved (and, if needed, already-decrypted) notebook —
+/// searched recursively across every folder, so two notes with the same
+/// title/slug in different folders both match `needle`. Errors with a
+/// clear disambiguation message (listing each match's folder) rather than
+/// silently returning whichever one the recursive walk happened to find
+/// first. Takes `&Notebook` rather than `(store, name)` so every caller
+/// resolves (and decrypts, if needed) the notebook exactly once instead of
+/// this function doing a second, crypto-blind lookup of its own — a second
+/// resolution is how an encrypted note's ciphertext used to silently get
+/// parsed as a plain-body note instead of being decrypted or erroring.
+pub fn find_note(nb: &Notebook, needle: &str) -> Result<Note> {
+    let notes = nb.all_notes_recursive()?;
+    let slug = Note::slugify(needle);
+    let mut matches: Vec<Note> = notes
+        .into_iter()
+        .filter(|n| n.file_stem() == slug || n.frontmatter.title.eq_ignore_ascii_case(needle))
+        .collect();
+    match matches.len() {
+        0 => Err(Error::NoteNotFound(format!("'{needle}' in '{}'", nb.name))),
+        1 => Ok(matches.remove(0)),
+        _ => {
+            let mut locations: Vec<String> = matches
+                .iter()
+                .map(|n| {
+                    n.path
+                        .strip_prefix(&nb.path)
+                        .unwrap_or(&n.path)
+                        .display()
+                        .to_string()
+                })
+                .collect();
+            locations.sort();
+            Err(Error::AmbiguousNote(format!(
+                "'{needle}' matches {} notes in '{}' \u{2014} be more specific: {}",
+                matches.len(),
+                nb.name,
+                locations.join(", ")
+            )))
+        }
+    }
+}
+
 #[cfg(test)]
 mod routing_tests {
     use super::*;
@@ -602,6 +678,84 @@ mod routing_tests {
         assert!(route_by_prefix("just some text", &notebooks).is_none());
         assert!(route_by_prefix("unknown: text", &notebooks).is_none());
         assert!(route_by_prefix(": text", &notebooks).is_none());
+    }
+
+    #[test]
+    fn parse_address_splits_notebook_from_the_rest() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = NotebookStore::new(tmp.path().join("data-dir"));
+        store.create("work").unwrap();
+
+        let (nb, rest) = parse_address(&store, "work/meetings/2026").unwrap();
+        assert_eq!(nb.name, "work");
+        assert_eq!(rest, PathBuf::from("meetings").join("2026"));
+    }
+
+    #[test]
+    fn parse_address_with_just_a_notebook_name_has_an_empty_rest() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = NotebookStore::new(tmp.path().join("data-dir"));
+        store.create("personal").unwrap();
+
+        let (nb, rest) = parse_address(&store, "personal").unwrap();
+        assert_eq!(nb.name, "personal");
+        assert_eq!(rest, PathBuf::new());
+    }
+
+    #[test]
+    fn parse_address_rejects_an_unknown_notebook_and_an_empty_target() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = NotebookStore::new(tmp.path().join("data-dir"));
+
+        assert!(parse_address(&store, "ghost/notes").is_err());
+        assert!(parse_address(&store, "").is_err());
+        assert!(parse_address(&store, "///").is_err());
+    }
+
+    #[test]
+    fn get_notebook_finds_a_real_one_and_errors_clearly_on_a_missing_one() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = NotebookStore::new(tmp.path().join("data-dir"));
+        store.create("personal").unwrap();
+
+        assert_eq!(get_notebook(&store, "personal").unwrap().name, "personal");
+        assert!(get_notebook(&store, "ghost").is_err());
+    }
+
+    #[test]
+    fn find_note_matches_by_slug_or_title_case_insensitively() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = NotebookStore::new(tmp.path().join("data-dir"));
+        let nb = store.create("personal").unwrap();
+        nb.create_note("Grocery List", "milk").unwrap();
+
+        assert_eq!(
+            find_note(&nb, "grocery-list").unwrap().frontmatter.title,
+            "Grocery List"
+        );
+        assert_eq!(
+            find_note(&nb, "grocery list").unwrap().frontmatter.title,
+            "Grocery List"
+        );
+    }
+
+    #[test]
+    fn find_note_errors_clearly_when_missing_or_ambiguous() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = NotebookStore::new(tmp.path().join("data-dir"));
+        let nb = store.create("personal").unwrap();
+
+        assert!(matches!(
+            find_note(&nb, "nope").unwrap_err(),
+            Error::NoteNotFound(_)
+        ));
+
+        nb.create_note_in(Path::new("a"), "Same Title", "").unwrap();
+        nb.create_note_in(Path::new("b"), "Same Title", "").unwrap();
+        assert!(matches!(
+            find_note(&nb, "same title").unwrap_err(),
+            Error::AmbiguousNote(_)
+        ));
     }
 }
 

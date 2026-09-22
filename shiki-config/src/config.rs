@@ -138,6 +138,15 @@ pub struct General {
     /// no menu, for anyone who finds the popup intrusive while typing.
     #[serde(default = "default_true")]
     pub wikilink_autocomplete: bool,
+    /// Typing `@` in the inline editor opens a suggestion menu of common
+    /// `@due(...)`/`@every(...)` tags (today, tomorrow, weekday names,
+    /// daily/weekly/monthly/yearly recurrence) — the same entries also
+    /// always show up under the `/`-menu regardless of this setting, since
+    /// `/` is a deliberate action rather than an incidental character that
+    /// shows up in emails/mentions. Defaults to `true`; off falls through
+    /// to a literal `@` with no menu.
+    #[serde(default = "default_true")]
+    pub due_date_autocomplete: bool,
     /// Creating a new daily note appends a "## Due today" section listing
     /// pending/overdue tasks across every notebook (only on creation, never
     /// on reopen — see `shiki_core::daily::create_or_open`). Defaults to
@@ -244,6 +253,23 @@ pub struct General {
     /// isn't something to opt everyone into silently.
     #[serde(default)]
     pub auto_pull_on_switch: bool,
+    /// When true, a background thread periodically scans every notebook for
+    /// checkbox tasks (`- [ ] ... @due(YYYY-MM-DD)`) due today or overdue
+    /// and fires a real OS desktop notification for each, once per calendar
+    /// day — in the TUI and headless via `shiki daemon` alike, so reminders
+    /// don't depend on the TUI happening to be open. On by default —
+    /// reminders are core to the point of tracking tasks with due dates,
+    /// not an optional add-on; if OS notifications aren't available on a
+    /// given machine (see `shiki doctor`), the checker simply never
+    /// manages to deliver anything, which is harmless.
+    #[serde(default = "default_true")]
+    pub enable_reminders: bool,
+    /// How often (seconds) the reminder-checker thread re-scans every
+    /// notebook while `enable_reminders` is on. Defaults to `300` (5
+    /// minutes). Edits apply to an already-running checker thread
+    /// immediately, no restart needed.
+    #[serde(default = "default_reminder_check_interval_secs")]
+    pub reminder_check_interval_secs: u64,
 }
 
 impl Default for General {
@@ -262,6 +288,7 @@ impl Default for General {
             skip_delete_confirm: false,
             show_dates: false,
             wikilink_autocomplete: true,
+            due_date_autocomplete: true,
             daily_agenda: true,
             compact_footer: false,
             show_borders: true,
@@ -278,12 +305,18 @@ impl Default for General {
             preview_image_scale: default_preview_image_scale(),
             attachments_dir: default_attachments_dir(),
             auto_pull_on_switch: false,
+            enable_reminders: true,
+            reminder_check_interval_secs: default_reminder_check_interval_secs(),
         }
     }
 }
 
 pub fn default_attachments_dir() -> String {
     "attachments".into()
+}
+
+fn default_reminder_check_interval_secs() -> u64 {
+    300
 }
 
 fn default_status_message_timeout_secs() -> u64 {
@@ -1685,6 +1718,18 @@ impl Config {
             .join("last-capture.toml"))
     }
 
+    /// Where the reminder-checker's dedup record (`shiki_core::reminders::
+    /// ReminderState`) lives — same collision reasoning as every other
+    /// fixed file in this list. Shared between the in-TUI checker and the
+    /// headless `shiki daemon` one, so a task notifies at most once per day
+    /// regardless of which process's thread saw it first.
+    pub fn default_reminders_state_path() -> Result<PathBuf> {
+        Ok(Self::default_path()?
+            .parent()
+            .expect("config path always has a parent")
+            .join("reminders-state.toml"))
+    }
+
     /// Loads the config from `path`, or creates and saves a default config if it doesn't exist.
     pub fn load_or_init(path: &Path) -> Result<Self> {
         Self::load_or_init_with_fs(path, &LocalConfigFs)
@@ -1802,6 +1847,10 @@ fn section_comment(line: &str) -> Option<&'static str> {
 # - show_dates: shows each note's date next to its title in the NOTES list.
 # - wikilink_autocomplete: typing `[[` opens the note-picker menu. Defaults
 #   to true.
+# - due_date_autocomplete: typing `@` opens a suggestion menu of common
+#   @due(...)/@every(...) tags (today, tomorrow, weekday names, daily/
+#   weekly/monthly/yearly). Defaults to true; the same entries always show
+#   up under the `/`-menu regardless of this setting.
 # - daily_agenda: a new daily note gets a \"## Due today\" section listing
 #   pending tasks across every notebook. Defaults to true.
 # - compact_footer: hides char/word count, reading time, and note-count
@@ -1830,7 +1879,15 @@ fn section_comment(line: &str) -> Option<&'static str> {
 # - chafa_path: absolute path to a `chafa` binary that isn't on $PATH.
 #   Empty (the default) means look it up on $PATH.
 # - preview_image_scale: fraction of the preview panel's width the rendered
-#   image art is drawn at. Defaults to 0.5 (clamped to (0.0, 1.0])."
+#   image art is drawn at. Defaults to 0.5 (clamped to (0.0, 1.0]).
+# - enable_reminders: when true, a background thread scans every notebook
+#   for @due(...) checkbox tasks due today or overdue and fires a real OS
+#   desktop notification for each, once per calendar day — works in the TUI
+#   and headless via `shiki daemon` alike. On by default; see `shiki doctor`
+#   for whether OS notifications are likely to work on this machine.
+# - reminder_check_interval_secs: how often (seconds) the reminder checker
+#   re-scans while enabled. Defaults to 300 (5 minutes); applies live to an
+#   already-running checker, no restart needed."
         }
         "[keybindings]" => {
             "\

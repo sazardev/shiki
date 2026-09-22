@@ -72,7 +72,7 @@ pub fn run(
             "edges": edges,
             "orphans": orphan_titles,
         });
-        println!("{}", serde_json::to_string_pretty(&out)?);
+        println!("{}", serde_json::to_string(&out)?);
         return Ok(());
     }
     if nodes.is_empty() {

@@ -59,6 +59,9 @@ pub fn draw(frame: &mut Frame, app: &App) {
             if app.show_wikilink_menu {
                 render_wikilink_menu(frame, areas.preview, editor, app);
             }
+            if app.show_at_menu {
+                render_at_menu(frame, areas.preview, editor, app);
+            }
             if app.editor_find.is_some() {
                 render_editor_find(frame, areas.preview, editor, app);
             }
@@ -1276,6 +1279,70 @@ fn render_wikilink_menu(
     let mut state = ListState::default();
     if !matches.is_empty() {
         state.select(Some(app.wikilink_menu_selected));
+    }
+    frame.render_stateful_widget(list, popup_area, &mut state);
+}
+
+/// Anchors the `@` due-date/recurrence suggestion menu the same way
+/// `render_slash_menu`/`render_wikilink_menu` do — right under the current
+/// line, flipping above it when there isn't room below. Each row shows the
+/// actual tag text that's about to be inserted (`cmd.body`, e.g.
+/// `@due(tomorrow)`) rather than the internal trigger name, since that's
+/// what the user actually cares about seeing.
+fn render_at_menu(frame: &mut Frame, area: Rect, editor: &crate::editor::InlineEditor, app: &App) {
+    let inner = editor.inner_area(area);
+    if inner.width < 10 || inner.height < 3 {
+        return;
+    }
+    let matches = app.at_menu_filtered();
+    let width = inner.width.min(48);
+    let max_height = inner.height.saturating_sub(1).max(3);
+    let row_count = matches.len().max(1);
+    let height = (row_count as u16 + 2).clamp(3, max_height);
+
+    let cursor_row = editor.cursor_screen_row();
+    let below_y = inner.y + cursor_row + 1;
+    let popup_y = if below_y + height <= inner.y + inner.height {
+        below_y
+    } else {
+        inner.y + cursor_row.saturating_sub(height)
+    };
+
+    let popup_area = Rect {
+        x: inner.x,
+        y: popup_y,
+        width,
+        height,
+    };
+    frame.render_widget(Clear, popup_area);
+
+    let items: Vec<ListItem> = if matches.is_empty() {
+        vec![ListItem::new("no matching suggestions")]
+    } else {
+        matches
+            .iter()
+            .map(|cmd| ListItem::new(format!("{:<16} {}", cmd.body.trim(), cmd.label)))
+            .collect()
+    };
+    let highlight_symbol = format!("{}", icons::ARROW);
+    let title = format!(" {}Due date ", icons::CALENDAR);
+    let list = List::new(items)
+        .block(panel_block(
+            Line::from(title),
+            true,
+            &app.theme,
+            app.config.general.show_borders,
+        ))
+        .highlight_style(
+            Style::default()
+                .bg(app.selection_bg())
+                .fg(app.selection_fg())
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol(highlight_symbol.as_str());
+    let mut state = ListState::default();
+    if !matches.is_empty() {
+        state.select(Some(app.at_menu_selected));
     }
     frame.render_stateful_widget(list, popup_area, &mut state);
 }

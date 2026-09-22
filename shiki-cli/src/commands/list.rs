@@ -1,14 +1,23 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
+use shiki_config::Config;
 use shiki_core::NotebookStore;
 
-pub fn run(store: &NotebookStore, notebook: &str, json: bool) -> Result<()> {
-    let nb = store.get(notebook).with_context(|| {
-        format!("notebook '{notebook}' not found \u{2014} see `shiki notebook list`")
-    })?;
+use super::{get_notebook, page_footer, page_json, paginate, unlock_if_encrypted};
+
+pub fn run(
+    store: &NotebookStore,
+    config: &Config,
+    notebook: &str,
+    json: bool,
+    offset: usize,
+    limit: Option<usize>,
+) -> Result<()> {
+    let nb = unlock_if_encrypted(config, get_notebook(store, notebook)?)?;
     let notes = nb.all_notes_recursive()?;
+    let (page, total) = paginate(notes, offset, limit);
 
     if json {
-        let items: Vec<serde_json::Value> = notes
+        let items: Vec<serde_json::Value> = page
             .iter()
             .map(|note| {
                 serde_json::json!({
@@ -20,15 +29,23 @@ pub fn run(store: &NotebookStore, notebook: &str, json: bool) -> Result<()> {
                 })
             })
             .collect();
-        println!("{}", serde_json::to_string_pretty(&items)?);
+        println!(
+            "{}",
+            serde_json::to_string(&page_json(items, total, offset, limit))?
+        );
         return Ok(());
     }
 
-    if notes.is_empty() {
-        println!("({notebook} is empty)");
+    if page.is_empty() {
+        if total == 0 {
+            println!("({notebook} is empty)");
+        } else {
+            println!("(nothing at offset {offset} \u{2014} {total} note(s) total)");
+        }
         return Ok(());
     }
-    for note in notes {
+    let shown = page.len();
+    for note in page {
         let tags = if note.frontmatter.tags.is_empty() {
             String::new()
         } else {
@@ -38,6 +55,9 @@ pub fn run(store: &NotebookStore, notebook: &str, json: bool) -> Result<()> {
             "{}  {}{tags}",
             note.frontmatter.date, note.frontmatter.title
         );
+    }
+    if let Some(footer) = page_footer(shown, offset, total) {
+        println!("{footer}");
     }
     Ok(())
 }

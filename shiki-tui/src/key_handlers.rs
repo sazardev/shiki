@@ -312,6 +312,10 @@ impl App {
                 "attachments_dir",
                 self.config.general.attachments_dir.clone(),
             ),
+            GeneralField::ReminderCheckIntervalSecs => (
+                "reminder_check_interval_secs",
+                self.config.general.reminder_check_interval_secs.to_string(),
+            ),
             GeneralField::UseFavoriteEditor
             | GeneralField::EnableCaptureDaemon
             | GeneralField::MouseDragSelection
@@ -321,12 +325,14 @@ impl App {
             | GeneralField::SkipDeleteConfirm
             | GeneralField::ShowDates
             | GeneralField::WikilinkAutocomplete
+            | GeneralField::DueDateAutocomplete
             | GeneralField::DailyAgenda
             | GeneralField::CompactFooter
             | GeneralField::ShowBorders
             | GeneralField::TasksShowDoneDefault
             | GeneralField::PreviewImages
-            | GeneralField::AutoPullOnSwitch => unreachable!(),
+            | GeneralField::AutoPullOnSwitch
+            | GeneralField::EnableReminders => unreachable!(),
         };
         self.settings_reopen_after_prompt = self.show_settings;
         self.show_settings = false;
@@ -399,6 +405,14 @@ impl App {
                     self.config.general.wikilink_autocomplete,
                 )
             }
+            GeneralField::DueDateAutocomplete => {
+                self.config.general.due_date_autocomplete =
+                    !self.config.general.due_date_autocomplete;
+                (
+                    "due_date_autocomplete",
+                    self.config.general.due_date_autocomplete,
+                )
+            }
             GeneralField::DailyAgenda => {
                 self.config.general.daily_agenda = !self.config.general.daily_agenda;
                 ("daily_agenda", self.config.general.daily_agenda)
@@ -430,6 +444,11 @@ impl App {
                     self.config.general.auto_pull_on_switch,
                 )
             }
+            GeneralField::EnableReminders => {
+                let new_value = !self.config.general.enable_reminders;
+                self.set_reminders_enabled(new_value);
+                return true;
+            }
             GeneralField::DefaultNotebook
             | GeneralField::Editor
             | GeneralField::DailyTemplate
@@ -442,7 +461,8 @@ impl App {
             | GeneralField::PageStep
             | GeneralField::ChafaPath
             | GeneralField::PreviewImageScale
-            | GeneralField::AttachmentsDir => return false,
+            | GeneralField::AttachmentsDir
+            | GeneralField::ReminderCheckIntervalSecs => return false,
         };
         self.save_config();
         self.set_status(format!("{label} -> {new_val}"));
@@ -5890,6 +5910,17 @@ impl App {
                                 self.config.general.attachments_dir = value.clone();
                                 "attachments_dir"
                             }
+                            GeneralField::ReminderCheckIntervalSecs => {
+                                self.config.general.reminder_check_interval_secs =
+                                    parse_or_report!(u64);
+                                if let Some(handle) = &self.reminder_checker {
+                                    handle.check_interval_secs.store(
+                                        self.config.general.reminder_check_interval_secs,
+                                        std::sync::atomic::Ordering::Relaxed,
+                                    );
+                                }
+                                "reminder_check_interval_secs"
+                            }
                             GeneralField::UseFavoriteEditor => "use_favorite_editor",
                             GeneralField::EnableCaptureDaemon => "enable_capture_daemon",
                             GeneralField::MouseDragSelection => "mouse_drag_selection",
@@ -5899,12 +5930,14 @@ impl App {
                             GeneralField::SkipDeleteConfirm => "skip_delete_confirm",
                             GeneralField::ShowDates => "show_dates",
                             GeneralField::WikilinkAutocomplete => "wikilink_autocomplete",
+                            GeneralField::DueDateAutocomplete => "due_date_autocomplete",
                             GeneralField::DailyAgenda => "daily_agenda",
                             GeneralField::CompactFooter => "compact_footer",
                             GeneralField::ShowBorders => "show_borders",
                             GeneralField::TasksShowDoneDefault => "tasks_show_done_default",
                             GeneralField::PreviewImages => "preview_images",
                             GeneralField::AutoPullOnSwitch => "auto_pull_on_switch",
+                            GeneralField::EnableReminders => "enable_reminders",
                         })
                     };
                     if let Some(label) = label {
@@ -6480,6 +6513,10 @@ impl App {
             self.handle_wikilink_menu_key(key);
             return;
         }
+        if self.show_at_menu {
+            self.handle_at_menu_key(key);
+            return;
+        }
         if self.show_spell {
             self.handle_spell_key(key);
             return;
@@ -6828,6 +6865,16 @@ impl App {
             if opens_wikilink {
                 self.open_wikilink_menu();
             }
+        }
+        // `@` opens the due-date/recurrence suggestion menu anywhere in the
+        // line, same reasoning as `[[` above — `@due(...)` normally shows up
+        // mid-line after a checkbox prefix (`- [ ] task @due(...)`), not at
+        // line start. No candidate pool to snapshot (unlike the wikilink
+        // menu): `at_menu_filtered` just re-filters the fixed
+        // `slash_menu::date_builtins()` set fresh per keystroke.
+        if key.code == KeyCode::Char('@') && self.config.general.due_date_autocomplete {
+            self.at_menu_selected = 0;
+            self.show_at_menu = true;
         }
     }
     /// Parses `line`'s leading list/checkbox marker, if any: optional
@@ -7234,6 +7281,126 @@ impl App {
             .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, start as u16));
         editor.textarea.delete_str(col - start);
         editor.textarea.insert_str(format!("[[{title}]]"));
+    }
+    /// The typed filter for the `@` due-date menu: everything between the
+    /// closest preceding `@` and the cursor, read live off the buffer —
+    /// same reasoning as `wikilink_query`/`slash_query`. `None` (closing
+    /// the menu) covers the query no longer being findable (backspaced
+    /// past the opening `@`) or already containing a space/`(`/`)`/another
+    /// `@` — those mean the user has moved past picking a suggestion and is
+    /// now typing their own argument by hand (the `(`/`)` case is this
+    /// menu's analog of `wikilink_query` closing on a stray `]`).
+    pub(crate) fn at_query(&self) -> Option<String> {
+        if !self.show_at_menu {
+            return None;
+        }
+        let editor = self.editor.as_ref()?;
+        let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
+        let line = editor.textarea.lines().get(row)?;
+        let chars: Vec<char> = line.chars().collect();
+        let upto = &chars[..col.min(chars.len())];
+        let start = upto.iter().rposition(|&c| c == '@')?;
+        let query: String = upto[start + 1..].iter().collect();
+        if query.contains([' ', '@', '(', ')']) {
+            return None;
+        }
+        Some(query)
+    }
+    /// `slash_menu::date_builtins()` narrowed to whatever's typed after the
+    /// `@`, same case-insensitive substring match `slash_menu_filtered`
+    /// uses. Filters through `all_commands(&self.config)` rather than
+    /// `date_builtins()` directly so a user's own `[snippets.due-tomorrow]`
+    /// override (same trigger, different body/label) is reflected here too,
+    /// not just under `/`.
+    pub(crate) fn at_menu_filtered(&self) -> Vec<slash_menu::SlashCommand> {
+        let Some(query) = self.at_query() else {
+            return Vec::new();
+        };
+        let query = query.to_lowercase();
+        let date_triggers: std::collections::HashSet<String> = slash_menu::date_builtins()
+            .into_iter()
+            .map(|c| c.trigger)
+            .collect();
+        slash_menu::all_commands(&self.config)
+            .into_iter()
+            .filter(|cmd| date_triggers.contains(&cmd.trigger))
+            .filter(|cmd| {
+                cmd.trigger.to_lowercase().contains(&query)
+                    || cmd.label.to_lowercase().contains(&query)
+            })
+            .collect()
+    }
+    fn handle_at_menu_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.show_at_menu = false,
+            KeyCode::Up => self.at_menu_selected = self.at_menu_selected.saturating_sub(1),
+            KeyCode::Down => {
+                let len = self.at_menu_filtered().len();
+                if self.at_menu_selected + 1 < len {
+                    self.at_menu_selected += 1;
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(cmd) = self.at_menu_filtered().get(self.at_menu_selected).cloned() {
+                    self.show_at_menu = false;
+                    self.apply_at_selection(&cmd);
+                }
+            }
+            KeyCode::Char(_) | KeyCode::Backspace => {
+                if let Some(editor) = &mut self.editor {
+                    editor.textarea.input(key);
+                }
+                match self.at_query() {
+                    Some(_) => self.at_menu_selected = 0,
+                    None => self.show_at_menu = false,
+                }
+            }
+            _ => {}
+        }
+    }
+    /// Replaces the typed `@query` (the same range `at_query` reads) with
+    /// the selected command's rendered body — same "delete the exact range
+    /// that was being typed, then insert the resolved text" shape as
+    /// `apply_wikilink_selection`/`apply_slash_command`. Reuses
+    /// `render_snippet_template` for consistency even though none of the
+    /// built-in date suggestions use `{{title}}`/`{{date}}`/`{{cursor}}` —
+    /// a future custom `@`-reachable snippet still gets them for free.
+    fn apply_at_selection(&mut self, cmd: &slash_menu::SlashCommand) {
+        self.editor_secondary_cursors.clear();
+        let (before, cursor_marker) = self.render_snippet_template(&cmd.body);
+
+        let Some(editor) = &mut self.editor else {
+            return;
+        };
+        let (row, col) = crate::editor::cursor_tuple(&editor.textarea);
+        let Some(line) = editor.textarea.lines().get(row) else {
+            return;
+        };
+        let chars: Vec<char> = line.chars().collect();
+        let upto = &chars[..col.min(chars.len())];
+        let Some(start) = upto.iter().rposition(|&c| c == '@') else {
+            return;
+        };
+        editor.textarea.cancel_selection();
+        editor
+            .textarea
+            .move_cursor(ratatui_textarea::CursorMove::Jump(row as u16, start as u16));
+        editor.textarea.delete_str(col - start);
+        let insert_row = row;
+        match &cursor_marker {
+            Some(after) => editor.textarea.insert_str(format!("{before}{after}")),
+            None => editor.textarea.insert_str(&before),
+        };
+        if cursor_marker.is_some() {
+            let target_row = insert_row + before.matches('\n').count();
+            let target_col = before.rsplit('\n').next().unwrap_or("").chars().count();
+            editor
+                .textarea
+                .move_cursor(ratatui_textarea::CursorMove::Jump(
+                    target_row as u16,
+                    target_col as u16,
+                ));
+        }
     }
     /// Ctrl+C (`config.editor.os_clipboard`): extracts the selected text
     /// *before* mutating anything (`copy()` may collapse/alter the

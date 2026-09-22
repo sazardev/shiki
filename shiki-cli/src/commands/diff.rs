@@ -1,26 +1,34 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use shiki_config::Config;
 use shiki_core::{git, NotebookStore};
 
-use super::find_note;
+use super::{find_note, get_notebook};
 
 /// `shiki diff [note]` — pending changes (working tree vs last commit),
 /// the same diff the TUI's `d` shows on a dirty note. Without a note,
 /// every pending change in the notebook. Encrypted notebooks are refused:
 /// both sides of their diffs are ciphertext blobs, so any +/- output would
-/// be meaningless noise.
-pub fn run(store: &NotebookStore, notebook: &str, note: Option<&str>) -> Result<()> {
-    let nb = store.get(notebook).with_context(|| {
-        format!("notebook '{notebook}' not found \u{2014} see `shiki notebook list`")
-    })?;
-    if nb.crypto.is_some() {
+/// be meaningless noise. Checked via `config.encrypt_for`, not `nb.crypto`
+/// — `get_notebook`/`store.get` never attach crypto on their own, so
+/// `nb.crypto.is_some()` was always false here regardless of whether the
+/// notebook was actually configured as encrypted, silently defeating this
+/// guard.
+pub fn run(
+    store: &NotebookStore,
+    config: &Config,
+    notebook: &str,
+    note: Option<&str>,
+) -> Result<()> {
+    let nb = get_notebook(store, notebook)?;
+    if config.encrypt_for(notebook) {
         anyhow::bail!("diff isn't available for encrypted notebooks");
     }
 
     match note {
         Some(note) => {
-            let note = find_note(store, notebook, note)?;
+            let note = find_note(&nb, note)?;
             let relative = relative_to(&note.path, &nb.path);
             print_file_diff(
                 &relative,

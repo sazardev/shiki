@@ -486,7 +486,25 @@ shiki list                # list notes in the default notebook
 shiki list -n work        # list notes in "work"
 shiki show <note>         # show rendered content (ANSI)
 shiki edit <note>         # edit with $EDITOR
+shiki edit <note> --body "text"           # replace the body non-interactively, no $EDITOR
+shiki edit <note> --stdin                 # replacement body piped in instead of --body
+shiki edit <note> --append "one more line"  # append instead of replace
+shiki edit <note> --append-stdin --json     # append text piped in; emits {"path":..,"title":..}
+shiki delete <note> --yes                 # trash-first delete (recoverable from the trash dir)
+shiki rename <note> "New title"           # renames + rewrites every inbound [[wikilink]] to it
+shiki rename <note> "New title" --no-rewrite-links  # renames only, leaves existing links as-is
+shiki move <note> work/meetings           # moves to notebook/path/within, any depth, any notebook
+shiki move <note> personal --copy         # copies instead of moving
+shiki tag <note> --add work,idea          # adds tags (dedupes)
+shiki tag <note> --remove idea            # removes tags
+shiki field <note> --set priority=3 --set status=pending  # custom frontmatter, same map `shiki query` reads
+shiki field <note> --unset status         # removes a custom field
+shiki folder create work/meetings/2026    # empty folder, any depth
+shiki folder delete work/meetings/2026 --yes
+shiki folder move work/meetings personal --copy
 shiki search <query>      # search and show results
+shiki search <query> --limit 20 --offset 20  # page 2 of results, 20 at a time
+shiki search <query> --no-limit --json       # every result in one call, no cap
 shiki capture "quick idea"       # near-instant note capture, no $EDITOR, no TUI drawn
 shiki capture "text" -n work     # capture into a specific notebook instead of default_notebook
 echo "piped idea" | shiki capture      # reads the text from stdin when no argument is given
@@ -505,10 +523,14 @@ shiki capture --undo                  # reverses the single most recent capture 
 shiki daemon                          # headless capture daemon (no TUI) — for systemd user services
 shiki new "title" --body "text"     # create non-interactively, no $EDITOR spawned
 shiki new "title" --stdin --tags work,idea  # body piped in, tags attached, still no $EDITOR
-shiki list --json         # list/search/show all take --json for scripting (list/search: array, show: object)
+shiki list --json         # list/search/show all take --json (show: one object; list/search/query/tasks/log: {total,offset,limit,returned,has_more,items})
+shiki list --limit 100 --offset 200  # page through a large notebook 100 at a time
+shiki index                # every notebook's note count + busiest folders/tags — no bodies, no titles
+shiki index -n work --json # same, scoped to one notebook — the first call for an agent exploring a setup
 shiki tasks               # every pending checkbox task across notebooks, urgency-sorted
 shiki tasks --overdue --count  # just the number — made for waybar/polybar/tmux status modules
 shiki tasks --today --json     # machine-readable, with due/overdue/location per task
+shiki tasks --no-limit          # every matching task, no 50-item cap (distinct from --all, which includes done tasks)
 shiki graph               # [[wikilink]] connection graph, force-directed, drawn in the terminal
 shiki graph -n work --json     # nodes/edges/orphans as JSON, for graphviz/d3/gephi
 shiki graph --width 120        # custom canvas width in columns (default: the terminal's own width)
@@ -519,7 +541,7 @@ shiki publish -n work --out report.pdf --theme dark   # custom path/theme; theme
 shiki sync                # git commit+push default notebook
 shiki sync -n work        # git sync in "work"
 shiki diff                # pending working-tree changes (also `shiki diff <note>` / `-n work`)
-shiki log                 # recent commits (also `shiki log <note>` / `-n work`)
+shiki log                 # recent commits (also `shiki log <note>` / `-n work`); --json/--limit/--offset/--no-limit too
 shiki config              # show config path
 shiki notebook create <name>
 shiki notebook list --json
@@ -555,6 +577,99 @@ given.
 matching an existing notebook; `data_dir` being a real directory, not just existing; two notebooks
 resolving to the same path on disk; `git.remote_template` containing its `{notebook}` placeholder;
 and `git.sign_commits` having an actual signing key configured (`git config user.signingkey`).
+
+**`delete`/`rename`/`move`/`tag`/`field`/`folder` are the CLI's full note/folder CRUD** — every
+`shiki-core` primitive the TUI already uses (`delete_note_at`, `rename_note_at` +
+`wikilinks::rewrite_links_to`, `move_note_to`/`copy_note_to`, `create_folder_in`/`delete_folder_at`/
+`move_folder_to`/`copy_folder_to`) reachable non-interactively, so a script or an AI agent can
+create → read → tag/field-set → query → update → move/rename → delete a note end to end without
+ever touching `$EDITOR` or the TUI. `field` writes into the same per-note `extra` frontmatter map
+`shiki query` filters/sorts on (values parsed as YAML scalars, so `--set priority=3` and
+`query 'where priority > 2'` agree on the type) — the six named fields (`title`/`date`/`tags`/
+`aliases`/`notebook`/`links`/`template`) are rejected there with a pointer at the command that
+actually owns each one. `rename` rewrites inbound `[[wikilinks]]` by default (`--no-rewrite-links`
+opts out) since there's no confirm dialog to ask on the command line, unlike the TUI's own rename
+flow. See `docs/documentation.html`'s "Built for scripts and AI agents" section, or `shiki
+<command> --help`, for the full non-interactive/scripting reference — not `AGENTS.md` at the repo
+root, which is a different document for a different audience (instructions for a coding agent
+*developing* shiki, not one *using* it to manage notes).
+
+Every command that touches an **encrypted** notebook's actual note content resolves the passphrase
+the same way: `SHIKI_PASSPHRASE` env var first (for scripts/agents/`shiki daemon`, no prompt at
+all), then an interactive hidden prompt — but only when stdin is genuinely a TTY — otherwise a
+clear error instead of hanging forever on a non-interactive stream. `shiki notebook encrypt`/
+`rekey` additionally read `SHIKI_NEW_PASSPHRASE` for the passphrase being *set* (taken as-is, no
+retype-to-confirm — there's no typo risk in a value that came from a variable). Cross-notebook
+commands (`query`/`tasks`/`graph`) are a known gap here: they walk every notebook via
+`NotebookStore::all_notes`, which never attaches crypto, so an encrypted notebook's notes show up
+garbled rather than decrypted or clearly skipped — there's no single passphrase that could unlock
+several differently-encrypted notebooks at once, and this hasn't been solved yet.
+
+**`list`/`search`/`query`/`tasks`/`log` are all paginated, on by default — a large notebook or a
+wide cross-notebook query can never dump everything into a script's or an AI agent's context in one
+call by accident.** `--limit <N>` (default 50) and `--offset <N>` (default 0) page through results;
+`--no-limit` removes the cap entirely when everything really is wanted in one call. `--json` output
+for these five wraps the array in `{"total", "offset", "limit", "returned", "has_more", "items"}`
+instead of a bare array, so a caller always knows whether to page further without a second request;
+plain-text output prints a `— showing 1–50 of 532 — continue with --offset 50 …` footer under a
+truncated page. (`shiki tasks --all` is a different flag entirely — "include already-done tasks" —
+not a pagination override; use `--no-limit` there for "no cap.") `shiki index [-n <notebook>]` is
+the companion piece: a structural overview (note count, busiest folders, busiest tags — never note
+bodies or titles) meant as the first call for an agent orienting itself in an unfamiliar shiki
+setup before deciding what to actually page through. It's bounded the same way in the other
+direction — folders and tags are capped to the busiest 25 each — so the index itself can never
+become the thing that gets dumped.
+
+---
+
+## MCP server (`shiki-mcp`)
+
+A separate binary, `shiki-mcp`, exposes the same note/notebook operations as the CLI — but as
+typed MCP (Model Context Protocol) tools an AI client calls directly with structured,
+schema-validated JSON arguments, over stdio, instead of shelling out to `shiki` and quoting/parsing
+text. It calls straight into `shiki-core` (the same domain logic the TUI and CLI already share),
+never the `shiki` binary itself — `shiki-mcp` is its own workspace member, siblings with
+`shiki-native-host`/`shiki-desktop`, and doesn't depend on `shiki-cli` at all.
+
+Register it with any MCP client by pointing at the built binary, stdio transport, no port or daemon
+to manage:
+
+```json
+{
+  "mcpServers": {
+    "shiki": { "command": "/path/to/shiki-mcp" }
+  }
+}
+```
+
+**28 tools**, one per operation, each with a real parameter schema (types, required/optional
+fields, per-field descriptions) instead of CLI flags to construct by hand:
+
+- **Read**: `list_notes`, `show_note`, `search_notes`, `query_notes`, `list_tasks`, `index`,
+  `list_notebooks`, `diff_notebook`, `log_notebook`, `doctor`.
+- **Write**: `new_note`, `edit_note`, `delete_note`, `rename_note`, `move_note`, `tag_note`,
+  `set_field`, `create_folder`, `delete_folder`, `move_folder`, `daily_note`.
+- **Git**: `sync_notebook` (commit + push, if enabled).
+- **Notebook management**: `create_notebook`, `rename_notebook`, `delete_notebook`,
+  `encrypt_notebook`, `decrypt_notebook`, `rekey_notebook`.
+
+Pagination (`limit`/`offset`/`no_limit`, default 50) and the `{total, offset, limit, returned,
+has_more, items}` response shape are identical to the CLI's own paginated commands — a client that
+learns to page through `list_notes` pages through `search_notes`/`query_notes`/`list_tasks`/
+`log_notebook` the same way, on either interface. `delete_note`/`delete_folder`/`delete_notebook`
+require an explicit `confirm: true` argument, the tool-call equivalent of the CLI's `--yes` gate.
+
+**Writes are never auto-committed** — same as the CLI, `new_note`/`edit_note`/etc. only write the
+file; nothing calls git. `sync_notebook` is what actually commits (and pushes, if that notebook's
+resolved sync policy has `auto_push` on) — the server's own tool descriptions tell the calling AI
+to call it after a batch of changes, since skipping it silently leaves everything as uncommitted
+working-tree state with no separate reminder.
+
+Encrypted notebooks resolve their passphrase from `SHIKI_PASSPHRASE` in the server process's own
+environment — the *only* source available here, since an MCP server is spawned headless by its
+client and never has a TTY to fall back to a prompt on, unlike the interactive CLI.
+`encrypt_notebook`/`rekey_notebook` additionally read `SHIKI_NEW_PASSPHRASE` for the passphrase
+being *set*, mirroring the CLI's own env-var scheme exactly.
 
 ---
 
@@ -645,6 +760,32 @@ TUI or a standalone process answered. It's meant to be managed by a service mana
 capture path live from boot even if no TUI is ever opened — rofi/waybar/browser captures just land
 on disk and every request is appended to the shared `shiki.log`. `shiki capture --check` reports
 "reachable" for either kind of daemon.
+
+**Task due-date reminders** (`general.enable_reminders`, on by default — toggle from `leader+s` →
+GENERAL → `enable_reminders`) fire a real OS desktop notification for every checkbox task
+(`- [ ] ... @due(YYYY-MM-DD)`) that's due today or newly overdue, exactly once per calendar day per
+task — in an already-running TUI *and* headless via `shiki daemon`, so reminders don't depend on
+happening to have the TUI open (the same background thread runs in both). A background thread wakes
+up every `reminder_check_interval_secs` (default 300 — 5 minutes; edits apply immediately, no
+restart) and scans every notebook the same way the tasks view (leader+`t`) and the daily agenda
+section do; a tiny on-disk dedup record (`~/.config/shiki/reminders-state.toml`) tracks which tasks
+already fired today so the same task doesn't notify again until tomorrow. Delivery goes through the
+OS's native notification facility (not a shelled-out `notify-send`/`osascript` string, so arbitrary
+task text can never break out of a quoted argument) — `shiki doctor` reports whether it's likely to
+actually appear on this machine.
+
+**Typing `@` in the inline editor opens a due-date/recurrence suggestion menu**
+(`general.due_date_autocomplete`, on by default), the same "trigger character opens a live-filtered
+popup" shape `[[wikilink]]` autocomplete and the `/`-menu already use — anchored under the cursor,
+flipping above it when there's no room below. It offers 14 curated entries: `@due(today)`,
+`@due(tomorrow)`, `@due(<weekday>)` for every day of the week, `@due(+1w)`, and
+`@every(day/week/month/year)` — every relative spec here is already understood by
+`shiki_core::tasks::parse_relative_due`/`parse_recurrence` and pinned to a real date the next time
+the note is saved, so the menu is purely a discoverability aid over vocabulary that already worked
+by hand. These same 14 entries are also regular `/`-menu commands (`slash_menu::date_builtins`,
+folded into `slash_menu::builtins`), searchable by trigger (`due-tomorrow`) or label ("Due tomorrow")
+and overridable via `[snippets.due-tomorrow]` exactly like any other snippet — so `/due` finds them
+too, not just `@`.
 
 **`shiki capture --voice` records the microphone and transcribes it locally with whisper.cpp**
 (`whisper-cli`, auto-fetched from ggml-org/whisper.cpp's release the first time it's needed, the
@@ -916,6 +1057,10 @@ skip_delete_confirm = false
 show_dates = false
 # Typing `[[` in the inline editor opens the wikilink autocomplete menu.
 wikilink_autocomplete = true
+# Typing `@` in the inline editor opens a due-date/recurrence suggestion
+# menu (@due(today)/@due(tomorrow)/weekday names/@every(...)). The same
+# entries always show up under the `/`-menu regardless of this setting.
+due_date_autocomplete = true
 # Creating a new daily note appends a "## Due today" section listing
 # pending/overdue tasks across every notebook (only on creation).
 daily_agenda = true
@@ -966,6 +1111,12 @@ attachments_dir = "attachments"
 # notebook per session. Off by default: this puts a network call behind
 # plain navigation, which otherwise never touches the network at all.
 auto_pull_on_switch = false
+# When true, a background thread scans every notebook for @due(...) tasks
+# due today or overdue and fires a real OS desktop notification for each,
+# once per calendar day — works in the TUI and headless via `shiki daemon`.
+enable_reminders = true
+# How often (seconds) the reminder checker re-scans while enabled.
+reminder_check_interval_secs = 300
 
 [keybindings]
 leader = "space"

@@ -126,15 +126,121 @@ enum Commands {
     List {
         #[arg(short = 'n', long)]
         notebook: Option<String>,
-        /// Emits a JSON array instead of plain text — for scripting.
+        /// Emits a JSON object (`{total, offset, limit, returned,
+        /// has_more, items}`) instead of plain text — for scripting.
         #[arg(long)]
         json: bool,
+        /// Caps how many notes come back (default 50) — a large notebook
+        /// can't be dumped into a script/agent's context in one call by
+        /// accident. Page through the rest with `--offset`.
+        #[arg(long, conflicts_with = "no_limit")]
+        limit: Option<usize>,
+        /// Skips this many notes before the page starts.
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        /// Removes the `--limit` cap — genuinely every note, in one call.
+        #[arg(long)]
+        no_limit: bool,
     },
-    /// Edits a note with $EDITOR
+    /// Edits a note. With no flags, opens $EDITOR (interactive). Any of
+    /// `--body`/`--stdin`/`--append`/`--append-stdin` writes the note
+    /// directly instead — non-interactive, for scripting/automation.
     Edit {
         note: String,
         #[arg(short, long)]
         notebook: Option<String>,
+        /// Replaces the note's whole body with this text, no $EDITOR.
+        #[arg(long, conflicts_with_all = ["stdin", "append", "append_stdin"])]
+        body: Option<String>,
+        /// Reads the replacement body from stdin instead of `--body`.
+        #[arg(long, conflicts_with_all = ["body", "append", "append_stdin"])]
+        stdin: bool,
+        /// Appends this text to the end of the note's body (on its own
+        /// line), instead of replacing it.
+        #[arg(long, conflicts_with_all = ["body", "stdin", "append_stdin"])]
+        append: Option<String>,
+        /// Reads the text to append from stdin instead of `--append`.
+        #[arg(long, conflicts_with_all = ["body", "stdin", "append"])]
+        append_stdin: bool,
+        /// Emits `{"path": ..., "title": ...}` after a non-interactive
+        /// edit instead of a plain sentence — for scripting. Ignored (and
+        /// nothing is printed) when none of the flags above are given,
+        /// since `$EDITOR` owns the terminal in that case.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Deletes a note — trash-first (recoverable by hand from
+    /// `{config_dir}/trash/<notebook>/`), same as the TUI's own note
+    /// delete. Irreversible-*feeling* enough that it requires `--yes`,
+    /// same gate as `notebook delete`.
+    Delete {
+        note: String,
+        #[arg(short, long)]
+        notebook: Option<String>,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Renames a note, rewriting every inbound `[[wikilink]]` to it by
+    /// default (the non-interactive equivalent of confirming "yes" on the
+    /// TUI's rename-with-links dialog).
+    Rename {
+        note: String,
+        new_title: String,
+        #[arg(short, long)]
+        notebook: Option<String>,
+        /// Skips the link rewrite — just changes this note's own title.
+        #[arg(long)]
+        no_rewrite_links: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Moves (or, with `--copy`, copies) a note to `notebook/path/within`,
+    /// any depth, any notebook — same address format as the TUI's `m`.
+    Move {
+        note: String,
+        destination: String,
+        #[arg(short, long)]
+        notebook: Option<String>,
+        /// Copies instead of moving — the source note is left in place.
+        #[arg(long)]
+        copy: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Adds/removes tags on a note's frontmatter. With neither flag, just
+    /// prints the note's current tags.
+    Tag {
+        note: String,
+        #[arg(short, long)]
+        notebook: Option<String>,
+        #[arg(long, value_delimiter = ',')]
+        add: Vec<String>,
+        #[arg(long, value_delimiter = ',')]
+        remove: Vec<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Sets/unsets custom frontmatter fields — the same `extra` map
+    /// `shiki query` filters/sorts on. Values are parsed as YAML scalars
+    /// (`3` -> int, `true` -> bool, else string), so `shiki field notes/x
+    /// --set priority=3` and `shiki query 'where priority > 2'` agree on
+    /// the field's type. Named fields (title/date/tags/etc.) are rejected
+    /// here — use the command that actually owns each one (see the error
+    /// message).
+    Field {
+        note: String,
+        #[arg(short, long)]
+        notebook: Option<String>,
+        /// `key=value`, repeatable.
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        set: Vec<String>,
+        /// A field name to remove, repeatable.
+        #[arg(long = "unset", value_name = "KEY")]
+        unset: Vec<String>,
+        #[arg(long)]
+        json: bool,
     },
     /// Shows the rendered contents of a note
     Show {
@@ -150,9 +256,19 @@ enum Commands {
         query: String,
         #[arg(short, long)]
         notebook: Option<String>,
-        /// Emits a JSON array instead of plain text — for scripting.
+        /// Emits a JSON object (`{total, offset, limit, returned,
+        /// has_more, items}`) instead of plain text — for scripting.
         #[arg(long)]
         json: bool,
+        /// Caps how many hits come back (default 50), best matches first.
+        #[arg(long, conflicts_with = "no_limit")]
+        limit: Option<usize>,
+        /// Skips this many hits before the page starts.
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        /// Removes the `--limit` cap — every hit, in one call.
+        #[arg(long)]
+        no_limit: bool,
     },
     /// Creates or opens today's daily note
     Daily {
@@ -180,6 +296,19 @@ enum Commands {
         note: Option<String>,
         #[arg(short = 'n', long)]
         notebook: Option<String>,
+        /// Emits a JSON object (`{total, offset, limit, returned,
+        /// has_more, items}`) instead of plain text — for scripting.
+        #[arg(long)]
+        json: bool,
+        /// Caps how many commits come back (default 50), most recent first.
+        #[arg(long, conflicts_with = "no_limit")]
+        limit: Option<usize>,
+        /// Skips this many commits before the page starts.
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        /// Removes the `--limit` cap — the whole history, in one call.
+        #[arg(long)]
+        no_limit: bool,
     },
     /// Exports every note in a notebook to a single HTML or Markdown file
     Export {
@@ -228,9 +357,20 @@ enum Commands {
         /// Prints just the number of matching tasks — for status bars.
         #[arg(long, conflicts_with = "json")]
         count: bool,
-        /// Emits a JSON array instead of plain text — for scripting.
+        /// Emits a JSON object (`{total, offset, limit, returned,
+        /// has_more, items}`) instead of plain text — for scripting.
         #[arg(long)]
         json: bool,
+        /// Caps how many tasks come back (default 50), most urgent first.
+        #[arg(long, conflicts_with = "no_limit")]
+        limit: Option<usize>,
+        /// Skips this many tasks before the page starts.
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        /// Removes the `--limit` cap — every matching task, in one call.
+        /// Not the same as `--all` above, which includes done tasks.
+        #[arg(long)]
+        no_limit: bool,
     },
     /// Renders the `[[wikilink]]` connection graph of your notes as a
     /// force-directed layout right in the terminal — hubs (`◉`) pull their
@@ -267,7 +407,32 @@ enum Commands {
         /// Prints just the number of matching notes — for status bars.
         #[arg(long, conflicts_with = "json")]
         count: bool,
-        /// Emits a JSON array instead of plain text — for scripting.
+        /// Emits a JSON object (`{total, offset, limit, returned,
+        /// has_more, items}`) instead of plain text — for scripting.
+        #[arg(long)]
+        json: bool,
+        /// Caps how many notes come back (default 50), in query-sorted order.
+        #[arg(long, conflicts_with = "no_limit")]
+        limit: Option<usize>,
+        /// Skips this many notes before the page starts.
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        /// Removes the `--limit` cap — every match, in one call.
+        #[arg(long)]
+        no_limit: bool,
+    },
+    /// Structural overview of your notebooks — counts, folders, and tags,
+    /// never note bodies — meant as the first call for an agent/script
+    /// orienting itself in an unfamiliar shiki setup before deciding what
+    /// to actually fetch with `list`/`search`/`query`. Always small and
+    /// bounded regardless of how large the underlying notebook(s) are:
+    /// folders and tags are capped to the busiest 25 each, with a flag
+    /// noting when something got cut.
+    Index {
+        /// Only this notebook (default: every notebook).
+        #[arg(short = 'n', long)]
+        notebook: Option<String>,
+        /// Emits JSON instead of plain text — for scripting.
         #[arg(long)]
         json: bool,
     },
@@ -285,6 +450,11 @@ enum Commands {
     Notebook {
         #[command(subcommand)]
         action: NotebookAction,
+    },
+    /// Creates/deletes/moves folders inside a notebook
+    Folder {
+        #[command(subcommand)]
+        action: FolderAction,
     },
     /// Lists or switches the color theme
     Theme {
@@ -390,6 +560,41 @@ enum NotebookAction {
     /// leaves the notes unencrypted on disk mid-operation.
     Rekey {
         name: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum FolderAction {
+    /// Creates an empty folder at any depth within a notebook.
+    Create {
+        path: String,
+        #[arg(short, long)]
+        notebook: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Recursively deletes a folder and everything inside it — no trash
+    /// (unlike a single-note delete), so it requires `--yes`.
+    Delete {
+        path: String,
+        #[arg(short, long)]
+        notebook: Option<String>,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Moves (or, with `--copy`, copies) a whole folder to
+    /// `notebook/path/within`, same address format as `shiki move`.
+    Move {
+        path: String,
+        destination: String,
+        #[arg(short, long)]
+        notebook: Option<String>,
+        #[arg(long)]
+        copy: bool,
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -570,14 +775,146 @@ fn main() -> Result<()> {
                 &tags,
             )
         }
-        Some(Commands::List { notebook, json }) => {
+        Some(Commands::List {
+            notebook,
+            json,
+            limit,
+            offset,
+            no_limit,
+        }) => {
             let notebook = ctx.notebook_name(notebook);
-            commands::list::run(&ctx.store, &notebook, json)
+            commands::list::run(
+                &ctx.store,
+                &ctx.config,
+                &notebook,
+                json,
+                offset,
+                commands::effective_limit(limit, no_limit),
+            )
         }
-        Some(Commands::Edit { note, notebook }) => {
+        Some(Commands::Edit {
+            note,
+            notebook,
+            body,
+            stdin,
+            append,
+            append_stdin,
+            json,
+        }) => {
             let notebook = ctx.notebook_name(notebook);
             let editor = ctx.resolve_editor();
-            commands::edit::run(&ctx.store, &notebook, &note, &editor)
+            let read_stdin = |what: &str| -> Result<String> {
+                use std::io::Read as _;
+                let mut buf = String::new();
+                std::io::stdin()
+                    .read_to_string(&mut buf)
+                    .with_context(|| format!("failed to read {what} from stdin"))?;
+                Ok(buf)
+            };
+            let edit_body = if stdin {
+                Some(commands::edit::EditBody::Replace(read_stdin("note body")?))
+            } else if let Some(body) = body {
+                Some(commands::edit::EditBody::Replace(body))
+            } else if append_stdin {
+                Some(commands::edit::EditBody::Append(read_stdin("append text")?))
+            } else {
+                append.map(commands::edit::EditBody::Append)
+            };
+            commands::edit::run(
+                &ctx.store,
+                &ctx.config,
+                &notebook,
+                &note,
+                &editor,
+                edit_body,
+                json,
+            )
+        }
+        Some(Commands::Delete {
+            note,
+            notebook,
+            yes,
+            json,
+        }) => {
+            let notebook = ctx.notebook_name(notebook);
+            commands::delete::run(&ctx.store, &ctx.config, &notebook, &note, yes, json)
+        }
+        Some(Commands::Rename {
+            note,
+            new_title,
+            notebook,
+            no_rewrite_links,
+            json,
+        }) => {
+            let notebook = ctx.notebook_name(notebook);
+            commands::rename::run(
+                &ctx.store,
+                &ctx.config,
+                &notebook,
+                &note,
+                &new_title,
+                !no_rewrite_links,
+                json,
+            )
+        }
+        Some(Commands::Move {
+            note,
+            destination,
+            notebook,
+            copy,
+            json,
+        }) => {
+            let notebook = ctx.notebook_name(notebook);
+            commands::r#move::run(
+                &ctx.store,
+                &ctx.config,
+                &notebook,
+                &note,
+                &destination,
+                copy,
+                json,
+            )
+        }
+        Some(Commands::Tag {
+            note,
+            notebook,
+            add,
+            remove,
+            json,
+        }) => {
+            let notebook = ctx.notebook_name(notebook);
+            commands::tag::run(
+                &ctx.store,
+                &ctx.config,
+                &notebook,
+                &note,
+                &add,
+                &remove,
+                json,
+            )
+        }
+        Some(Commands::Field {
+            note,
+            notebook,
+            set,
+            unset,
+            json,
+        }) => {
+            let notebook = ctx.notebook_name(notebook);
+            let mut ops = Vec::new();
+            for raw in set {
+                let (key, value) = raw.split_once('=').with_context(|| {
+                    format!("'--set {raw}' isn't `key=value` \u{2014} missing '='")
+                })?;
+                ops.push(commands::field::FieldOp::Set(
+                    key.to_string(),
+                    value.to_string(),
+                ));
+            }
+            for key in unset {
+                ops.push(commands::field::FieldOp::Unset(key));
+            }
+            commands::field::run(&ctx.store, &ctx.config, &notebook, &note, &ops, json)
         }
         Some(Commands::Show {
             note,
@@ -585,15 +922,26 @@ fn main() -> Result<()> {
             json,
         }) => {
             let notebook = ctx.notebook_name(notebook);
-            commands::show::run(&ctx.store, &notebook, &note, json)
+            commands::show::run(&ctx.store, &ctx.config, &notebook, &note, json)
         }
         Some(Commands::Search {
             query,
             notebook,
             json,
+            limit,
+            offset,
+            no_limit,
         }) => {
             let notebook = ctx.notebook_name(notebook);
-            commands::search::run(&ctx.store, &notebook, &query, json)
+            commands::search::run(
+                &ctx.store,
+                &ctx.config,
+                &notebook,
+                &query,
+                json,
+                offset,
+                commands::effective_limit(limit, no_limit),
+            )
         }
         Some(Commands::Daily { notebook }) => {
             let notebook = ctx.notebook_name(notebook);
@@ -615,11 +963,26 @@ fn main() -> Result<()> {
         }
         Some(Commands::Diff { note, notebook }) => {
             let notebook = ctx.notebook_name(notebook);
-            commands::diff::run(&ctx.store, &notebook, note.as_deref())
+            commands::diff::run(&ctx.store, &ctx.config, &notebook, note.as_deref())
         }
-        Some(Commands::Log { note, notebook }) => {
+        Some(Commands::Log {
+            note,
+            notebook,
+            json,
+            limit,
+            offset,
+            no_limit,
+        }) => {
             let notebook = ctx.notebook_name(notebook);
-            commands::log::run(&ctx.store, &notebook, note.as_deref())
+            commands::log::run(
+                &ctx.store,
+                &ctx.config,
+                &notebook,
+                note.as_deref(),
+                json,
+                offset,
+                commands::effective_limit(limit, no_limit),
+            )
         }
         Some(Commands::Export {
             notebook,
@@ -653,6 +1016,9 @@ fn main() -> Result<()> {
             all,
             count,
             json,
+            limit,
+            offset,
+            no_limit,
         }) => commands::tasks::run(
             &ctx.store,
             notebook.as_deref(),
@@ -663,6 +1029,8 @@ fn main() -> Result<()> {
             },
             json,
             count,
+            offset,
+            commands::effective_limit(limit, no_limit),
         ),
         Some(Commands::Graph {
             notebook,
@@ -675,6 +1043,9 @@ fn main() -> Result<()> {
             notebook,
             count,
             json,
+            limit,
+            offset,
+            no_limit,
         }) => {
             let dsl = match (dsl, saved) {
                 (Some(d), None) => d,
@@ -687,7 +1058,18 @@ fn main() -> Result<()> {
                 (None, None) => anyhow::bail!("provide a query string or --saved <name>"),
                 (Some(_), Some(_)) => unreachable!("clap enforces --saved conflicts_with dsl"),
             };
-            commands::query::run(&ctx.store, notebook.as_deref(), &dsl, json, count)
+            commands::query::run(
+                &ctx.store,
+                notebook.as_deref(),
+                &dsl,
+                json,
+                count,
+                offset,
+                commands::effective_limit(limit, no_limit),
+            )
+        }
+        Some(Commands::Index { notebook, json }) => {
+            commands::index::run(&ctx.store, &ctx.config, notebook.as_deref(), json)
         }
         Some(Commands::Config) => commands::config::run(),
         Some(Commands::Doctor) => unreachable!("handled before Context::load() above"),
@@ -713,6 +1095,43 @@ fn main() -> Result<()> {
             }
             NotebookAction::Rekey { name } => {
                 commands::notebook::rekey(&ctx.store, &mut ctx.config, &name)
+            }
+        },
+        Some(Commands::Folder { action }) => match action {
+            FolderAction::Create {
+                path,
+                notebook,
+                json,
+            } => {
+                let notebook = ctx.notebook_name(notebook);
+                commands::folder::create(&ctx.store, &ctx.config, &notebook, &path, json)
+            }
+            FolderAction::Delete {
+                path,
+                notebook,
+                yes,
+                json,
+            } => {
+                let notebook = ctx.notebook_name(notebook);
+                commands::folder::delete(&ctx.store, &ctx.config, &notebook, &path, yes, json)
+            }
+            FolderAction::Move {
+                path,
+                destination,
+                notebook,
+                copy,
+                json,
+            } => {
+                let notebook = ctx.notebook_name(notebook);
+                commands::folder::move_folder(
+                    &ctx.store,
+                    &ctx.config,
+                    &notebook,
+                    &path,
+                    &destination,
+                    copy,
+                    json,
+                )
             }
         },
         Some(Commands::Theme { action }) => match action {

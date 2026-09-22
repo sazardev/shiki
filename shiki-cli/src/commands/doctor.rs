@@ -234,6 +234,28 @@ pub fn run() -> Result<()> {
         );
     }
 
+    // Desktop notifications (`general.enable_reminders`) go through the
+    // OS's native notification facility, not an external binary — so
+    // there's no `on_path()` check to run. macOS/Windows are always
+    // reported available; Linux/BSD need a live D-Bus session, the one
+    // cheap thing worth checking for (`notifications_likely_available`).
+    if shiki_core::reminders::notifications_likely_available() {
+        r.pass(
+            "desktop notifications (task reminders)",
+            "available \u{2014} reminders can fire real OS notifications",
+        );
+    } else if config.general.enable_reminders {
+        r.warn(
+            "desktop notifications (task reminders)",
+            "no D-Bus session detected \u{2014} `enable_reminders` is on but notifications likely won't appear (needs a desktop session with a notification daemon running)",
+        );
+    } else {
+        r.pass(
+            "desktop notifications (task reminders)",
+            "not needed \u{2014} `enable_reminders` is off",
+        );
+    }
+
     // `whisper-cli` (whisper.cpp, used by `shiki capture --voice`) is
     // fetched automatically the first time it's needed if it's missing from
     // both `$PATH` and shiki's own cache — same self-healing state as

@@ -10,12 +10,16 @@ use anyhow::Result;
 use shiki_core::query::QueryRow;
 use shiki_core::NotebookStore;
 
+use super::{page_footer, page_json, paginate};
+
 pub fn run(
     store: &NotebookStore,
     notebook: Option<&str>,
     dsl: &str,
     json: bool,
     count: bool,
+    offset: usize,
+    limit: Option<usize>,
 ) -> Result<()> {
     let today = chrono::Local::now().date_naive();
     let pool = store.all_notes()?;
@@ -38,8 +42,9 @@ pub fn run(
         println!("{}", rows.len());
         return Ok(());
     }
+    let (page, total) = paginate(rows, offset, limit);
     if json {
-        let items: Vec<serde_json::Value> = rows
+        let items: Vec<serde_json::Value> = page
             .iter()
             .map(|r| {
                 let fields: serde_json::Map<String, serde_json::Value> = r
@@ -60,17 +65,28 @@ pub fn run(
                 })
             })
             .collect();
-        println!("{}", serde_json::to_string_pretty(&items)?);
+        println!(
+            "{}",
+            serde_json::to_string(&page_json(items, total, offset, limit))?
+        );
         return Ok(());
     }
 
-    if rows.is_empty() {
-        println!("(no matching notes)");
+    if page.is_empty() {
+        if total == 0 {
+            println!("(no matching notes)");
+        } else {
+            println!("(nothing at offset {offset} \u{2014} {total} matching note(s) total)");
+        }
         return Ok(());
     }
+    let shown = page.len();
     let color = std::io::stdout().is_terminal();
-    for r in &rows {
+    for r in &page {
         println!("{}", format_row(r, color));
+    }
+    if let Some(footer) = page_footer(shown, offset, total) {
+        println!("{footer}");
     }
     Ok(())
 }

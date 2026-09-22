@@ -1,16 +1,26 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
+use shiki_config::Config;
 use shiki_core::{NotebookStore, SearchEngine};
 
-pub fn run(store: &NotebookStore, notebook: &str, query: &str, json: bool) -> Result<()> {
-    let nb = store.get(notebook).with_context(|| {
-        format!("notebook '{notebook}' not found \u{2014} see `shiki notebook list`")
-    })?;
+use super::{get_notebook, page_footer, page_json, paginate, unlock_if_encrypted};
+
+pub fn run(
+    store: &NotebookStore,
+    config: &Config,
+    notebook: &str,
+    query: &str,
+    json: bool,
+    offset: usize,
+    limit: Option<usize>,
+) -> Result<()> {
+    let nb = unlock_if_encrypted(config, get_notebook(store, notebook)?)?;
     let notes = nb.all_notes_recursive()?;
     let mut engine = SearchEngine::new();
     let hits = engine.search(query, &notes);
+    let (page, total) = paginate(hits, offset, limit);
 
     if json {
-        let items: Vec<serde_json::Value> = hits
+        let items: Vec<serde_json::Value> = page
             .iter()
             .map(|hit| {
                 let note = &notes[hit.index];
@@ -24,17 +34,28 @@ pub fn run(store: &NotebookStore, notebook: &str, query: &str, json: bool) -> Re
                 })
             })
             .collect();
-        println!("{}", serde_json::to_string_pretty(&items)?);
+        println!(
+            "{}",
+            serde_json::to_string(&page_json(items, total, offset, limit))?
+        );
         return Ok(());
     }
 
-    if hits.is_empty() {
-        println!("(no results)");
+    if page.is_empty() {
+        if total == 0 {
+            println!("(no results)");
+        } else {
+            println!("(nothing at offset {offset} \u{2014} {total} result(s) total)");
+        }
         return Ok(());
     }
-    for hit in hits {
+    let shown = page.len();
+    for hit in page {
         let note = &notes[hit.index];
         println!("{}  ({})", note.frontmatter.title, note.file_stem());
+    }
+    if let Some(footer) = page_footer(shown, offset, total) {
+        println!("{footer}");
     }
     Ok(())
 }
