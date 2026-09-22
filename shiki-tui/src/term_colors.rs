@@ -59,7 +59,7 @@ pub fn query_fg_bg() -> Option<(Color, Color)> {
             revents: 0,
         };
         let ready = unsafe { libc::poll(&mut pfd, 1, remaining.as_millis() as i32) };
-        if ready <= 0 {
+        if ready <= 0 || pfd.revents & libc::POLLIN == 0 {
             break;
         }
         match tty.read(&mut chunk) {
@@ -81,7 +81,7 @@ pub fn query_fg_bg() -> Option<(Color, Color)> {
         events: libc::POLLIN,
         revents: 0,
     };
-    while unsafe { libc::poll(&mut pfd, 1, 0) } > 0 {
+    while unsafe { libc::poll(&mut pfd, 1, 0) } > 0 && pfd.revents & libc::POLLIN != 0 {
         match tty.read(&mut chunk) {
             Ok(0) | Err(_) => break,
             Ok(_) => {}
