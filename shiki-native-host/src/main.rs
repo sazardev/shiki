@@ -244,7 +244,8 @@ fn load_config_and_store() -> anyhow::Result<(Config, NotebookStore)> {
         Some(dir) => PathBuf::from(dir),
         None => Config::default_data_dir()?,
     };
-    let store = NotebookStore::new_with_custom_paths(data_dir, config.notebook_custom_paths());
+    let mut store = NotebookStore::new_with_custom_paths(data_dir, config.notebook_custom_paths());
+    store.extra_extensions = config.general.note_extra_extensions.clone();
     Ok((config, store))
 }
 
@@ -527,7 +528,8 @@ fn handle_undo() -> anyhow::Result<serde_json::Value> {
         Some(dir) => PathBuf::from(dir),
         None => Config::default_data_dir()?,
     };
-    let store = NotebookStore::new_with_custom_paths(data_dir, config.notebook_custom_paths());
+    let mut store = NotebookStore::new_with_custom_paths(data_dir, config.notebook_custom_paths());
+    store.extra_extensions = config.general.note_extra_extensions.clone();
     let _nb = store
         .get(&notebook)
         .map_err(|e| anyhow::anyhow!("notebook '{notebook}' not found: {e}"))?;

@@ -71,7 +71,9 @@ impl AppState {
                     .to_string()
             })?,
         };
-        let store = NotebookStore::new_with_custom_paths(data_dir, config.notebook_custom_paths());
+        let mut store =
+            NotebookStore::new_with_custom_paths(data_dir, config.notebook_custom_paths());
+        store.extra_extensions = config.general.note_extra_extensions.clone();
         Ok((config, store))
     }
 

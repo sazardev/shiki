@@ -347,7 +347,8 @@ pub(crate) fn perform_direct_undo(interactive: bool) -> Result<std::path::PathBu
         Some(dir) => std::path::PathBuf::from(dir),
         None => Config::default_data_dir()?,
     };
-    let store = NotebookStore::new_with_custom_paths(data_dir, config.notebook_custom_paths());
+    let mut store = NotebookStore::new_with_custom_paths(data_dir, config.notebook_custom_paths());
+    store.extra_extensions = config.general.note_extra_extensions.clone();
     let nb = store
         .get(&notebook)
         .with_context(|| format!("notebook '{notebook}' not found"))?;

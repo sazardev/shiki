@@ -316,6 +316,10 @@ impl App {
                 "reminder_check_interval_secs",
                 self.config.general.reminder_check_interval_secs.to_string(),
             ),
+            GeneralField::NoteExtraExtensions => (
+                "note_extra_extensions",
+                self.config.general.note_extra_extensions.join(", "),
+            ),
             GeneralField::UseFavoriteEditor
             | GeneralField::EnableCaptureDaemon
             | GeneralField::MouseDragSelection
@@ -462,7 +466,8 @@ impl App {
             | GeneralField::ChafaPath
             | GeneralField::PreviewImageScale
             | GeneralField::AttachmentsDir
-            | GeneralField::ReminderCheckIntervalSecs => return false,
+            | GeneralField::ReminderCheckIntervalSecs
+            | GeneralField::NoteExtraExtensions => return false,
         };
         self.save_config();
         self.set_status(format!("{label} -> {new_val}"));
@@ -5833,7 +5838,10 @@ impl App {
                     // (`pending_input_title = None; mode = Mode::Normal;`),
                     // which an early `return` from inside a nested macro would.
                     let label: Option<&'static str> = 'field: {
-                        if value.is_empty() && field != GeneralField::DefaultNoteSort {
+                        if value.is_empty()
+                            && field != GeneralField::DefaultNoteSort
+                            && field != GeneralField::NoteExtraExtensions
+                        {
                             self.set_status("unchanged (empty)".into());
                             break 'field None;
                         }
@@ -5920,6 +5928,16 @@ impl App {
                                     );
                                 }
                                 "reminder_check_interval_secs"
+                            }
+                            GeneralField::NoteExtraExtensions => {
+                                self.config.general.note_extra_extensions = value
+                                    .split(',')
+                                    .map(|e| e.trim().trim_start_matches('.').to_string())
+                                    .filter(|e| !e.is_empty())
+                                    .collect();
+                                self.store.extra_extensions =
+                                    self.config.general.note_extra_extensions.clone();
+                                "note_extra_extensions"
                             }
                             GeneralField::UseFavoriteEditor => "use_favorite_editor",
                             GeneralField::EnableCaptureDaemon => "enable_capture_daemon",

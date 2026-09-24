@@ -20,6 +20,16 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
   was for. New notes are still always created as `.md`; renaming a non-`.md` note preserves its
   original extension, original case included, instead of converting it to `.md`. (#96)
 
+- **`general.note_extra_extensions`** — a new Settings modal (GENERAL tab) option letting a
+  notebook treat arbitrary extra file extensions (source code, plain text, anything else shaped
+  like content with optional YAML frontmatter) as notes too, on top of the built-in
+  `md`/`mdx`/`txt`/`qmd`/`rmd`/`markdown` list — e.g. `py, org` to also pick up Python scripts or
+  Org-mode files. Empty by default (this is for genuinely user-chosen formats, not something shiki
+  opts a notebook into on its own), matched case-insensitively, edited as a comma-separated list
+  the same way every other GENERAL text field already is. `Notebook::with_extra_extensions`/
+  `NotebookStore::extra_extensions` propagate it to every `Notebook` a store hands out, and editing
+  it in the Settings modal takes effect immediately — no restart needed. (#96)
+
 ## [0.10.0] - 2026-09-22
 
 ### Added

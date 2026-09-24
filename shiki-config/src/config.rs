@@ -270,6 +270,18 @@ pub struct General {
     /// immediately, no restart needed.
     #[serde(default = "default_reminder_check_interval_secs")]
     pub reminder_check_interval_secs: u64,
+    /// Extra file extensions (no leading dot, e.g. `"py"`, `"org"`) a
+    /// notebook also treats as a note when listing/reading, on top of the
+    /// built-in `md`/`mdx`/`txt`/`qmd`/`rmd`/`markdown`. Empty by default —
+    /// this is for genuinely user-chosen formats (source code, plain text,
+    /// anything else already shaped like "content with optional YAML
+    /// frontmatter" that `Note::from_file` can parse), not something shiki
+    /// opts a notebook into on its own. Matched case-insensitively; a
+    /// leading dot typed by habit is tolerated (see `Notebook::
+    /// with_extra_extensions`). Editable from the Settings modal's GENERAL
+    /// tab as a comma-separated list.
+    #[serde(default)]
+    pub note_extra_extensions: Vec<String>,
 }
 
 impl Default for General {
@@ -307,6 +319,7 @@ impl Default for General {
             auto_pull_on_switch: false,
             enable_reminders: true,
             reminder_check_interval_secs: default_reminder_check_interval_secs(),
+            note_extra_extensions: Vec::new(),
         }
     }
 }
@@ -1887,7 +1900,11 @@ fn section_comment(line: &str) -> Option<&'static str> {
 #   for whether OS notifications are likely to work on this machine.
 # - reminder_check_interval_secs: how often (seconds) the reminder checker
 #   re-scans while enabled. Defaults to 300 (5 minutes); applies live to an
-#   already-running checker, no restart needed."
+#   already-running checker, no restart needed.
+# - note_extra_extensions: extra file extensions (no dot, e.g. \"py\", \"org\")
+#   a notebook also treats as a note when listing/reading, on top of the
+#   built-in md/mdx/txt/qmd/rmd/markdown. Empty by default; editable as a
+#   comma-separated list from the Settings modal's GENERAL tab."
         }
         "[keybindings]" => {
             "\

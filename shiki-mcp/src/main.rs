@@ -1006,7 +1006,8 @@ fn load_context() -> anyhow::Result<Shiki> {
         None => Config::default_data_dir()?,
     };
     let custom_paths = config.notebook_custom_paths();
-    let store = NotebookStore::new_with_custom_paths(data_dir, custom_paths);
+    let mut store = NotebookStore::new_with_custom_paths(data_dir, custom_paths);
+    store.extra_extensions = config.general.note_extra_extensions.clone();
     Ok(Shiki {
         store,
         config: std::sync::RwLock::new(config),

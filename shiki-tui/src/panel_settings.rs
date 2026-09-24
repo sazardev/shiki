@@ -95,10 +95,11 @@ pub enum GeneralField {
     AutoPullOnSwitch,
     EnableReminders,
     ReminderCheckIntervalSecs,
+    NoteExtraExtensions,
 }
 
 impl GeneralField {
-    pub const ALL: [GeneralField; 31] = [
+    pub const ALL: [GeneralField; 32] = [
         GeneralField::DefaultNotebook,
         GeneralField::Editor,
         GeneralField::DailyTemplate,
@@ -130,6 +131,7 @@ impl GeneralField {
         GeneralField::AutoPullOnSwitch,
         GeneralField::EnableReminders,
         GeneralField::ReminderCheckIntervalSecs,
+        GeneralField::NoteExtraExtensions,
     ];
 }
 
@@ -499,6 +501,15 @@ pub(crate) fn general_rows(app: &App) -> Vec<Line<'static>> {
             app,
             "reminder_check_interval_secs",
             cfg.general.reminder_check_interval_secs.to_string(),
+        ),
+        row_line(
+            app,
+            "note_extra_extensions",
+            if cfg.general.note_extra_extensions.is_empty() {
+                "(none)".to_string()
+            } else {
+                cfg.general.note_extra_extensions.join(", ")
+            },
         ),
     ]
 }

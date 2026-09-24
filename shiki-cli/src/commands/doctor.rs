@@ -364,7 +364,8 @@ pub fn run() -> Result<()> {
     }
 
     let custom_paths = config.notebook_custom_paths();
-    let store = NotebookStore::new_with_custom_paths(data_dir.clone(), custom_paths);
+    let mut store = NotebookStore::new_with_custom_paths(data_dir.clone(), custom_paths);
+    store.extra_extensions = config.general.note_extra_extensions.clone();
     // Set inside the `Ok` arm below — the git-identity check only matters
     // once there's something to commit into.
     let mut notebook_count = 0usize;

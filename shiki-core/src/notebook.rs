@@ -112,6 +112,14 @@ fn is_same_or_nested(source: &Path, dest: &Path) -> bool {
 /// extension (original case included) through rename/move/copy (see
 /// `rename_note_at`), rather than being silently converted to `.md` the
 /// first time it's touched from inside shiki.
+///
+/// This is the *built-in* list, fixed at compile time. A user can extend it
+/// further, per notebook-store instance, via `Notebook::with_extra_extensions`/
+/// `NotebookStore::with_extra_extensions` — e.g. to treat `.py`/`.org`/
+/// arbitrary code or text files as notes too. That path is for genuinely
+/// user-chosen, possibly-arbitrary extensions (configured in the Settings
+/// modal), so it stays separate from this compile-time list rather than
+/// growing this array itself.
 const NOTE_EXTENSIONS: [&str; 6] = ["md", "mdx", "txt", "qmd", "rmd", "markdown"];
 
 /// A notebook is a directory with its own git repo, containing notes with
@@ -138,6 +146,13 @@ pub struct Notebook {
     /// `NotebookStore::fs`); nothing outside `shiki-core` needs to touch
     /// this field directly.
     fs: std::sync::Arc<dyn crate::fs::FileStore>,
+    /// User-configured extensions (no leading dot, e.g. `"py"`) that
+    /// `list_dir` also treats as a note, on top of the built-in
+    /// `NOTE_EXTENSIONS`. Empty by default — `shiki-core` has no access to
+    /// `shiki-config`, so it can't read `general.note_extra_extensions`
+    /// itself; `shiki-tui`/`shiki-cli`/etc. resolve that and attach it via
+    /// `with_extra_extensions`, same reasoning as `crypto` above.
+    extra_extensions: Vec<String>,
 }
 
 // Same reasoning as `NotebookStore`'s manual `Debug` impl: `dyn FileStore`
@@ -149,6 +164,7 @@ impl std::fmt::Debug for Notebook {
             .field("path", &self.path)
             .field("crypto", &self.crypto)
             .field("fs", &"<dyn FileStore>")
+            .field("extra_extensions", &self.extra_extensions)
             .finish()
     }
 }
@@ -160,6 +176,7 @@ impl Notebook {
             path,
             crypto: None,
             fs: std::sync::Arc::new(crate::fs::LocalFs),
+            extra_extensions: Vec::new(),
         }
     }
 
@@ -178,6 +195,23 @@ impl Notebook {
     /// entirely) can use the same way.
     pub fn with_fs_backend(mut self, fs: std::sync::Arc<dyn crate::fs::FileStore>) -> Self {
         self.fs = fs;
+        self
+    }
+
+    /// Attaches the user's own extra note extensions (`general.
+    /// note_extra_extensions`, resolved by the caller — see the field's own
+    /// doc comment for why `shiki-core` can't read it directly), the same
+    /// propagation seam `with_fs_backend` already establishes. Values are
+    /// matched case-insensitively and without a leading dot, same as the
+    /// built-in `NOTE_EXTENSIONS`; a leading dot a user types by habit
+    /// (`.py` vs `py`) is stripped here rather than silently never
+    /// matching anything.
+    pub fn with_extra_extensions(mut self, extra: Vec<String>) -> Self {
+        self.extra_extensions = extra
+            .into_iter()
+            .map(|e| e.trim().trim_start_matches('.').to_string())
+            .filter(|e| !e.is_empty())
+            .collect();
         self
     }
 
@@ -222,7 +256,14 @@ impl Notebook {
             } else if path
                 .extension()
                 .and_then(|ext| ext.to_str())
-                .is_some_and(|ext| NOTE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+                .is_some_and(|ext| {
+                    let lower = ext.to_ascii_lowercase();
+                    NOTE_EXTENSIONS.contains(&lower.as_str())
+                        || self
+                            .extra_extensions
+                            .iter()
+                            .any(|e| e.eq_ignore_ascii_case(&lower))
+                })
             {
                 notes.push(Note::from_file_in_notebook_with_crypto_and_fs(
                     &path,
@@ -510,6 +551,14 @@ pub struct NotebookStore {
     /// `vcs` above; a future non-native consumer (no local disk) supplies
     /// its own `FileStore` via `new_with_backends`.
     fs: std::sync::Arc<dyn crate::fs::FileStore>,
+    /// User-configured extra note extensions (see `Notebook::
+    /// with_extra_extensions`), propagated to every `Notebook` this store
+    /// hands out. Empty by default, same shape as `custom_paths`: a plain
+    /// `pub` field a caller can mutate directly in place (`shiki-tui`'s
+    /// Settings modal does exactly this when the setting changes), not
+    /// just a constructor parameter — so an edit takes effect immediately
+    /// without needing to rebuild the whole store.
+    pub extra_extensions: Vec<String>,
 }
 
 // `dyn VcsPort`/`dyn FileStore` don't implement `Debug` on their own (that
@@ -524,6 +573,7 @@ impl std::fmt::Debug for NotebookStore {
             .field("custom_paths", &self.custom_paths)
             .field("vcs", &"<dyn VcsPort>")
             .field("fs", &"<dyn FileStore>")
+            .field("extra_extensions", &self.extra_extensions)
             .finish()
     }
 }
@@ -823,6 +873,7 @@ impl NotebookStore {
             custom_paths,
             vcs,
             fs,
+            extra_extensions: Vec::new(),
         }
     }
 
@@ -844,7 +895,9 @@ impl NotebookStore {
             if path.is_dir() {
                 seen.insert(name.clone());
                 notebooks.push(
-                    Notebook::new(name.clone(), path.clone()).with_fs_backend(self.fs.clone()),
+                    Notebook::new(name.clone(), path.clone())
+                        .with_fs_backend(self.fs.clone())
+                        .with_extra_extensions(self.extra_extensions.clone()),
                 );
             }
         }
@@ -871,7 +924,11 @@ impl NotebookStore {
                     .unwrap_or_default();
                 // Don't add a notebook twice if a custom path uses the same name
                 if seen.insert(name.clone()) {
-                    notebooks.push(Notebook::new(name, path).with_fs_backend(self.fs.clone()));
+                    notebooks.push(
+                        Notebook::new(name, path)
+                            .with_fs_backend(self.fs.clone())
+                            .with_extra_extensions(self.extra_extensions.clone()),
+                    );
                 }
             }
         }
@@ -900,7 +957,9 @@ impl NotebookStore {
         if !self.fs.is_dir(&path) {
             return Err(Error::NotebookNotFound(name.to_string()));
         }
-        Ok(Notebook::new(name, path).with_fs_backend(self.fs.clone()))
+        Ok(Notebook::new(name, path)
+            .with_fs_backend(self.fs.clone())
+            .with_extra_extensions(self.extra_extensions.clone()))
     }
 
     /// Creates a new notebook with its own git repo.
@@ -916,7 +975,9 @@ impl NotebookStore {
         }
         self.fs.create_dir_all(&path)?;
         self.vcs.init_repo(&path)?;
-        Ok(Notebook::new(name, path).with_fs_backend(self.fs.clone()))
+        Ok(Notebook::new(name, path)
+            .with_fs_backend(self.fs.clone())
+            .with_extra_extensions(self.extra_extensions.clone()))
     }
 
     pub fn rename(&self, old_name: &str, new_name: &str) -> Result<Notebook> {
@@ -946,7 +1007,9 @@ impl NotebookStore {
             return Err(Error::NotebookExists(new_name.to_string()));
         }
         self.fs.rename(&old_path, &new_path)?;
-        Ok(Notebook::new(new_name, new_path).with_fs_backend(self.fs.clone()))
+        Ok(Notebook::new(new_name, new_path)
+            .with_fs_backend(self.fs.clone())
+            .with_extra_extensions(self.extra_extensions.clone()))
     }
 
     pub fn delete(&self, name: &str) -> Result<()> {
@@ -1056,6 +1119,81 @@ mod tests {
             6,
             "non-note extensions must be excluded: {stems:?}"
         );
+    }
+
+    #[test]
+    fn list_dir_ignores_arbitrary_extensions_without_opt_in() {
+        let tmp = tempfile::tempdir().unwrap();
+        let nb = test_notebook(tmp.path(), "vault");
+        std::fs::write(nb.path.join("script.py"), "print('hi')").unwrap();
+
+        let (_, notes) = nb.list_dir(Path::new("")).unwrap();
+
+        assert!(
+            notes.is_empty(),
+            ".py must not show up by default: {notes:?}"
+        );
+    }
+
+    #[test]
+    fn with_extra_extensions_makes_list_dir_pick_up_user_configured_extensions() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("vault");
+        std::fs::create_dir_all(&path).unwrap();
+        let nb = Notebook::new("vault", path.clone())
+            .with_extra_extensions(vec!["py".to_string(), "org".to_string()]);
+        std::fs::write(path.join("script.py"), "print('hi')").unwrap();
+        std::fs::write(path.join("notes.org"), "* heading").unwrap();
+        std::fs::write(path.join("ignored.png"), []).unwrap();
+
+        let (_, notes) = nb.list_dir(Path::new("")).unwrap();
+        let stems: Vec<String> = notes.iter().map(|n| n.file_stem()).collect();
+
+        assert!(stems.contains(&"script".to_string()));
+        assert!(stems.contains(&"notes".to_string()));
+        assert_eq!(notes.len(), 2, "only opted-in extensions: {stems:?}");
+    }
+
+    #[test]
+    fn with_extra_extensions_matches_case_insensitively_and_strips_a_leading_dot() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("vault");
+        std::fs::create_dir_all(&path).unwrap();
+        // A user might type ".PY" or "PY" or "py" in the settings prompt —
+        // all should behave identically.
+        let nb = Notebook::new("vault", path.clone())
+            .with_extra_extensions(vec![".PY".to_string(), "  ".to_string()]);
+        std::fs::write(path.join("script.py"), "print('hi')").unwrap();
+
+        let (_, notes) = nb.list_dir(Path::new("")).unwrap();
+
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].file_stem(), "script");
+    }
+
+    #[test]
+    fn notebook_store_propagates_extra_extensions_to_every_notebook_it_hands_out() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut store =
+            NotebookStore::new_with_custom_paths(tmp.path().to_path_buf(), HashMap::new());
+        store.extra_extensions = vec!["py".to_string()];
+        let created = store.create("code").unwrap();
+        std::fs::write(created.path.join("script.py"), "print('hi')").unwrap();
+
+        // Through `create`'s return value...
+        let (_, notes) = created.list_dir(Path::new("")).unwrap();
+        assert_eq!(notes.len(), 1);
+
+        // ...and independently through `get`/`list`, which mint a fresh
+        // `Notebook` from the store rather than reusing `created`.
+        let fetched = store.get("code").unwrap();
+        let (_, notes) = fetched.list_dir(Path::new("")).unwrap();
+        assert_eq!(notes.len(), 1);
+
+        let listed = store.list().unwrap();
+        let code = listed.iter().find(|n| n.name == "code").unwrap();
+        let (_, notes) = code.list_dir(Path::new("")).unwrap();
+        assert_eq!(notes.len(), 1);
     }
 
     #[test]

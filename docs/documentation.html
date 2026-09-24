@@ -1092,7 +1092,11 @@ Content in **markdown**.
         static-site generators default to the verbose <code>.markdown</code> spelling. The
         extension match is case-insensitive (R Markdown's real convention is capital-R
         <code>.Rmd</code>). New notes are always created as <code>.md</code>; renaming a non-
-        <code>.md</code> note preserves its original extension, original case included.
+        <code>.md</code> note preserves its original extension, original case included. Beyond
+        this built-in list, <code>general.note_extra_extensions</code> (Settings modal → GENERAL)
+        lets a notebook treat arbitrary extra extensions — source code, plain text, anything else
+        shaped like content with optional YAML frontmatter — as notes too, for more support than
+        shiki ships with by default.
       </p>
     </div>
   </section>
@@ -1202,6 +1206,7 @@ Content in **markdown**.
           <tr><td><code>preview_image_scale</code></td><td><code>0.5</code></td><td>Fraction of the preview panel's width the rendered image art is drawn at (<code>(0.0, 1.0]</code>)</td></tr>
           <tr><td><code>attachments_dir</code></td><td><code>"attachments"</code></td><td>Folder (relative to the notebook root) where pasted clipboard images are saved; the inserted <code>![pasted-…](attachments/…)</code> link resolves from any note depth. An empty value falls back to <code>attachments</code></td></tr>
           <tr><td><code>auto_pull_on_switch</code></td><td><code>false</code></td><td>Switching to a notebook that has a remote configured triggers a background pull automatically (same footer spinner as manual <code>p</code>), once per notebook per session</td></tr>
+          <tr><td><code>note_extra_extensions</code></td><td><code>[]</code></td><td>Extra file extensions (no dot, e.g. <code>"py"</code>, <code>"org"</code>) a notebook also treats as a note alongside the built-in <code>md</code>/<code>mdx</code>/<code>txt</code>/<code>qmd</code>/<code>rmd</code>/<code>markdown</code> — matched case-insensitively. Editable as a comma-separated list from the Settings modal's GENERAL tab; takes effect immediately, no restart needed</td></tr>
         </tbody>
       </table>
       <div class="doc-callout">

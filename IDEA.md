@@ -1026,6 +1026,14 @@ original extension, original case included. Dot-directories are never listed or 
 beyond shiki's own `.git`, that keeps an adopted vault's `.obsidian/` (settings), `.trash/`, and
 friends from showing up as notebook folders.
 
+Beyond that built-in list, `general.note_extra_extensions` (Settings modal → GENERAL →
+`note_extra_extensions`, a comma-separated list, e.g. `py, org`) lets a notebook also treat
+arbitrary extra file types — source code, plain text, anything else already shaped like "content
+with optional YAML frontmatter" — as notes. Matched case-insensitively; a leading dot typed by
+habit (`.py` vs `py`) is tolerated. Empty by default: this is for genuinely user-chosen formats,
+not something shiki opts a notebook into on its own. Editing it in the Settings modal takes effect
+immediately, no restart needed.
+
 ---
 
 ## Included themes (37 built-in)

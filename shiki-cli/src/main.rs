@@ -680,7 +680,8 @@ impl Context {
                 .context("could not determine a default data directory (no $HOME/$XDG_DATA_HOME?) — set general.data_dir in config.toml")?,
         };
         let custom_paths = config.notebook_custom_paths();
-        let store = NotebookStore::new_with_custom_paths(data_dir, custom_paths);
+        let mut store = NotebookStore::new_with_custom_paths(data_dir, custom_paths);
+        store.extra_extensions = config.general.note_extra_extensions.clone();
         Ok(Self { config, store })
     }
 

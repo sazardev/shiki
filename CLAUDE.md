@@ -24,7 +24,7 @@ cargo test -p shiki-tui clicking_the_button_row   # single test by (substring of
 cargo audit                          # CI runs this too; ignore list is .cargo/audit.toml
 ```
 
-There are 500 `#[test]`s: 238 in `shiki-core`, 27 in `shiki-config`, 196 in `shiki-tui`, 33 in
+There are 504 `#[test]`s: 242 in `shiki-core`, 27 in `shiki-config`, 196 in `shiki-tui`, 33 in
 `shiki-cli`, plus 1 in `shiki-native-host` and 5 in `shiki-desktop` (`shiki-mcp` has none yet — its
 tool bodies are thin wrappers over already-tested `shiki-core` logic, verified instead by a manual
 stdio protocol smoke test) — `cargo test --workspace` is green. They're all inline `#[cfg(test)]`
