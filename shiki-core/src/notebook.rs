@@ -91,18 +91,28 @@ fn is_same_or_nested(source: &Path, dest: &Path) -> bool {
 }
 
 /// File extensions shiki treats as a note when listing a notebook's
-/// contents — `.md` (what shiki itself always creates), plus `.mdx` and
-/// `.txt` so a notebook pointed at an existing Obsidian vault (which
-/// commonly has both) shows those files too instead of silently hiding
-/// them, and `.qmd` so a notebook pointed at an existing Quarto project
-/// (the scientific-publishing notebook format — plain Markdown with YAML
-/// frontmatter, same shape shiki already parses) shows those too. This
-/// only affects *reading/listing* — new notes are always created as `.md`
-/// (`create_note_in`); an existing `.mdx`/`.txt`/`.qmd` file kept its own
-/// extension through rename/move/copy (see `rename_note_at`), rather than
-/// being silently converted to `.md` the first time it's touched from
-/// inside shiki.
-const NOTE_EXTENSIONS: [&str; 4] = ["md", "mdx", "txt", "qmd"];
+/// contents — `.md` (what shiki itself always creates), plus every other
+/// extension that's really just "Markdown with optional YAML frontmatter"
+/// under a different name, so a notebook pointed at an existing
+/// non-shiki directory shows those files too instead of silently hiding
+/// them: `.mdx` and `.txt` (an Obsidian vault commonly has both), `.qmd`
+/// (Quarto, the scientific-publishing notebook format), `.rmd` (R
+/// Markdown, Quarto's direct predecessor — same community, same shape),
+/// and `.markdown` (the verbose spelling some static-site generators,
+/// e.g. Jekyll, default to). None of these get any special
+/// treatment beyond being recognized at all — they're all the exact same
+/// shape `Note::from_file` already parses, no new parsing logic per
+/// extension. The match in `list_dir` lowercases the file's actual
+/// extension before comparing, so this list only needs the lowercase
+/// spelling once: R Markdown's real-world convention is `.Rmd` (capital
+/// R, lowercase `md`), not `.rmd` — without case-insensitive matching,
+/// adding `"rmd"` here wouldn't actually recognize the files it's for.
+/// This only affects *reading/listing* — new notes are always created as
+/// `.md` (`create_note_in`); an existing non-`.md` file kept its own
+/// extension (original case included) through rename/move/copy (see
+/// `rename_note_at`), rather than being silently converted to `.md` the
+/// first time it's touched from inside shiki.
+const NOTE_EXTENSIONS: [&str; 6] = ["md", "mdx", "txt", "qmd", "rmd", "markdown"];
 
 /// A notebook is a directory with its own git repo, containing notes with
 /// one of `NOTE_EXTENSIONS`' extensions (in practice, almost always `.md`).
@@ -180,9 +190,9 @@ impl Notebook {
     /// A note file (any of `NOTE_EXTENSIONS`) that doesn't parse as a shiki
     /// note (no `---` frontmatter — common in an imported/pre-existing
     /// repo, one from `nb`, a plain `.txt`/`.mdx` file from an Obsidian
-    /// vault, or a `.qmd` file from a Quarto project) still shows up:
-    /// `Note::from_file` synthesizes metadata for those rather than
-    /// failing, so nothing here needs to skip them.
+    /// vault, or a `.qmd`/`.rmd`/`.markdown` file from some other tool)
+    /// still shows up: `Note::from_file` synthesizes metadata for those
+    /// rather than failing, so nothing here needs to skip them.
     pub fn list_dir(&self, relative: &Path) -> Result<(Vec<String>, Vec<Note>)> {
         let dir = self.path.join(relative);
         if !self.fs.exists(&dir) {
@@ -212,7 +222,7 @@ impl Notebook {
             } else if path
                 .extension()
                 .and_then(|ext| ext.to_str())
-                .is_some_and(|ext| NOTE_EXTENSIONS.contains(&ext))
+                .is_some_and(|ext| NOTE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
             {
                 notes.push(Note::from_file_in_notebook_with_crypto_and_fs(
                     &path,
@@ -320,10 +330,11 @@ impl Notebook {
     }
 
     /// Renames the note at `path`, keeping it in the same folder and the
-    /// same file extension — a `.txt`/`.mdx`/`.qmd` note (see
-    /// `NOTE_EXTENSIONS`) renamed from inside shiki stays a `.txt`/`.mdx`/
-    /// `.qmd` file rather than being silently converted to `.md`, the one
-    /// extension shiki itself ever creates new notes with.
+    /// same file extension (original case included, e.g. a `.Rmd` file
+    /// stays `.Rmd`, not `.rmd`) — a non-`.md` note (see `NOTE_EXTENSIONS`)
+    /// renamed from inside shiki stays that same file type rather than
+    /// being silently converted to `.md`, the one extension shiki itself
+    /// ever creates new notes with.
     pub fn rename_note_at(&self, path: &Path, new_title: &str) -> Result<Note> {
         let mut note = Note::from_file_in_notebook_with_crypto_and_fs(
             path,
@@ -1017,13 +1028,18 @@ mod tests {
     }
 
     #[test]
-    fn list_dir_includes_txt_mdx_and_qmd_files_alongside_md() {
+    fn list_dir_includes_txt_mdx_qmd_rmd_and_markdown_files_alongside_md() {
         let tmp = tempfile::tempdir().unwrap();
         let nb = test_notebook(tmp.path(), "vault");
         nb.create_note("Shiki note", "body").unwrap();
         std::fs::write(nb.path.join("plain.txt"), "just text").unwrap();
         std::fs::write(nb.path.join("obsidian.mdx"), "# mdx content").unwrap();
         std::fs::write(nb.path.join("analysis.qmd"), "# quarto content").unwrap();
+        // Real-world R Markdown convention is capital-R `.Rmd`, not `.rmd` —
+        // this exercises the case-insensitive extension match, not just the
+        // lowercase spelling already in `NOTE_EXTENSIONS`.
+        std::fs::write(nb.path.join("report.Rmd"), "# r markdown content").unwrap();
+        std::fs::write(nb.path.join("post.markdown"), "# jekyll post").unwrap();
         std::fs::write(nb.path.join("ignored.png"), []).unwrap();
 
         let (_, notes) = nb.list_dir(Path::new("")).unwrap();
@@ -1033,9 +1049,11 @@ mod tests {
         assert!(stems.contains(&"plain".to_string()));
         assert!(stems.contains(&"obsidian".to_string()));
         assert!(stems.contains(&"analysis".to_string()));
+        assert!(stems.contains(&"report".to_string()));
+        assert!(stems.contains(&"post".to_string()));
         assert_eq!(
             notes.len(),
-            4,
+            6,
             "non-note extensions must be excluded: {stems:?}"
         );
     }
@@ -1087,6 +1105,24 @@ mod tests {
         let renamed = nb.rename_note_at(&path, "New Analysis").unwrap();
 
         assert_eq!(renamed.path.extension().unwrap(), "qmd");
+        assert!(!path.exists());
+        assert!(renamed.path.exists());
+    }
+
+    #[test]
+    fn rename_note_at_preserves_the_original_case_of_a_capital_r_rmd_extension() {
+        let tmp = tempfile::tempdir().unwrap();
+        let nb = test_notebook(tmp.path(), "vault");
+        let path = nb.path.join("old-report.Rmd");
+        std::fs::write(&path, "---\ntitle: Old\n---\ncontent").unwrap();
+
+        let renamed = nb.rename_note_at(&path, "New Report").unwrap();
+
+        assert_eq!(
+            renamed.path.extension().unwrap(),
+            "Rmd",
+            "must stay .Rmd, not be lowercased to .rmd"
+        );
         assert!(!path.exists());
         assert!(renamed.path.exists());
     }

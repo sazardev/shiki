@@ -8,13 +8,17 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ### Added
 
-- Notebooks now tolerate `.qmd` files (the Quarto scientific-publishing notebook format — plain
-  Markdown with YAML frontmatter, same shape shiki already parses) alongside `.md`/`.mdx`/`.txt`
-  when listing/reading notes (`Notebook::list_dir`'s `NOTE_EXTENSIONS`), the same way `.mdx`/`.txt`
-  support for Obsidian vaults landed in 0.9.0 — a notebook pointed at an existing Quarto project
-  now shows its `.qmd` files instead of silently hiding them. New notes are still always created
-  as `.md`; renaming a `.qmd` note preserves its original extension instead of converting it to
-  `.md`. (#96)
+- **Document-format compatibility patch**: notebooks now tolerate `.qmd` (Quarto), `.rmd` (R
+  Markdown, Quarto's direct predecessor), and `.markdown` (the verbose spelling some static-site
+  generators default to) files alongside `.md`/`.mdx`/`.txt` when listing/reading notes
+  (`Notebook::list_dir`'s `NOTE_EXTENSIONS`), the same way `.mdx`/`.txt` support for Obsidian
+  vaults landed in 0.9.0 — a notebook pointed at an existing Quarto/R-Markdown/Jekyll project now
+  shows those files instead of silently hiding them. All of these are just Markdown with optional
+  YAML frontmatter under a different name, so no new per-format parsing was needed. The extension
+  match is now case-insensitive, since R Markdown's real-world convention is capital-R `.Rmd`, not
+  `.rmd` — without that, adding `.rmd` to the list wouldn't have actually recognized the files it
+  was for. New notes are still always created as `.md`; renaming a non-`.md` note preserves its
+  original extension, original case included, instead of converting it to `.md`. (#96)
 
 ## [0.10.0] - 2026-09-22
 

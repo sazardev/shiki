@@ -1083,12 +1083,16 @@ Content in **markdown**.
         an error; it just won't resolve until you create one with that title.
       </p>
       <p style="max-width:70ch;">
-        Notebooks also tolerate <code>.txt</code>, <code>.mdx</code>, and <code>.qmd</code> files
-        alongside <code>.md</code> when listing/reading notes — a notebook pointed at an existing
-        Obsidian vault or similar commonly has the first two, and a Quarto scientific-publishing
-        project uses <code>.qmd</code>. New notes are always created as <code>.md</code>; renaming
-        a <code>.txt</code>/<code>.mdx</code>/<code>.qmd</code> note preserves its original
-        extension.
+        Notebooks also tolerate <code>.txt</code>, <code>.mdx</code>, <code>.qmd</code>,
+        <code>.rmd</code>, and <code>.markdown</code> files alongside <code>.md</code> when
+        listing/reading notes — a notebook pointed at an existing non-shiki directory shows those
+        too instead of silently hiding them: an Obsidian vault commonly has
+        <code>.txt</code>/<code>.mdx</code>, a Quarto scientific-publishing project uses
+        <code>.qmd</code>, R Markdown (Quarto's predecessor) uses <code>.rmd</code>, and some
+        static-site generators default to the verbose <code>.markdown</code> spelling. The
+        extension match is case-insensitive (R Markdown's real convention is capital-R
+        <code>.Rmd</code>). New notes are always created as <code>.md</code>; renaming a non-
+        <code>.md</code> note preserves its original extension, original case included.
       </p>
     </div>
   </section>
