@@ -1013,11 +1013,13 @@ Wikilinks also tolerate Obsidian's sub-address syntax — `[[note#heading]]` and
 resolve to `note` everywhere (the suffix is stripped before matching, never treated as part of the
 target text).
 
-Notebooks also tolerate `.txt` and `.mdx` files alongside `.md` when listing/reading notes — a
-notebook pointed at an existing Obsidian vault or similar commonly has both. New notes are always
-created as `.md`; renaming a `.txt`/`.mdx` note preserves its original extension. Dot-directories
-are never listed or descended into — beyond shiki's own `.git`, that keeps an adopted vault's
-`.obsidian/` (settings), `.trash/`, and friends from showing up as notebook folders.
+Notebooks also tolerate `.txt`, `.mdx`, and `.qmd` files alongside `.md` when listing/reading
+notes — a notebook pointed at an existing Obsidian vault or similar commonly has the first two,
+and a Quarto scientific-publishing project (plain Markdown with YAML frontmatter, same shape shiki
+already parses) uses `.qmd`. New notes are always created as `.md`; renaming a `.txt`/`.mdx`/`.qmd`
+note preserves its original extension. Dot-directories are never listed or descended into —
+beyond shiki's own `.git`, that keeps an adopted vault's `.obsidian/` (settings), `.trash/`, and
+friends from showing up as notebook folders.
 
 ---
 

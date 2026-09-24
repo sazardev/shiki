@@ -6,6 +6,16 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- Notebooks now tolerate `.qmd` files (the Quarto scientific-publishing notebook format — plain
+  Markdown with YAML frontmatter, same shape shiki already parses) alongside `.md`/`.mdx`/`.txt`
+  when listing/reading notes (`Notebook::list_dir`'s `NOTE_EXTENSIONS`), the same way `.mdx`/`.txt`
+  support for Obsidian vaults landed in 0.9.0 — a notebook pointed at an existing Quarto project
+  now shows its `.qmd` files instead of silently hiding them. New notes are still always created
+  as `.md`; renaming a `.qmd` note preserves its original extension instead of converting it to
+  `.md`. (#96)
+
 ## [0.10.0] - 2026-09-22
 
 ### Added

@@ -94,12 +94,15 @@ fn is_same_or_nested(source: &Path, dest: &Path) -> bool {
 /// contents — `.md` (what shiki itself always creates), plus `.mdx` and
 /// `.txt` so a notebook pointed at an existing Obsidian vault (which
 /// commonly has both) shows those files too instead of silently hiding
-/// them. This only affects *reading/listing* — new notes are always
-/// created as `.md` (`create_note_in`); an existing `.mdx`/`.txt` file kept
-/// its own extension through rename/move/copy (see `rename_note_at`),
-/// rather than being silently converted to `.md` the first time it's
-/// touched from inside shiki.
-const NOTE_EXTENSIONS: [&str; 3] = ["md", "mdx", "txt"];
+/// them, and `.qmd` so a notebook pointed at an existing Quarto project
+/// (the scientific-publishing notebook format — plain Markdown with YAML
+/// frontmatter, same shape shiki already parses) shows those too. This
+/// only affects *reading/listing* — new notes are always created as `.md`
+/// (`create_note_in`); an existing `.mdx`/`.txt`/`.qmd` file kept its own
+/// extension through rename/move/copy (see `rename_note_at`), rather than
+/// being silently converted to `.md` the first time it's touched from
+/// inside shiki.
+const NOTE_EXTENSIONS: [&str; 4] = ["md", "mdx", "txt", "qmd"];
 
 /// A notebook is a directory with its own git repo, containing notes with
 /// one of `NOTE_EXTENSIONS`' extensions (in practice, almost always `.md`).
@@ -176,9 +179,10 @@ impl Notebook {
     ///
     /// A note file (any of `NOTE_EXTENSIONS`) that doesn't parse as a shiki
     /// note (no `---` frontmatter — common in an imported/pre-existing
-    /// repo, one from `nb`, or a plain `.txt`/`.mdx` file from an Obsidian
-    /// vault) still shows up: `Note::from_file` synthesizes metadata for
-    /// those rather than failing, so nothing here needs to skip them.
+    /// repo, one from `nb`, a plain `.txt`/`.mdx` file from an Obsidian
+    /// vault, or a `.qmd` file from a Quarto project) still shows up:
+    /// `Note::from_file` synthesizes metadata for those rather than
+    /// failing, so nothing here needs to skip them.
     pub fn list_dir(&self, relative: &Path) -> Result<(Vec<String>, Vec<Note>)> {
         let dir = self.path.join(relative);
         if !self.fs.exists(&dir) {
@@ -316,10 +320,10 @@ impl Notebook {
     }
 
     /// Renames the note at `path`, keeping it in the same folder and the
-    /// same file extension — a `.txt`/`.mdx` note (see `NOTE_EXTENSIONS`)
-    /// renamed from inside shiki stays a `.txt`/`.mdx` file rather than
-    /// being silently converted to `.md`, the one extension shiki itself
-    /// ever creates new notes with.
+    /// same file extension — a `.txt`/`.mdx`/`.qmd` note (see
+    /// `NOTE_EXTENSIONS`) renamed from inside shiki stays a `.txt`/`.mdx`/
+    /// `.qmd` file rather than being silently converted to `.md`, the one
+    /// extension shiki itself ever creates new notes with.
     pub fn rename_note_at(&self, path: &Path, new_title: &str) -> Result<Note> {
         let mut note = Note::from_file_in_notebook_with_crypto_and_fs(
             path,
@@ -1013,12 +1017,13 @@ mod tests {
     }
 
     #[test]
-    fn list_dir_includes_txt_and_mdx_files_alongside_md() {
+    fn list_dir_includes_txt_mdx_and_qmd_files_alongside_md() {
         let tmp = tempfile::tempdir().unwrap();
         let nb = test_notebook(tmp.path(), "vault");
         nb.create_note("Shiki note", "body").unwrap();
         std::fs::write(nb.path.join("plain.txt"), "just text").unwrap();
         std::fs::write(nb.path.join("obsidian.mdx"), "# mdx content").unwrap();
+        std::fs::write(nb.path.join("analysis.qmd"), "# quarto content").unwrap();
         std::fs::write(nb.path.join("ignored.png"), []).unwrap();
 
         let (_, notes) = nb.list_dir(Path::new("")).unwrap();
@@ -1027,9 +1032,10 @@ mod tests {
         assert!(stems.contains(&"shiki-note".to_string()));
         assert!(stems.contains(&"plain".to_string()));
         assert!(stems.contains(&"obsidian".to_string()));
+        assert!(stems.contains(&"analysis".to_string()));
         assert_eq!(
             notes.len(),
-            3,
+            4,
             "non-note extensions must be excluded: {stems:?}"
         );
     }
@@ -1067,6 +1073,20 @@ mod tests {
         let renamed = nb.rename_note_at(&path, "New Name").unwrap();
 
         assert_eq!(renamed.path.extension().unwrap(), "txt");
+        assert!(!path.exists());
+        assert!(renamed.path.exists());
+    }
+
+    #[test]
+    fn rename_note_at_preserves_a_qmd_extension() {
+        let tmp = tempfile::tempdir().unwrap();
+        let nb = test_notebook(tmp.path(), "vault");
+        let path = nb.path.join("old-analysis.qmd");
+        std::fs::write(&path, "---\ntitle: Old\n---\ncontent").unwrap();
+
+        let renamed = nb.rename_note_at(&path, "New Analysis").unwrap();
+
+        assert_eq!(renamed.path.extension().unwrap(), "qmd");
         assert!(!path.exists());
         assert!(renamed.path.exists());
     }
