@@ -36,7 +36,7 @@ git2 = { version = "0.21", features = ["ssh", "https", "vendored-libgit2", "vend
 # = [...]`, never override `default-features` back to `true` once the root
 # says `false` — so this has to be the root's own default, not something
 # fixed per-member.
-comrak = { version = "0.55", default-features = false }
+comrak = { version = "0.59", default-features = false }
 syntect = "5"
 # Bundles ~150 extra syntect syntax definitions (from bat's asset collection)
 # on top of syntect's own bundled defaults — notably TypeScript/TSX, which
@@ -56,13 +56,13 @@ serde_json = "1"
 toml = "1.1"
 clap = { version = "4", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
-notify = "6"
+notify = "8"
 serde_yaml = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 regex = "1"
 walkdir = "2"
-zip = { version = "8", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 pulldown-cmark = "0.13"
 anyhow = "1"
 thiserror = "2"
