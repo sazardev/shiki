@@ -1,4 +1,4 @@
-use crate::app::{notebook_name_from_git_url, App};
+use crate::app::{notebook_name_from_git_url, App, Mode};
 use shiki_config::Config;
 use shiki_core::{Notebook, NotebookStore};
 
@@ -173,6 +173,35 @@ impl App {
         self.note_preview_cache = None;
         self.tag_index_cache = None;
         self.refresh_git_status();
+    }
+
+    /// Quiet period after the last filesystem event before reloading, so a
+    /// burst (a `git pull` rewriting many files, an editor's save-via-rename)
+    /// costs one reload instead of dozens.
+    const FS_RELOAD_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(300);
+
+    /// Called once per `run()` iteration. Keeps the watcher pointed at the
+    /// selected notebook and reloads the listing when files changed on disk.
+    /// The reload waits for `Mode::Normal` — in Edit/Insert/Visual it would
+    /// shuffle indices or caches out from under whatever's in progress — and
+    /// is simply picked up on a later iteration once the user is back.
+    pub(crate) fn poll_fs_watch(&mut self) {
+        let wanted = self.selected_notebook().map(|nb| nb.path.clone());
+        if self.fs_watch.as_ref().map(|w| &w.path) != wanted.as_ref() {
+            self.fs_watch = wanted.and_then(|p| crate::fs_watch::FsWatcher::new(&p));
+            self.fs_dirty_since = None;
+        }
+        if self.fs_watch.as_ref().is_some_and(|w| w.take_changed()) {
+            self.fs_dirty_since = Some(std::time::Instant::now());
+        }
+        let Some(since) = self.fs_dirty_since else {
+            return;
+        };
+        if since.elapsed() < Self::FS_RELOAD_DEBOUNCE || self.mode != Mode::Normal {
+            return;
+        }
+        self.fs_dirty_since = None;
+        self.refresh_notes_preserve_selection();
     }
 
     pub(crate) fn refresh_git_status(&mut self) {

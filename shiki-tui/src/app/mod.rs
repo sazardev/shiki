@@ -800,6 +800,13 @@ pub struct App {
     /// `poll_capture_channel` for a channel that's empty 99% of the time
     /// anyway.
     pub(crate) capture_rx: std::sync::mpsc::Receiver<crate::capture::CaptureRequest>,
+    /// Live-reload watcher for the selected notebook's directory; re-pointed
+    /// by `poll_fs_watch` whenever the selection moves to another notebook.
+    pub(crate) fs_watch: Option<crate::fs_watch::FsWatcher>,
+    /// When the last on-disk change was seen, while a reload is still owed.
+    /// Doubles as the debounce clock and as the "deferred" flag for changes
+    /// that arrive mid-edit/prompt.
+    pub(crate) fs_dirty_since: Option<std::time::Instant>,
     /// The sender half handed to the listener thread's clone the moment the
     /// daemon is actually spawned (see `set_capture_daemon_enabled`).
     pub(crate) capture_tx: std::sync::mpsc::Sender<crate::capture::CaptureRequest>,
@@ -1140,6 +1147,8 @@ impl App {
             spinner_frame: 0,
             capture_daemon: None,
             capture_rx,
+            fs_watch: None,
+            fs_dirty_since: None,
             capture_tx,
             reminder_checker: None,
         };
@@ -2664,6 +2673,7 @@ pub fn run<B: Backend<Error = io::Error>>(
         app.poll_history_count_channel();
         app.poll_image_art_channel();
         app.poll_capture_channel();
+        app.poll_fs_watch();
         app.poll_gh_preflight_channel();
         if app.sync_in_flight.is_some() {
             app.spinner_frame = app.spinner_frame.wrapping_add(1);
@@ -2713,7 +2723,7 @@ pub fn run<B: Backend<Error = io::Error>>(
                     // than Press, and filtering to `== Press` was silently
                     // swallowing those.
                     if key.kind != KeyEventKind::Release {
-                        app.on_key(key);
+                        app.on_key(crate::keybindings::normalize_altgr(key));
                     }
                 }
                 Event::Mouse(mouse) => app.on_mouse(mouse),

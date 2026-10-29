@@ -6,6 +6,31 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-29
+
+### Added
+
+- **Live reload when notes change on disk.** shiki now watches the selected notebook's directory
+  (`notify`, `shiki-tui/src/fs_watch.rs`) and re-lists NOTES when a file is created, edited, or
+  deleted by something else — another editor, a `git pull` from a shell, a sync tool — instead of
+  needing a manual reload. Events are debounced (300 ms) so a burst costs one reload, anything under
+  `.git` is ignored, and the reload only runs in Normal mode: a change that lands mid-edit,
+  mid-prompt, or mid-Visual-selection is held and applied once you're back, so it can't shuffle
+  indices out from under what you're doing. The selection is preserved across the reload. (#105)
+
+### Fixed
+
+- **AltGr key combinations (`[`, `#`, `@`, `{`, …) now type on layouts that need them.** Windows
+  terminals report AltGr as Ctrl+Alt, so those characters arrived with both modifiers set and every
+  handler — plus the inline editor, which only inserts unmodified characters — treated them as
+  shortcuts and dropped them. `keybindings::normalize_altgr` strips Ctrl+Alt from printable
+  non-letter characters at the one point key events enter the app; ASCII letters are left alone so
+  real Ctrl+Alt+letter bindings (e.g. Ctrl+Alt+I) still work. (#108)
+- **The cursor in text prompts (rename, new note, …) is placed correctly after wide Unicode
+  characters.** It was offset by the character count; CJK and emoji occupy two terminal cells, so
+  the cursor sat to the left of where the text actually ended. It now uses display width (masked
+  passphrase boxes still count one `*` per character). (#103)
+
 ### Added
 
 - **Document-format compatibility patch**: notebooks now tolerate `.qmd` (Quarto), `.rmd` (R
