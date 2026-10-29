@@ -12,6 +12,28 @@
       <link>https://sazardev.github.io/shiki/changelog.html</link>
     </image>
     <item>
+      <title>shiki v0.10.1</title>
+      <link>https://sazardev.github.io/shiki/changelog/0.10.1.html</link>
+      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.10.1.html</guid>
+      <pubDate>Thu, 29 Oct 2026 00:00:00 +0000</pubDate>
+      <description>Live reload when notes change on disk. shiki now watches the selected notebook&#x27;s directory (notify, shiki-tui/src/fs_watch.rs) and re-lists NOTES when a file…</description>
+      <content:encoded><![CDATA[<h4>Added</h4>
+<ul>
+<li><strong>Live reload when notes change on disk.</strong> shiki now watches the selected notebook&#x27;s directory (<code>notify</code>, <code>shiki-tui/src/fs_watch.rs</code>) and re-lists NOTES when a file is created, edited, or deleted by something else — another editor, a <code>git pull</code> from a shell, a sync tool — instead of needing a manual reload. Events are debounced (300 ms) so a burst costs one reload, anything under <code>.git</code> is ignored, and the reload only runs in Normal mode: a change that lands mid-edit, mid-prompt, or mid-Visual-selection is held and applied once you&#x27;re back, so it can&#x27;t shuffle indices out from under what you&#x27;re doing. The selection is preserved across the reload. (#105)</li>
+</ul>
+<h4>Fixed</h4>
+<ul>
+<li><strong>AltGr key combinations (<code>[</code>, <code>#</code>, <code>@</code>, <code>{</code>, …) now type on layouts that need them.</strong> Windows terminals report AltGr as Ctrl+Alt, so those characters arrived with both modifiers set and every handler — plus the inline editor, which only inserts unmodified characters — treated them as shortcuts and dropped them. <code>keybindings::normalize_altgr</code> strips Ctrl+Alt from printable non-letter characters at the one point key events enter the app; ASCII letters are left alone so real Ctrl+Alt+letter bindings (e.g. Ctrl+Alt+I) still work. (#108)</li>
+<li><strong>The cursor in text prompts (rename, new note, …) is placed correctly after wide Unicode characters.</strong> It was offset by the character count; CJK and emoji occupy two terminal cells, so the cursor sat to the left of where the text actually ended. It now uses display width (masked passphrase boxes still count one <code>*</code> per character). (#103)</li>
+</ul>
+<h4>Added</h4>
+<ul>
+<li><strong>Document-format compatibility patch</strong>: notebooks now tolerate <code>.qmd</code> (Quarto), <code>.rmd</code> (R Markdown, Quarto&#x27;s direct predecessor), and <code>.markdown</code> (the verbose spelling some static-site generators default to) files alongside <code>.md</code>/<code>.mdx</code>/<code>.txt</code> when listing/reading notes (<code>Notebook::list_dir</code>&#x27;s <code>NOTE_EXTENSIONS</code>), the same way <code>.mdx</code>/<code>.txt</code> support for Obsidian vaults landed in 0.9.0 — a notebook pointed at an existing Quarto/R-Markdown/Jekyll project now shows those files instead of silently hiding them. All of these are just Markdown with optional YAML frontmatter under a different name, so no new per-format parsing was needed. The extension match is now case-insensitive, since R Markdown&#x27;s real-world convention is capital-R <code>.Rmd</code>, not <code>.rmd</code> — without that, adding <code>.rmd</code> to the list wouldn&#x27;t have actually recognized the files it was for. New notes are still always created as <code>.md</code>; renaming a non-<code>.md</code> note preserves its original extension, original case included, instead of converting it to <code>.md</code>. (#96)</li>
+<li><strong><code>general.note_extra_extensions</code></strong> — a new Settings modal (GENERAL tab) option letting a notebook treat arbitrary extra file extensions (source code, plain text, anything else shaped like content with optional YAML frontmatter) as notes too, on top of the built-in <code>md</code>/<code>mdx</code>/<code>txt</code>/<code>qmd</code>/<code>rmd</code>/<code>markdown</code> list — e.g. <code>py, org</code> to also pick up Python scripts or Org-mode files. Empty by default (this is for genuinely user-chosen formats, not something shiki opts a notebook into on its own), matched case-insensitively, edited as a comma-separated list the same way every other GENERAL text field already is. <code>Notebook::with_extra_extensions</code>/ <code>NotebookStore::extra_extensions</code> propagate it to every <code>Notebook</code> a store hands out, and editing it in the Settings modal takes effect immediately — no restart needed. (#96)</li>
+</ul>]]></content:encoded>
+      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.10.1.png" type="image/png" />
+    </item>
+    <item>
       <title>shiki v0.10.0</title>
       <link>https://sazardev.github.io/shiki/changelog/0.10.0.html</link>
       <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.10.0.html</guid>

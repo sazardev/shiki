@@ -1,0 +1,158 @@
+<!--
+  Per-version release page template. `scripts/generate_release_pages.py`
+  fills in every {{PLACEHOLDER}} with plain string substitution and writes
+  the result to docs/changelog/0.10.1.html. Paths inside are written
+  relative to that output location (one level under docs/), i.e. `../css/`,
+  `../assets/`, `../index.html` etc. — not relative to this template file.
+
+  Unlike changelog.html (which fetches CHANGELOG.md live via JS so it can
+  never drift, see docs/js/main.js), this page's changelog body is baked in
+  statically at generation time — it has to be, since link-unfurlers (the
+  actual point of this page existing) read the raw HTML and never execute
+  JS, so the og:title/og:description/og:image and the visible content must
+  already be correct in the file as committed.
+-->
+<!DOCTYPE html>
+<html lang="en" data-theme="gruvbox-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>shiki v0.10.1 — Release notes</title>
+  <meta name="description" content="Live reload when notes change on disk. shiki now watches the selected notebook&#x27;s directory (notify, shiki-tui/src/fs_watch.rs) and re-lists NOTES when a file…" />
+  <meta name="keywords" content="shiki changelog, shiki v0.10.1, shiki release notes" />
+  <meta name="author" content="sazardev" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://sazardev.github.io/shiki/changelog/0.10.1.html" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://sazardev.github.io/shiki/changelog/0.10.1.html" />
+  <meta property="og:site_name" content="shiki" />
+  <meta property="og:title" content="shiki v0.10.1 — Release notes" />
+  <meta property="og:description" content="Live reload when notes change on disk. shiki now watches the selected notebook&#x27;s directory (notify, shiki-tui/src/fs_watch.rs) and re-lists NOTES when a file…" />
+  <meta property="og:image" content="https://sazardev.github.io/shiki/assets/og/0.10.1.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="shiki v0.10.1 — release card" />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="shiki v0.10.1 — Release notes" />
+  <meta name="twitter:description" content="Live reload when notes change on disk. shiki now watches the selected notebook&#x27;s directory (notify, shiki-tui/src/fs_watch.rs) and re-lists NOTES when a file…" />
+  <meta name="twitter:image" content="https://sazardev.github.io/shiki/assets/og/0.10.1.png" />
+  <meta name="twitter:image:alt" content="shiki v0.10.1 — release card" />
+
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+  <link rel="alternate" type="application/rss+xml" title="shiki changelog" href="../feed.xml" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/documentation.css" />
+
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "shiki v0.10.1 — Release notes", "description": "Live reload when notes change on disk. shiki now watches the selected notebook's directory (notify, shiki-tui/src/fs_watch.rs) and re-lists NOTES when a file…", "image": "https://sazardev.github.io/shiki/assets/og/0.10.1.png", "url": "https://sazardev.github.io/shiki/changelog/0.10.1.html", "mainEntityOfPage": {"@type": "WebPage", "@id": "https://sazardev.github.io/shiki/changelog/0.10.1.html"}, "author": {"@type": "Person", "name": "sazardev", "url": "https://github.com/sazardev"}, "publisher": {"@type": "Organization", "name": "shiki", "logo": {"@type": "ImageObject", "url": "https://sazardev.github.io/shiki/assets/favicon-512.png"}}, "datePublished": "2026-10-29", "dateModified": "2026-10-29"}</script>
+</head>
+<body class="doc-page">
+
+  <header class="topbar">
+    <div class="brand"><a href="../index.html" style="color:inherit;text-decoration:none;">shiki (私記)</a><span class="cursor"></span></div>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
+    <nav id="site-nav">
+      <a href="../index.html#themes">Themes</a>
+      <a href="../index.html#features">Features</a>
+      <a href="../index.html#install">Install</a>
+      <a href="../documentation.html">Docs</a>
+      <a href="../changelog.html" class="active">Changelog</a>
+      <a href="../press.html">Press</a>
+      <a href="https://github.com/sazardev/shiki">GitHub</a>
+      <span class="version-chip-wrap" id="version-chip-wrap">
+        <button type="button" class="pill pill-button" id="version-pill" hidden></button>
+        <div class="version-popover" id="version-popover" role="dialog" aria-label="What's new" hidden>
+          <div class="version-popover-header">
+            <strong>What's new</strong>
+            <a href="../changelog.html">Full changelog →</a>
+          </div>
+          <div class="version-popover-body changelog-body" id="version-popover-content">
+            <p class="changelog-loading">Loading changelog…</p>
+          </div>
+        </div>
+      </span>
+    </nav>
+  </header>
+
+  <section class="doc-hero">
+    <div class="container">
+      <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
+      <h1>shiki v0.10.1</h1>
+      <p class="muted" style="max-width: 66ch;">Released 2026-10-29.</p>
+      <div class="release-share-row">
+        <span class="release-share-label">Share:</span>
+        <a class="release-share-link" href="https://twitter.com/intent/tweet?text=shiki%20v0.10.1%3A%20Live%20reload%20when%20notes%20change%20on%20disk.%20shiki%20now%20watches%20the%20selected%20notebook%27s%20directory%20%28notify%2C%20shiki-tui%2Fsrc%2Ffs_watch.rs%29%20and%20re-lists%20NOTES%20when%20a%20file%E2%80%A6&amp;url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.10.1.html" target="_blank" rel="noopener">X</a>
+        <a class="release-share-link" href="https://bsky.app/intent/compose?text=shiki%20v0.10.1%3A%20Live%20reload%20when%20notes%20change%20on%20disk.%20shiki%20now%20watches%20the%20selected%20notebook%27s%20directory%20%28notify%2C%20shiki-tui%2Fsrc%2Ffs_watch.rs%29%20and%20re-lists%20NOTES%20when%20a%20file%E2%80%A6%20https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.10.1.html" target="_blank" rel="noopener">Bluesky</a>
+        <a class="release-share-link" href="https://www.reddit.com/submit?url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.10.1.html&amp;title=shiki%20v0.10.1%3A%20Live%20reload%20when%20notes%20change%20on%20disk.%20shiki%20now%20watches%20the%20selected%20notebook%27s%20directory%20%28notify%2C%20shiki-tui%2Fsrc%2Ffs_watch.rs%29%20and%20re-lists%20NOTES%20when%20a%20file%E2%80%A6" target="_blank" rel="noopener">Reddit</a>
+        <a class="release-share-link" href="https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.10.1.html&amp;t=shiki%20v0.10.1%3A%20Live%20reload%20when%20notes%20change%20on%20disk.%20shiki%20now%20watches%20the%20selected%20notebook%27s%20directory%20%28notify%2C%20shiki-tui%2Fsrc%2Ffs_watch.rs%29%20and%20re-lists%20NOTES%20when%20a%20file%E2%80%A6" target="_blank" rel="noopener">Hacker News</a>
+        <a class="release-share-link" href="https://wa.me/?text=shiki%20v0.10.1%3A%20Live%20reload%20when%20notes%20change%20on%20disk.%20shiki%20now%20watches%20the%20selected%20notebook%27s%20directory%20%28notify%2C%20shiki-tui%2Fsrc%2Ffs_watch.rs%29%20and%20re-lists%20NOTES%20when%20a%20file%E2%80%A6%20https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.10.1.html" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="release-share-link" href="https://t.me/share/url?url=https%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.10.1.html&amp;text=shiki%20v0.10.1%3A%20Live%20reload%20when%20notes%20change%20on%20disk.%20shiki%20now%20watches%20the%20selected%20notebook%27s%20directory%20%28notify%2C%20shiki-tui%2Fsrc%2Ffs_watch.rs%29%20and%20re-lists%20NOTES%20when%20a%20file%E2%80%A6" target="_blank" rel="noopener">Telegram</a>
+        <a class="release-share-link" href="mailto:?subject=shiki%20v0.10.1%20released&amp;body=shiki%20v0.10.1%3A%20Live%20reload%20when%20notes%20change%20on%20disk.%20shiki%20now%20watches%20the%20selected%20notebook%27s%20directory%20%28notify%2C%20shiki-tui%2Fsrc%2Ffs_watch.rs%29%20and%20re-lists%20NOTES%20when%20a%20file%E2%80%A6%0A%0Ahttps%3A%2F%2Fsazardev.github.io%2Fshiki%2Fchangelog%2F0.10.1.html">Email</a>
+        <button type="button" class="copy-btn copy-btn-inline" data-copy-text="🚀 shiki v0.10.1 is out — Live reload when notes change on disk. shiki now watches the selected notebook&#x27;s directory (notify, shiki-tui/src/fs_watch.rs) and re-lists NOTES when a file…
+
+https://sazardev.github.io/shiki/changelog/0.10.1.html
+
+#rustlang #TUI #opensource">Copy announcement</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container release-layout">
+      <div class="release-shot">
+        <div class="release-shot-frame">
+          <img src="../assets/screenshots/gruvbox-dark.png" alt="shiki v0.10.1, running in a terminal" loading="lazy" />
+        </div>
+      </div>
+      <div class="changelog-body release-notes">
+<h4>Added</h4>
+<ul>
+<li><strong>Live reload when notes change on disk.</strong> shiki now watches the selected notebook&#x27;s directory (<code>notify</code>, <code>shiki-tui/src/fs_watch.rs</code>) and re-lists NOTES when a file is created, edited, or deleted by something else — another editor, a <code>git pull</code> from a shell, a sync tool — instead of needing a manual reload. Events are debounced (300 ms) so a burst costs one reload, anything under <code>.git</code> is ignored, and the reload only runs in Normal mode: a change that lands mid-edit, mid-prompt, or mid-Visual-selection is held and applied once you&#x27;re back, so it can&#x27;t shuffle indices out from under what you&#x27;re doing. The selection is preserved across the reload. (#105)</li>
+</ul>
+<h4>Fixed</h4>
+<ul>
+<li><strong>AltGr key combinations (<code>[</code>, <code>#</code>, <code>@</code>, <code>{</code>, …) now type on layouts that need them.</strong> Windows terminals report AltGr as Ctrl+Alt, so those characters arrived with both modifiers set and every handler — plus the inline editor, which only inserts unmodified characters — treated them as shortcuts and dropped them. <code>keybindings::normalize_altgr</code> strips Ctrl+Alt from printable non-letter characters at the one point key events enter the app; ASCII letters are left alone so real Ctrl+Alt+letter bindings (e.g. Ctrl+Alt+I) still work. (#108)</li>
+<li><strong>The cursor in text prompts (rename, new note, …) is placed correctly after wide Unicode characters.</strong> It was offset by the character count; CJK and emoji occupy two terminal cells, so the cursor sat to the left of where the text actually ended. It now uses display width (masked passphrase boxes still count one <code>*</code> per character). (#103)</li>
+</ul>
+<h4>Added</h4>
+<ul>
+<li><strong>Document-format compatibility patch</strong>: notebooks now tolerate <code>.qmd</code> (Quarto), <code>.rmd</code> (R Markdown, Quarto&#x27;s direct predecessor), and <code>.markdown</code> (the verbose spelling some static-site generators default to) files alongside <code>.md</code>/<code>.mdx</code>/<code>.txt</code> when listing/reading notes (<code>Notebook::list_dir</code>&#x27;s <code>NOTE_EXTENSIONS</code>), the same way <code>.mdx</code>/<code>.txt</code> support for Obsidian vaults landed in 0.9.0 — a notebook pointed at an existing Quarto/R-Markdown/Jekyll project now shows those files instead of silently hiding them. All of these are just Markdown with optional YAML frontmatter under a different name, so no new per-format parsing was needed. The extension match is now case-insensitive, since R Markdown&#x27;s real-world convention is capital-R <code>.Rmd</code>, not <code>.rmd</code> — without that, adding <code>.rmd</code> to the list wouldn&#x27;t have actually recognized the files it was for. New notes are still always created as <code>.md</code>; renaming a non-<code>.md</code> note preserves its original extension, original case included, instead of converting it to <code>.md</code>. (#96)</li>
+<li><strong><code>general.note_extra_extensions</code></strong> — a new Settings modal (GENERAL tab) option letting a notebook treat arbitrary extra file extensions (source code, plain text, anything else shaped like content with optional YAML frontmatter) as notes too, on top of the built-in <code>md</code>/<code>mdx</code>/<code>txt</code>/<code>qmd</code>/<code>rmd</code>/<code>markdown</code> list — e.g. <code>py, org</code> to also pick up Python scripts or Org-mode files. Empty by default (this is for genuinely user-chosen formats, not something shiki opts a notebook into on its own), matched case-insensitively, edited as a comma-separated list the same way every other GENERAL text field already is. <code>Notebook::with_extra_extensions</code>/ <code>NotebookStore::extra_extensions</code> propagate it to every <code>Notebook</code> a store hands out, and editing it in the Settings modal takes effect immediately — no restart needed. (#96)</li>
+</ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="release-nav">
+    <div class="container release-nav-row">
+      <a href="0.10.0.html" class="release-nav-link">← v0.10.0</a>
+      <a href="../changelog.html" class="release-nav-link">All releases</a>
+      <a href="../changelog.html" class="release-nav-link release-nav-link--disabled">No newer release →</a>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/sazardev/shiki">GitHub</a>
+        <a href="https://github.com/sazardev/shiki/releases/tag/v0.10.1">GitHub Release</a>
+        <a href="https://github.com/sazardev/shiki/issues">Issues</a>
+        <a href="https://github.com/sazardev/shiki/blob/main/LICENSE">MIT License</a>
+        <a class="coffee-link" href="https://buymeacoffee.com/sazarcode">☕ Buy me a coffee</a>
+      </div>
+      <small>shiki (私記) — built by <a href="https://github.com/sazardev">sazardev</a>. Free and open source, forever.</small>
+    </div>
+  </footer>
+
+  <script src="../js/main.js"></script>
+</body>
+</html>
