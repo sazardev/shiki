@@ -33,5 +33,5 @@ rpassword.workspace = true
 regex.workspace = true
 arboard.workspace = true
 walkdir = "2"
-zip = { version = "8", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 tempfile.workspace = true

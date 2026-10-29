@@ -15,4 +15,16 @@
 # ]
 
 [advisories]
-ignore = []
+ignore = [
+    # zip <9 `extract()` follows symlinks / keeps SUID bits. The remaining copies are transitive
+    # (self_update pins zip 8; the 4.x copy comes from another upstream dep) — upstream hasn't
+    # moved to zip 9 yet. shiki's own direct use (shiki-cli's Notion import) is on zip 9, and
+    # self_update only extracts shiki's own release asset after a sha256 digest check.
+    # Remove these three once self_update / the other dependent release with zip >= 9.
+    "RUSTSEC-2026-0367",
+    "RUSTSEC-2026-0368",
+    "RUSTSEC-2026-0369",
+    # crypto-bigint 0.5.5 timing variability, via age -> p256/elliptic-curve (and hpke). Needs
+    # >= 0.7.6, a semver-incompatible bump that only upstream age can take. Remove once age updates.
+    "RUSTSEC-2026-0387",
+]

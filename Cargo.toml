@@ -11,7 +11,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.10.1"
+version = "0.10.2"
 edition = "2021"
 authors = ["Omar"]
 license = "MIT"
@@ -21,9 +21,9 @@ keywords = ["notes", "tui", "markdown", "git", "cli"]
 categories = ["command-line-utilities", "text-editors"]
 
 [workspace.dependencies]
-shiki-core = { path = "shiki-core", version = "0.10.1" }
-shiki-config = { path = "shiki-config", version = "0.10.1" }
-shiki-tui = { path = "shiki-tui", version = "0.10.1" }
+shiki-core = { path = "shiki-core", version = "0.10.2" }
+shiki-config = { path = "shiki-config", version = "0.10.2" }
+shiki-tui = { path = "shiki-tui", version = "0.10.2" }
 
 ratatui = "0.30"
 crossterm = "0.29"
@@ -62,7 +62,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 regex = "1"
 walkdir = "2"
-zip = { version = "8", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 pulldown-cmark = "0.13"
 anyhow = "1"
 thiserror = "2"
