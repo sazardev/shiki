@@ -28,6 +28,7 @@ unicode-width.workspace = true
 directories.workspace = true
 arboard.workspace = true
 png.workspace = true
+notify.workspace = true
 serde_yaml.workspace = true
 
 [dev-dependencies]

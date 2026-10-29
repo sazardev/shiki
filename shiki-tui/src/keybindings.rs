@@ -1,4 +1,4 @@
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use shiki_config::config::Keybindings as KeybindingsConfig;
 use std::collections::HashMap;
 
@@ -494,6 +494,27 @@ pub fn action_icon(action: Action) -> crate::icons::Icon {
     }
 }
 
+/// Windows terminals report AltGr as Ctrl+Alt, so a layout that types `[`,
+/// `#`, `@`, `{`… via AltGr arrives as `Char('[')` with CONTROL|ALT set — which
+/// every handler (and the textarea, which only inserts unmodified chars) then
+/// treats as a shortcut and drops. ASCII letters are left alone so the real
+/// Ctrl+Alt+<letter> bindings (e.g. Ctrl+Alt+I) keep working; any other
+/// printable char under Ctrl+Alt is overwhelmingly an AltGr composition.
+pub fn normalize_altgr(key: KeyEvent) -> KeyEvent {
+    let both = KeyModifiers::CONTROL | KeyModifiers::ALT;
+    match key.code {
+        KeyCode::Char(c)
+            if key.modifiers.contains(both) && !c.is_ascii_alphabetic() && !c.is_control() =>
+        {
+            KeyEvent {
+                modifiers: key.modifiers - both,
+                ..key
+            }
+        }
+        _ => key,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -635,5 +656,21 @@ mod tests {
         assert_eq!(describe_key(KeyCode::Tab), "tab");
         assert_eq!(describe_key(KeyCode::Esc), "esc");
         assert_eq!(describe_key(KeyCode::Backspace), "backspace");
+    }
+
+    #[test]
+    fn altgr_symbols_lose_ctrl_alt_but_letter_shortcuts_keep_them() {
+        let both = KeyModifiers::CONTROL | KeyModifiers::ALT;
+        let hash = normalize_altgr(KeyEvent::new(KeyCode::Char('#'), both));
+        assert_eq!(hash.modifiers, KeyModifiers::NONE);
+        let shifted = normalize_altgr(KeyEvent::new(
+            KeyCode::Char('€'),
+            both | KeyModifiers::SHIFT,
+        ));
+        assert_eq!(shifted.modifiers, KeyModifiers::SHIFT);
+        let italic = normalize_altgr(KeyEvent::new(KeyCode::Char('i'), both));
+        assert_eq!(italic.modifiers, both);
+        let ctrl_only = normalize_altgr(KeyEvent::new(KeyCode::Char('['), KeyModifiers::CONTROL));
+        assert_eq!(ctrl_only.modifiers, KeyModifiers::CONTROL);
     }
 }
