@@ -12,6 +12,18 @@
       <link>https://sazardev.github.io/shiki/changelog.html</link>
     </image>
     <item>
+      <title>shiki v0.10.2</title>
+      <link>https://sazardev.github.io/shiki/changelog/0.10.2.html</link>
+      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.10.2.html</guid>
+      <pubDate>Thu, 29 Oct 2026 00:00:00 +0000</pubDate>
+      <description>Dependency updates for new RUSTSEC advisories (CI&#x27;s cargo audit job had started failing). Bumped the patched, semver-compatible crates — pulldown-cmark 0.13.…</description>
+      <content:encoded><![CDATA[<h4>Security</h4>
+<ul>
+<li><strong>Dependency updates for new RUSTSEC advisories</strong> (CI&#x27;s <code>cargo audit</code> job had started failing). Bumped the patched, semver-compatible crates — <code>pulldown-cmark</code> 0.13.5 (exponential event growth with wikilinks enabled), <code>quinn-proto</code> 0.11.19, <code>rustls</code> 0.23.46, <code>rustls-webpki</code> 0.103.16, <code>webpki-roots</code>/<code>webpki-root-certs</code> 1.0.11, <code>libz-sys</code> 1.1.31, <code>tokio</code> 1.54.1 — and moved the direct <code>zip</code> dependency (Notion import) from 8 to 9. Advisories only upstream can fix (transitive <code>zip</code> &lt;9 via <code>self_update</code>, <code>crypto-bigint</code> via <code>age</code>) are allowlisted in <code>.cargo/audit.toml</code> with the condition for removing each entry.</li>
+</ul>]]></content:encoded>
+      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.10.2.png" type="image/png" />
+    </item>
+    <item>
       <title>shiki v0.10.1</title>
       <link>https://sazardev.github.io/shiki/changelog/0.10.1.html</link>
       <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.10.1.html</guid>
