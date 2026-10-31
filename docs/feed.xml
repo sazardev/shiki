@@ -12,6 +12,18 @@
       <link>https://sazardev.github.io/shiki/changelog.html</link>
     </image>
     <item>
+      <title>shiki v0.10.3</title>
+      <link>https://sazardev.github.io/shiki/changelog/0.10.3.html</link>
+      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.10.3.html</guid>
+      <pubDate>Fri, 30 Oct 2026 00:00:00 +0000</pubDate>
+      <description>macOS: startup no longer opens the Rename dialog with the terminal&#x27;s OSC 10/11 reply in the input. Darwin&#x27;s poll(2) reports POLLNVAL for /dev/tty (and other…</description>
+      <content:encoded><![CDATA[<h4>Fixed</h4>
+<ul>
+<li><strong>macOS: startup no longer opens the Rename dialog with the terminal&#x27;s OSC 10/11 reply in the input.</strong> Darwin&#x27;s <code>poll(2)</code> reports <code>POLLNVAL</code> for <code>/dev/tty</code> (and other tty/pty fds), so the startup color query returned before reading either answer; crossterm then parsed the late bytes as <code>Alt+]</code> plus stray characters — with NOTES focused, the <code>r</code> in <code>rgb:</code> triggered Rename. The readiness wait now uses <code>select(2)</code> on macOS (<code>shiki-tui/src/term_colors.rs</code>), the same workaround crossterm&#x27;s <code>filedescriptor</code> dependency uses, and the <code>&quot;auto&quot;</code> selection band resolves correctly there instead of always falling back to <code>darkgray</code>. (#114)</li>
+</ul>]]></content:encoded>
+      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.10.3.png" type="image/png" />
+    </item>
+    <item>
       <title>shiki v0.10.2</title>
       <link>https://sazardev.github.io/shiki/changelog/0.10.2.html</link>
       <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.10.2.html</guid>
