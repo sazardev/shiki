@@ -6,6 +6,16 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **macOS: startup no longer opens the Rename dialog with the terminal's OSC 10/11 reply in the
+  input.** Darwin's `poll(2)` reports `POLLNVAL` for `/dev/tty` (and other tty/pty fds), so the
+  startup color query returned before reading either answer; crossterm then parsed the late bytes
+  as `Alt+]` plus stray characters — with NOTES focused, the `r` in `rgb:` triggered Rename. The
+  readiness wait now uses `select(2)` on macOS (`shiki-tui/src/term_colors.rs`), the same
+  workaround crossterm's `filedescriptor` dependency uses, and the `"auto"` selection band resolves
+  correctly there instead of always falling back to `darkgray`. (#114)
+
 ## [0.10.2] - 2026-10-29
 
 ### Security
