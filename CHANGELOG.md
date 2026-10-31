@@ -6,6 +6,8 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-10-30
+
 ### Fixed
 
 - **macOS: startup no longer opens the Rename dialog with the terminal's OSC 10/11 reply in the
