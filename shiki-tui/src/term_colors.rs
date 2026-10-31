@@ -15,9 +15,19 @@
 //! source owns stdin, and an OSC response that lost the race with the timeout
 //! would otherwise be parsed as `Alt+]` plus stray characters and typed into
 //! the app.
+//!
+//! The readiness wait is `select(2)` on macOS rather than `poll(2)`: Darwin's
+//! `poll` reports `POLLNVAL` for `/dev/tty` and other tty/pty fds, so the
+//! query returned before reading either reply — which then reached crossterm
+//! as `Alt+]` plus stray characters (#93, #114). `select` handles those fds;
+//! crossterm's own `filedescriptor` dependency uses the same workaround.
 
 use ratatui::style::Color;
 
+#[cfg(unix)]
+use std::io::{Read, Write};
+#[cfg(unix)]
+use std::os::unix::io::{AsRawFd, RawFd};
 #[cfg(unix)]
 use std::time::{Duration, Instant};
 
@@ -36,30 +46,31 @@ pub const SELECTION_ALPHA_PERCENT: u8 = 20;
 /// answers in a format this doesn't recognize.
 #[cfg(unix)]
 pub fn query_fg_bg() -> Option<(Color, Color)> {
-    use std::io::{Read, Write};
-    use std::os::unix::io::AsRawFd;
-
     let mut tty = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
         .open("/dev/tty")
         .ok()?;
+    query_fg_bg_on(&mut tty, QUERY_TIMEOUT)
+}
+
+/// The I/O half of `query_fg_bg`, split out so the Unix unit tests can drive
+/// it over a socketpair instead of requiring a real controlling terminal.
+#[cfg(unix)]
+fn query_fg_bg_on<T: Read + Write + AsRawFd>(
+    tty: &mut T,
+    timeout: Duration,
+) -> Option<(Color, Color)> {
     tty.write_all(b"\x1b]10;?\x1b\\\x1b]11;?\x1b\\").ok()?;
     tty.flush().ok()?;
 
     let fd = tty.as_raw_fd();
-    let deadline = Instant::now() + QUERY_TIMEOUT;
+    let deadline = Instant::now() + timeout;
     let mut buf: Vec<u8> = Vec::new();
     let mut chunk = [0u8; 128];
     while Instant::now() < deadline {
         let remaining = deadline.saturating_duration_since(Instant::now());
-        let mut pfd = libc::pollfd {
-            fd,
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        let ready = unsafe { libc::poll(&mut pfd, 1, remaining.as_millis() as i32) };
-        if ready <= 0 || pfd.revents & libc::POLLIN == 0 {
+        if !wait_readable(fd, remaining) {
             break;
         }
         match tty.read(&mut chunk) {
@@ -76,12 +87,7 @@ pub fn query_fg_bg() -> Option<(Color, Color)> {
     // A response that arrived right at the deadline (or after both were
     // already parsed) must not be left in the tty queue for crossterm to
     // misparse as keystrokes — drain whatever is immediately available.
-    let mut pfd = libc::pollfd {
-        fd,
-        events: libc::POLLIN,
-        revents: 0,
-    };
-    while unsafe { libc::poll(&mut pfd, 1, 0) } > 0 && pfd.revents & libc::POLLIN != 0 {
+    while wait_readable(fd, Duration::ZERO) {
         match tty.read(&mut chunk) {
             Ok(0) | Err(_) => break,
             Ok(_) => {}
@@ -89,6 +95,68 @@ pub fn query_fg_bg() -> Option<(Color, Color)> {
     }
 
     parse_fg_bg(&buf)
+}
+
+/// Waits until `fd` is readable or `timeout` elapses, retrying if a signal
+/// interrupts the wait. `false` on timeout, error, or an fd `select(2)` can't
+/// represent.
+#[cfg(all(unix, target_os = "macos"))]
+fn wait_readable(fd: RawFd, timeout: Duration) -> bool {
+    if fd < 0 || fd as usize >= libc::FD_SETSIZE {
+        return false;
+    }
+    let deadline = Instant::now() + timeout;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let mut set: libc::fd_set = unsafe { std::mem::zeroed() };
+        let mut tv = libc::timeval {
+            tv_sec: remaining.as_secs() as _,
+            tv_usec: remaining.subsec_micros() as _,
+        };
+        let ready = unsafe {
+            libc::FD_ZERO(&mut set);
+            libc::FD_SET(fd, &mut set);
+            libc::select(
+                fd + 1,
+                &mut set,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                &mut tv,
+            )
+        };
+        if ready < 0 {
+            if std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted
+                && Instant::now() < deadline
+            {
+                continue;
+            }
+            return false;
+        }
+        return ready > 0 && unsafe { libc::FD_ISSET(fd, &set) };
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn wait_readable(fd: RawFd, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let mut pfd = libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        let ready = unsafe { libc::poll(&mut pfd, 1, remaining.as_millis() as i32) };
+        if ready < 0 {
+            if std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted
+                && Instant::now() < deadline
+            {
+                continue;
+            }
+            return false;
+        }
+        return ready > 0 && pfd.revents & libc::POLLIN != 0;
+    }
 }
 
 /// Non-Unix builds have no `/dev/tty`/OSC path wired up — the `"auto"`
@@ -263,5 +331,41 @@ mod tests {
         assert_eq!(blend_fg_over_bg(fg, bg, 100), fg);
         // Clamped rather than wrapping.
         assert_eq!(blend_fg_over_bg(fg, bg, 255), fg);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reads_a_delayed_terminal_reply() {
+        use std::io::Read;
+        use std::os::unix::net::UnixStream;
+        use std::thread;
+
+        let (mut app, mut terminal) = UnixStream::pair().unwrap();
+        let responder = thread::spawn(move || {
+            let mut query = [0u8; 16];
+            terminal.read_exact(&mut query).unwrap();
+            assert_eq!(&query, b"\x1b]10;?\x1b\\\x1b]11;?\x1b\\");
+            thread::sleep(Duration::from_millis(10));
+            terminal
+                .write_all(b"\x1b]10;rgb:ebeb/dbdb/b2b2\x1b\\\x1b]11;rgb:2828/2828/2828\x1b\\")
+                .unwrap();
+        });
+
+        let reply = query_fg_bg_on(&mut app, Duration::from_secs(2));
+        responder.join().unwrap();
+
+        assert_eq!(
+            reply,
+            Some((Color::Rgb(0xeb, 0xdb, 0xb2), Color::Rgb(0x28, 0x28, 0x28)))
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn returns_none_when_no_reply_arrives() {
+        use std::os::unix::net::UnixStream;
+
+        let (mut app, _terminal) = UnixStream::pair().unwrap();
+        assert_eq!(query_fg_bg_on(&mut app, Duration::from_millis(20)), None);
     }
 }

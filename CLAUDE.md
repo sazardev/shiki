@@ -472,8 +472,13 @@ has both slots as `"reset"`, `shiki-cli/src/tui.rs` queries the terminal's real 
 OSC 10/11 once at startup (`shiki-tui/src/term_colors.rs`: `/dev/tty` directly, not stdin, so a
 reply that loses the race with the 120 ms timeout can't be misparsed by crossterm as `Alt+]` plus
 stray characters; a final non-blocking drain catches late ones) and `App::set_terminal_colors`
-stores the pair. A terminal that never answers (tmux without `allow-passthrough`, a non-VT console,
-Windows) falls back to the old fixed `DarkGray`, so nothing regresses. `selection_fg` returns the
+stores the pair. That readiness wait is `select(2)` on macOS, not `poll(2)`: Darwin's `poll`
+reports `POLLNVAL` for `/dev/tty` and other tty/pty fds, so the query returned before reading
+either reply — the late bytes then reached crossterm as `Alt+]` plus stray characters, and with
+NOTES focused the `r` in `rgb:` opened the Rename dialog on startup (#93, #114). `select` handles
+those fds; crossterm's own `filedescriptor` dependency uses the same workaround. A terminal that
+never answers (tmux without `allow-passthrough`, a non-VT console, Windows) falls back to the old
+fixed `DarkGray`, so nothing regresses. `selection_fg` returns the
 theme's `fg` instead of `accent` for `"auto"`: `default`'s `accent` is a bare ANSI name (`blue`)
 whose palette entry can be nearly the same darkness as the band — Ghostty's *Aether* scheme
 resolves it to `#ad2222`, ~1.6:1 against the blend — while `fg` on a band derived from `fg` is
