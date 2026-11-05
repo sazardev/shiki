@@ -60,7 +60,7 @@ always recorded against that release's own binary — not a workflow from severa
 These update automatically after every release (`update-screenshots` job in
 [`release.yml`](.github/workflows/release.yml)), so they always reflect the current version — not
 a screenshot from three releases ago. All 37 built-in themes have a live, interactive preview on
-the [website](https://sazardev.github.io/shiki/#themes).
+the [website](https://shiki.sazardev.stream/#themes).
 
 ## Features
 

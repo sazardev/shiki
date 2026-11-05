@@ -2,14 +2,14 @@
 <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>shiki (私記) — Changelog</title>
-    <link>https://sazardev.github.io/shiki/changelog.html</link>
-    <atom:link href="https://sazardev.github.io/shiki/feed.xml" rel="self" type="application/rss+xml" />
+    <link>https://shiki.sazardev.stream/changelog.html</link>
+    <atom:link href="https://shiki.sazardev.stream/feed.xml" rel="self" type="application/rss+xml" />
     <description>Every shiki release, in full — new features, real fixes, the occasional oops.</description>
     <language>en-us</language>
     <image>
-      <url>https://sazardev.github.io/shiki/assets/favicon-512.png</url>
+      <url>https://shiki.sazardev.stream/assets/favicon-512.png</url>
       <title>shiki (私記) — Changelog</title>
-      <link>https://sazardev.github.io/shiki/changelog.html</link>
+      <link>https://shiki.sazardev.stream/changelog.html</link>
     </image>
     <item>
       <title>shiki v0.10.3</title>
@@ -131,8 +131,8 @@
     </item>
     <item>
       <title>shiki v0.9.5</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.9.5.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.9.5.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.9.5.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.9.5.html</guid>
       <pubDate>Thu, 27 Aug 2026 00:00:00 +0000</pubDate>
       <description>shiki Desktop reaches full keyboard-driven feature parity with the TUI: which-key, global search, outline, tags, tree view, query, git dashboard, tasks, link…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -145,12 +145,12 @@
 <li><strong>shiki Desktop: theme selection didn&#x27;t persist across a webview reload that didn&#x27;t restart the whole process</strong> — the in-memory config was loaded once at startup and never mutated, so <code>set_theme</code>/<code>save_full_config</code>/<code>toggle_favorite_editor</code> wrote <code>config.toml</code> correctly but a reload kept showing the stale in-memory theme. Config/store are now mutex-wrapped so a change touches memory and disk together.</li>
 <li><strong>Capture daemon: the port file is now PID-aware and detects stale entries</strong> — a crashed TUI process used to leave a <code>capture.port</code> pointing at a port nobody was listening on, requiring the client to time out before falling back; the file now also records the writer&#x27;s PID, and both <code>shiki capture</code> and <code>shiki doctor</code> check the PID&#x27;s liveness first, cleaning up and falling back immediately when it&#x27;s stale instead of hanging.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.9.5.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.9.5.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.9.4</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.9.4.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.9.4.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.9.4.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.9.4.html</guid>
       <pubDate>Wed, 26 Aug 2026 00:00:00 +0000</pubDate>
       <description>shiki Desktop is now actually usable — the Tauri + Svelte 5 GUI (shiki-desktop) gained its first real working surface on top of the F0 scaffold, reusing the…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -161,12 +161,12 @@
 <ul>
 <li>The desktop crate&#x27;s image-path unit test was platform-dependent (Linux vs Windows path separators) and failed on the Windows CI matrix; it now asserts against the same single-join behavior the renderer uses.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.9.4.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.9.4.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.9.3</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.9.3.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.9.3.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.9.3.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.9.3.html</guid>
       <pubDate>Wed, 26 Aug 2026 00:00:00 +0000</pubDate>
       <description>Git onboarding: creating a plain notebook in the TUI (when git.remote_template isn&#x27;t configured) now asks once — &quot;Git remote (URL or local path, empty = skip…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -196,12 +196,12 @@
 <li>Every CLI subcommand launched the TUI instead of running: the pre-config extension check called <code>cli.command.take()</code> unconditionally, consuming whatever command was parsed and leaving <code>None</code> behind — which the dispatch reads as &quot;no args, launch TUI&quot;. The take is now guarded so only a genuine <code>Extension</code> command is consumed.</li>
 <li>The merge-conflict resolver modal (auto-opened when a pull comes back with conflicts, reopenable any time with <code>p</code> while mid-merge) gained <code>i</code> — edit inline: loads the conflicted file&#x27;s raw content into the normal inline editor, and saving writes it back and stages it as that file&#x27;s resolution, the same bookkeeping <code>o</code>/<code>t</code>/<code>e</code> trigger. Removing conflict markers no longer requires an external editor.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.9.3.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.9.3.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.9.2</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.9.2.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.9.2.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.9.2.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.9.2.html</guid>
       <pubDate>Thu, 20 Aug 2026 00:00:00 +0000</pubDate>
       <description>The theme picker (leader+c) grew a live filter box: type to narrow the list case-insensitively (same behavior as the which-key modal), Esc clears the query b…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -220,12 +220,12 @@
 <li><code>!<a href="path" target="_blank" rel="noopener">alt</a></code> images that stand alone on their own line render as real terminal art in PREVIEW via <code>chafa</code> (external binary, ANSI-colored half-block output parsed into styled rows that scroll with the panel). <code>[general] preview_images</code> (on by default), <code>chafa_path</code> (absolute path when it isn&#x27;t on <code>$PATH</code>), and <code>preview_image_scale</code> (fraction of the panel width) control it; paths resolve against the note&#x27;s folder, the notebook root, then <code>data_dir</code>. When <code>chafa</code> is missing or the file doesn&#x27;t exist, the previous icon+alt rendering is kept, and an image embedded mid-line always stays that way. <code>shiki doctor</code> reports whether <code>chafa</code> is available.</li>
 <li>Three new built-in themes from League of Legends champion palettes (<code>shiki theme list</code> shows them, the theme picker live-previews them): <strong>LoL (Jinx)</strong> (neon-pink/electric-blue with a Zaun-night background), <strong>LoL (Teemo)</strong> (scout green with yellow scarf accents, Bandle-forest background), and <strong>LoL (Ahri)</strong> (magenta fox tails with purple essence-orb accents, Ionia- twilight background). The marketing site&#x27;s theme swatches cover all three (CSS-only mockups until screenshots are captured).</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.9.2.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.9.2.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.9.1</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.9.1.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.9.1.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.9.1.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.9.1.html</guid>
       <pubDate>Thu, 13 Aug 2026 00:00:00 +0000</pubDate>
       <description>&lt;details&gt;/&lt;summary&gt; blocks in a note&#x27;s body are now truly collapsible in PREVIEW: a collapsed block shows only its summary (▸ plus a hidden-line count) and h…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -269,12 +269,12 @@
 <li>Pressing <code>i</code> in PREVIEW used to open the editor at line 1 no matter where you were reading — the scroll offset that was the only positional context in the read-only view was thrown away. It now jumps the cursor to whichever line was at the top of the preview viewport, reusing the same source-line mapping click-to-edit already uses.</li>
 <li>shiki-managed git repos now force <code>core.autocrlf</code> off (per-repo config, not a global setting). Git for Windows commonly defaults it to <code>true</code> globally, which made libgit2 rewrite committed <code>\n</code> into <code>\r\n</code> on disk — silently corrupting real notebooks on Windows, where every note is parsed and written assuming plain <code>\n</code> line endings.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.9.1.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.9.1.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.9.0</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.9.0.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.9.0.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.9.0.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.9.0.html</guid>
       <pubDate>Tue, 04 Aug 2026 00:00:00 +0000</pubDate>
       <description>shiki tasks — the tasks view as a scriptable CLI command: pending tasks across every notebook, urgency-sorted, with --overdue/--today/--all/--notebook filter…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -332,12 +332,12 @@
 <li><code>wikilinks::backlinks</code> re-scanned every note (with a fresh <code>slugify</code> call) once per link per note, making it cost O(notes × total links in the notebook); it now builds a title/slug index once.</li>
 <li><code>search_text</code> (global search) allocated a fresh scratch buffer per note on every keystroke instead of reusing one across the scan.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.9.0.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.9.0.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.8.10</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.8.10.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.8.10.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.8.10.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.8.10.html</guid>
       <pubDate>Fri, 31 Jul 2026 00:00:00 +0000</pubDate>
       <description>[[wikilink]] autocomplete in the inline editor: typing [[ opens an Obsidian-style fuzzy note picker (reusing the existing SearchEngine, same fuzzy match / no…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -354,12 +354,12 @@
 <li>Creating a note (<code>a</code> in Notes) now switches focus to Preview instead of leaving it on Notes: the fresh note&#x27;s editor used to only get the collapsed 1-column sliver on narrow/short terminals (<code>single</code> layout tier renders only the focused panel), so it looked like nothing happened until the terminal was resized wider.</li>
 <li>Saving the scratchpad (leader+<code>p</code>, Ctrl+S) as a note no longer opens the template picker: since the scratchpad body always won over a rendered template anyway, picking a real template there previously created a note whose body was just the raw scratchpad text but whose <code>template:</code> frontmatter field named a template that was never actually applied. It now skips straight to a blank note using the scratchpad&#x27;s own text, and <code>create_note_with_template</code> no longer stamps <code>frontmatter.template</code> in any path unless that template&#x27;s render genuinely became the note&#x27;s body.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.8.10.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.8.10.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.8.9</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.8.9.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.8.9.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.8.9.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.8.9.html</guid>
       <pubDate>Thu, 30 Jul 2026 00:00:00 +0000</pubDate>
       <description>general.remember_last_session (on by default): quitting the TUI now saves exactly where you were — the selected notebook, the folder inside it, the selected…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -375,12 +375,12 @@
 <ul>
 <li><code>ratatui</code> bumped 0.29 → 0.30 and <code>tui-textarea</code> swapped for <code>ratatui-textarea</code> 0.9 (its maintained successor under the ratatui org), closing the Dependabot alert on <code>lru</code> (GHSA-rhfx-m35p-ff5j, an <code>IterMut</code> soundness issue) pulled in transitively via <code>ratatui</code> — <code>tui-textarea</code> 0.7 never moved off the vulnerable <code>ratatui</code>/<code>lru</code> line, so the fix required moving the whole editor widget, not just bumping a version number. <code>crossterm</code> bumped 0.28 → 0.29 alongside it to stay unified with what <code>ratatui</code> 0.30 itself pulls in. Fallout from both bumps is fixed throughout: <code>TextArea::cursor()</code> now returns a <code>DataCursor</code> struct instead of a plain tuple, <code>List::highlight_symbol</code> no longer accepts <code>&amp;String</code>, and ratatui&#x27;s <code>Backend</code> trait gained an associated <code>Error</code> type.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.8.9.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.8.9.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.8.8</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.8.8.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.8.8.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.8.8.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.8.8.html</guid>
       <pubDate>Wed, 29 Jul 2026 00:00:00 +0000</pubDate>
       <description>In-memory scratchpad (leader+p) for temporary writing. Ctrl+S saves its contents as a real note through the existing new-note flow; closing it with Esc disca…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -405,12 +405,12 @@
 <li>Secondary cursors reused <code>cursor_style()</code> (tui-textarea&#x27;s default <code>Modifier::REVERSED</code>, the same style the primary cursor uses) and had no fallback for sitting past the last character of a line — reported live: &quot;solo hay 1 visualmente, no parpadean varios cursores.&quot; A terminal can only ever blink one real caret, so secondary cursors were never going to blink like the primary regardless of styling, but reusing the *exact same* subtle reverse-video look made them easy to miss entirely, and a cursor landing at end-of-line (the common case right after typing) had nothing to render at all. Fixed with a distinct solid accent-colored block style plus the missing end-of-line fallback.</li>
 <li><code>arboard</code>&#x27;s clipboard handle is now kept alive for the process&#x27;s lifetime instead of being constructed and dropped on every copy/paste — the previous per-call pattern hit arboard&#x27;s own X11 &quot;clipboard was dropped very quickly&quot; guard, which <code>eprintln!</code>s a warning straight to the real terminal underneath ratatui&#x27;s alternate screen, visibly corrupting the TUI on every Ctrl+C/Ctrl+V. Caught live by checking the real system clipboard (<code>wl-copy</code>/<code>wl-paste</code>) around a Ctrl+C, not just by reasoning about the code.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.8.8.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.8.8.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.8.7</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.8.7.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.8.7.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.8.7.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.8.7.html</guid>
       <pubDate>Tue, 28 Jul 2026 00:00:00 +0000</pubDate>
       <description>New-notebook (a) now accepts a filesystem path (/abs/path, ~/docs, ./relative) as a third fast path alongside a plain name (create empty) and a git URL (clon…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -418,12 +418,12 @@
 <li>New-notebook (<code>a</code>) now accepts a filesystem path (<code>/abs/path</code>, <code>~/docs</code>, <code>./relative</code>) as a third fast path alongside a plain name (create empty) and a git URL (clone): it adopts that existing directory as a notebook instead, deriving the name from the last path segment. If the directory has no <code>.git</code> yet, it asks for confirmation before initializing one, keeping the existing rule that every notebook in shiki is git-managed; if it&#x27;s already a repo, it&#x27;s adopted immediately. Registered via the same <code>[notebooks.&lt;name&gt;] path</code> config field the existing &quot;point at an Obsidian vault subfolder&quot; feature already used, so it&#x27;s picked up on every future launch too. Existing notes already inside the adopted folder show up right away.</li>
 <li><code>general.show_hints</code> (on by default, toggleable from Settings&#x27; GENERAL tab) shows a small muted hint line under the input box for prompts whose behavior isn&#x27;t obvious from the title alone — currently just new-notebook, explaining both the git-URL-clones and path-adopts fast paths.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.8.7.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.8.7.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.8.6</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.8.6.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.8.6.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.8.6.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.8.6.html</guid>
       <pubDate>Tue, 28 Jul 2026 00:00:00 +0000</pubDate>
       <description>Configurable notebooks root directory and per-notebook custom paths, so shiki can point at an existing collection of markdown notes (e.g. an Obsidian vault)…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -435,24 +435,24 @@
 <ul>
 <li>Renaming a notebook with a custom <code>path</code> used to silently move its directory into shiki&#x27;s own data directory instead of keeping it where it actually lived (e.g. inside an Obsidian vault) — it now stays in place unless the new name has its own configured <code>path</code>.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.8.6.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.8.6.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.8.5</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.8.5.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.8.5.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.8.5.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.8.5.html</guid>
       <pubDate>Mon, 27 Jul 2026 00:00:00 +0000</pubDate>
       <description>Settings screen (leader+s) is now fully interactive instead of read-only — every tab lets you edit values in place with no need to drop into config.toml by h…</description>
       <content:encoded><![CDATA[<h4>Changed</h4>
 <ul>
 <li>Settings screen (leader+<code>s</code>) is now fully interactive instead of read-only — every tab lets you edit values in place with no need to drop into <code>config.toml</code> by hand: - Paged by tab (<code>←</code>/<code>→</code> switches GENERAL/THEME/GIT/NOTEBOOKS/SNIPPETS) instead of one long scroll. - GENERAL/GIT: booleans (<code>use_favorite_editor</code>, <code>auto_commit</code>/<code>auto_push</code>/<code>sign_commits</code>/ <code>auto_sync</code>) toggle in place on <code>Enter</code>; every other field opens a prompt prefilled with its current value. - THEME: <code>name</code> opens the existing theme picker (live preview, same as leader+<code>c</code>); <code>overrides</code> stays informational, pointing at leader+<code>c</code>/<code>shiki theme create --from</code> instead. - NOTEBOOKS: the list now shows every notebook&#x27;s actual git remote (redacted), not just ones with a config override — previously there was no way to see, let alone change, which repo a notebook was synced to from Settings at all. <code>Enter</code> drills into a notebook to edit its remote and its <code>auto_push</code>/<code>auto_sync</code>/<code>auto_sync_every</code> overrides (booleans cycle inherit → true → false → inherit; the notebook&#x27;s <code>[notebooks.&lt;name&gt;]</code> table is removed automatically once every override is back to inherit). - SNIPPETS: <code>a</code> creates a new snippet (prompts for a trigger), <code>d</code> deletes one (with confirmation); drilling into one edits its <code>label</code> and its full multi-line <code>body</code> through the same inline editor a note&#x27;s own body uses. - <code>i</code>/<code>E</code> still jump straight to editing <code>config.toml</code> itself for anything not covered above.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.8.5.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.8.5.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.8.4</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.8.4.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.8.4.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.8.4.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.8.4.html</guid>
       <pubDate>Mon, 27 Jul 2026 00:00:00 +0000</pubDate>
       <description>Settings screen (leader+s) — a read-only, near-full-screen summary of the current config (general/theme/git/per-notebook overrides/snippets), grouped by sect…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -469,12 +469,12 @@
 <li>Two <code>/</code>-menu snippet triggers colliding case-insensitively (<code>[snippets.H1]</code> and <code>[snippets.h1]</code> in the same config) used to resolve to whichever one <code>HashMap</code> iteration happened to visit last — different, unpredictably, between runs of the exact same config. Now sorted deterministically, so the outcome (while still worth fixing — <code>shiki doctor</code> reports it) is at least reproducible.</li>
 <li>PREVIEW&#x27;s Markdown renderer never actually rendered <code><strong>bold</strong></code>/<code>*italic*</code>/`<code> </code>code<code> </code><code> (the asterisks/backticks showed up literally), tables, </code>$$math$$<code> blocks, </code>&lt;details&gt;<code>/</code>&lt;summary&gt;<code>, ordered lists, horizontal rules, or </code><a href="url" target="_blank" rel="noopener">text</a><code>/</code>!<a href="url" target="_blank" rel="noopener">alt</a><code> links/images — so several of the </code>/<code>-menu&#x27;s own blocks (table, math, note/warning callouts, details, link, image) looked broken the moment you left edit mode, since a callout&#x27;s </code>&gt; <strong>Warning:</strong> ...<code> showed the bold markers raw instead of bolding the text. All of the above are now recognized and styled; </code>&lt;details&gt;` is shown fully expanded (a static preview pane has no fold state to toggle against) rather than actually collapsing.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.8.4.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.8.4.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.8.3</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.8.3.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.8.3.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.8.3.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.8.3.html</guid>
       <pubDate>Mon, 27 Jul 2026 00:00:00 +0000</pubDate>
       <description>/-menu in the inline editor: typing / as the first character of a line opens a small searchable menu (filters as you keep typing, ↑/↓ navigates, Enter insert…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -489,12 +489,12 @@
 <ul>
 <li>The inline editor now wraps long lines to the panel&#x27;s width (same as PREVIEW) instead of scrolling them off-screen horizontally — <code>tui-textarea</code> has no wrap support in any published version, so the editor&#x27;s rendering is now computed by hand (the same wrap math is reused both to draw the text and to place the cursor, so the two can never disagree), while all real editing (insert/delete/undo/selection) still goes through <code>tui-textarea</code> unchanged.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.8.3.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.8.3.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.8.2</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.8.2.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.8.2.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.8.2.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.8.2.html</guid>
       <pubDate>Fri, 24 Jul 2026 00:00:00 +0000</pubDate>
       <description>The CLI&#x27;s find_note now searches subfolders recursively (all_notes_recursive), not just the notebook&#x27;s root — shiki edit/shiki show now find nested notes.</description>
       <content:encoded><![CDATA[<h4>Fixed</h4>
@@ -510,12 +510,12 @@
 <li>4 dead dependencies removed from <code>shiki-core</code>: <code>notify</code>, <code>pulldown-cmark</code>, <code>anyhow</code>, <code>uuid</code> (none were used anywhere in the source).</li>
 <li><code>app.rs</code> split into 4 modules (<code>draw.rs</code>, <code>sync.rs</code>, <code>key_handlers.rs</code>, <code>app.rs</code>): went from 4057 to 1508 lines. No behavior change, reorganization only.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.8.2.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.8.2.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.8.1</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.8.1.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.8.1.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.8.1.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.8.1.html</guid>
       <pubDate>Thu, 23 Jul 2026 00:00:00 +0000</pubDate>
       <description>Footer now shows a clickable &quot;☕ Support&quot; link (buymeacoffee.com/sazarcode) — opens in the default browser cross-platform via a new shiki_core::browser::open_…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -532,12 +532,12 @@
 <li>Fresh installs now default to the <code>gruvbox-dark</code> theme instead of <code>catppuccin-mocha</code>.</li>
 <li>Delete confirmation prompts no longer say &quot;this can&#x27;t be undone&quot; — it can now, via leader+<code>u</code>.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.8.1.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.8.1.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.8.0</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.8.0.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.8.0.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.8.0.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.8.0.html</guid>
       <pubDate>Thu, 23 Jul 2026 00:00:00 +0000</pubDate>
       <description>Notes-scope v enters real multi-select (Mode::Visual — declared long ago but never wired up): j/k extend a selection range, shown highlighted in the list and…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -547,12 +547,12 @@
 <li><code>m</code>&#x27;s prompt is now <code>notebook/path/within/it</code>, prefilled with the current location — edit the trailing segments to move within the same notebook (missing folders are created automatically), or replace the first segment to move to a different notebook entirely. The target notebook must already exist (errors clearly otherwise — a notebook is a new git repo, so one is never silently created from a typo).</li>
 <li>4 new <code>shiki-core</code> primitives backing all of the above: <code>copy_note_to</code>/<code>move_note_to</code> (rewriting a note&#x27;s <code>frontmatter.notebook</code> when it actually crosses notebooks) and <code>copy_folder_to</code>/<code>move_folder_to</code> (recursive, preserving nested structure and empty subfolders), plus <code>delete_folder_at</code>. All error rather than silently overwriting if the destination already has something there. 7 new unit tests.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.8.0.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.8.0.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.7.0</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.7.0.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.7.0.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.7.0.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.7.0.html</guid>
       <pubDate>Thu, 23 Jul 2026 00:00:00 +0000</pubDate>
       <description>Tags modal (leader+T) is now real, two-level navigation instead of a read-only list: j/k browse tags, Enter/l drills into the notes carrying one, Enter/l the…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -572,12 +572,12 @@
 <ul>
 <li>The theme picker&#x27;s <code>Enter</code> and <code>shiki theme set</code> no longer wipe custom color overrides when re-confirming/re-setting the theme that was already active with no actual change — previously they reset <code>[theme.overrides]</code> unconditionally on every confirm, silently discarding any hand-written custom colors even when nothing was actually being switched.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.7.0.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.7.0.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.6.0</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.6.0.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.6.0.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.6.0.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.6.0.html</guid>
       <pubDate>Thu, 23 Jul 2026 00:00:00 +0000</pubDate>
       <description>Notebook drawer (leader+b): a collapsible left-side sidebar listing every notebook&#x27;s git status in color (dirty count, ahead/behind), separate from the alway…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -591,12 +591,12 @@
 <ul>
 <li><code>sync</code>/<code>push</code>/<code>pull</code>/<code>pull all</code> now run on a background thread (the same <code>std::thread</code> + <code>mpsc</code> pattern already used by the in-TUI self-updater) instead of blocking the render loop for the duration of the git/network call. Only one operation runs at a time; a second request while one is in flight is reported and dropped rather than queued. Verified live against a real local bare-repo remote (successful push) and an unreachable one (commit succeeds, push fails cleanly, state refreshes correctly) — the UI never freezes in either case.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.6.0.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.6.0.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.5.1</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.5.1.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.5.1.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.5.1.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.5.1.html</guid>
       <pubDate>Thu, 23 Jul 2026 00:00:00 +0000</pubDate>
       <description>scripts/benchmark.sh: an automated, transparent CPU/RAM/responsiveness benchmark that drives the real release binary headlessly via tmux across seven scenari…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -607,24 +607,24 @@
 <ul>
 <li>PREVIEW&#x27;s note view and folder-peek now cache their formatted output (<code>App::note_preview_cache</code>/ <code>folder_preview_cache</code>) instead of re-formatting on every ~100ms draw tick, and borrow rather than clone that cached text into the <code>Paragraph</code> (<code>render::borrow_lines</code>). Previously, a selected note&#x27;s entire body was reformatted via <code>markdown_to_lines</code> on every redraw regardless of size, and a selected-but-not-entered folder re-listed the directory and re-parsed every note&#x27;s frontmatter on every redraw regardless of folder size — both scaled with content size at ~10Hz whether or not anything had actually changed. Verified via <code>scripts/benchmark.sh</code>&#x27;s aggressive scenarios: a 100,000-note folder now costs ~4.7% idle CPU (found via the same benchmark to be in the double digits before formatted-output caching was added) and a 300,000-line note ~9.9%, both with a sub-second first frame and zero measured RSS drift.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.5.1.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.5.1.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.5.0</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.5.0.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.5.0.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.5.0.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.5.0.html</guid>
       <pubDate>Thu, 23 Jul 2026 00:00:00 +0000</pubDate>
       <description>Notes-scope f creates a new (empty) subfolder at the current breadcrumb depth — previously folders could only be navigated, never created from the TUI; the o…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
 <ul>
 <li>Notes-scope <code>f</code> creates a new (empty) subfolder at the current breadcrumb depth — previously folders could only be navigated, never created from the TUI; the only way to get one was to already have it on disk (an imported repo, or made outside shiki entirely).</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.5.0.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.5.0.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.4.2</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.4.2.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.4.2.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.4.2.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.4.2.html</guid>
       <pubDate>Thu, 23 Jul 2026 00:00:00 +0000</pubDate>
       <description>In-TUI self-update (leader+U): checks GitHub Releases for a newer version without downloading anything, shows &quot;Update available: vX.Y.Z → vA.B.C&quot; if one exis…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -636,24 +636,24 @@
 <li><code>git2</code> bumped 0.19 → 0.21, closing 3 <code>cargo audit</code> &quot;unsound&quot; advisories (<code>Remote::list()</code>/<code>BlameHunk</code> signature/<code>Buf</code> dereference UB) — shiki&#x27;s code never called any of the affected APIs, but they showed up in every audit regardless while pinned to 0.19. <code>Commit::summary()</code>/<code>Reference::shorthand()</code>/<code>Reference::name()</code>/<code>Remote::url()</code> all changed from <code>Option</code>-returning to <code>Result</code>-returning between these versions; every call site in <code>git.rs</code> was updated to match. <code>ssh</code>/<code>https</code> are now explicit features (git2 0.21&#x27;s <code>default-features</code> became empty, whereas 0.19 defaulted to them) — without this, SSH remotes and <code>Cred::credential_helper</code> would&#x27;ve silently stopped working. Verified live: full push → remote commit → pull-into-fresh- notebook → note-history round trip against a local bare repo. <code>cargo audit</code> is down to 4 warnings, all transitive via <code>syntect</code>/<code>ratatui</code> and not fixable from shiki&#x27;s own <code>Cargo.toml</code>.</li>
 <li><code>.github/workflows/ci.yml</code> now declares <code>permissions: contents: read</code> explicitly instead of inheriting the repo&#x27;s default token permissions — it only builds/lints, never needs write access.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.4.2.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.4.2.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.4.1</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.4.1.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.4.1.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.4.1.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.4.1.html</guid>
       <pubDate>Thu, 23 Jul 2026 00:00:00 +0000</pubDate>
       <description>shiki-core/shiki-config/shiki-tui/shiki-cli are now published to crates.io — CARGO_REGISTRY_TOKEN is configured, so cargo install shiki-cli works directly, n…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
 <ul>
 <li><code>shiki-core</code>/<code>shiki-config</code>/<code>shiki-tui</code>/<code>shiki-cli</code> are now published to <a href="https://crates.io/crates/shiki-cli" target="_blank" rel="noopener">crates.io</a> — <code>CARGO_REGISTRY_TOKEN</code> is configured, so <code>cargo install shiki-cli</code> works directly, no <code>--git</code>/<code>--path</code> needed. This is the release that verifies the <code>publish-crates</code> job actually publishes for real (previous tags skipped it since the secret wasn&#x27;t set yet).</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.4.1.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.4.1.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.4.0</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.4.0.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.4.0.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.4.0.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.4.0.html</guid>
       <pubDate>Wed, 22 Jul 2026 00:00:00 +0000</pubDate>
       <description>Automated release packaging: .github/workflows/ci.yml runs fmt/clippy/build on a Linux + Windows + macOS matrix on every push/PR; .github/workflows/release.y…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -666,12 +666,12 @@
 <li><code>git2</code> now builds with <code>vendored-libgit2</code>/<code>vendored-openssl</code>, statically linking libgit2/OpenSSL instead of depending on whatever (if anything) is installed on the system — required for reliable Windows builds (no system libgit2 there) and makes Linux/macOS builds portable too.</li>
 <li>Workspace path-dependencies (<code>shiki-core</code>, <code>shiki-config</code>, <code>shiki-tui</code>) now carry an explicit <code>version</code> alongside <code>path</code>, required for <code>cargo package</code>/<code>cargo publish</code> to succeed (previously failed with &quot;dependency does not specify a version&quot;).</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.4.0.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.4.0.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.3.0</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.3.0.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.3.0.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.3.0.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.3.0.html</guid>
       <pubDate>Wed, 22 Jul 2026 00:00:00 +0000</pubDate>
       <description>Footer status messages now clear themselves after 2 seconds instead of sitting there until the next action happens to overwrite them, and are truncated to wh…</description>
       <content:encoded><![CDATA[<h4>Changed</h4>
@@ -679,12 +679,12 @@
 <li>Footer status messages now clear themselves after 2 seconds instead of sitting there until the next action happens to overwrite them, and are truncated to whatever footer space is actually left instead of overflowing. Nothing is lost either way — every message is still recorded in full in the logs modal (leader+<code>l</code>) regardless of how briefly or how much of it the footer shows.</li>
 <li>A bit more padding around the right-aligned <code>? help  vX.Y.Z</code> in the footer, so it doesn&#x27;t sit flush against the terminal edge or the rest of the footer content.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.3.0.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.3.0.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.2.0</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.2.0.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.2.0.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.2.0.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.2.0.html</guid>
       <pubDate>Wed, 22 Jul 2026 00:00:00 +0000</pubDate>
       <description>Note version history (PREVIEW-scope H): every commit that changed the specific note being read, newest first — real git history, not a separate versioning sy…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -718,12 +718,12 @@
 <li><code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> didn&#x27;t work anywhere in the app — not while reading a note in PREVIEW, and not in the which-key popup, logs, global search, or tree view. They now work everywhere: a bigger jump (10 at a time) or first/last, using the same list or scroll each modal already navigates with <code>j</code>/<code>k</code>.</li>
 <li>Which-key (<code>?</code>) had no scrolling at all — content that didn&#x27;t fit the small centered popup was silently clipped with no way to see the rest, and any keypress just closed it (so it couldn&#x27;t be typed into either).</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.2.0.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.2.0.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.1.0</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.1.0.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.1.0.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.1.0.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.1.0.html</guid>
       <pubDate>Wed, 22 Jul 2026 00:00:00 +0000</pubDate>
       <description>Three-pane TUI (Notebooks / Notes / Preview), Yazi-inspired: collapsing Miller-columns layout, modal navigation (hjkl/arrows, tab, leader key), no exterior p…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -744,7 +744,7 @@
 <li>CLI commands alongside the TUI: <code>new</code>, <code>list</code>, <code>edit</code>, <code>show</code>, <code>search</code>, <code>daily</code>, <code>sync</code>, <code>config</code>, <code>notebook</code>, <code>theme</code>.</li>
 <li>App version shown in the status bar footer.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.1.0.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.1.0.png" type="image/png" />
     </item>
   </channel>
 </rss>

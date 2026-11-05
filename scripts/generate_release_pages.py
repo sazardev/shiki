@@ -50,7 +50,7 @@ SCREENSHOTS_DIR = DOCS / "assets" / "screenshots"
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 SITEMAP = DOCS / "sitemap.xml"
 FEED_PATH = DOCS / "feed.xml"
-SITE_URL = "https://sazardev.github.io/shiki"
+SITE_URL = "https://shiki.sazardev.stream"
 
 # Every release page/OG card uses the same theme, deliberately — shiki has
 # no notion of "this version's theme" (themes are a user preference, not a

@@ -243,9 +243,9 @@ jobs:
           # predictable from the version alone, and self-heal with no edit
           # needed once those catch up.
           body: |
-            📝 **[Full release notes with screenshot](https://sazardev.github.io/shiki/changelog/${{ steps.version.outputs.version }}.html)**
+            📝 **[Full release notes with screenshot](https://shiki.sazardev.stream/changelog/${{ steps.version.outputs.version }}.html)**
 
-            ![shiki v${{ steps.version.outputs.version }}](https://sazardev.github.io/shiki/assets/og/${{ steps.version.outputs.version }}.png)
+            ![shiki v${{ steps.version.outputs.version }}](https://shiki.sazardev.stream/assets/og/${{ steps.version.outputs.version }}.png)
           generate_release_notes: true
 
   update-packaging-manifests:

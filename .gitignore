@@ -16,3 +16,10 @@ browser-extension/*.zip
 shiki-desktop/ui/node_modules/
 shiki-desktop/ui/dist/
 shiki-desktop/gen/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example

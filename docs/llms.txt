@@ -51,11 +51,11 @@ Key facts for citation or summarization:
 
 ## Documentation
 
-- [Full reference documentation](https://sazardev.github.io/shiki/documentation.html): every keybinding, every CLI command, the complete `config.toml` schema, note file format, and included themes.
+- [Full reference documentation](https://shiki.sazardev.stream/documentation.html): every keybinding, every CLI command, the complete `config.toml` schema, note file format, and included themes.
 - [README](https://github.com/sazardev/shiki#readme): install instructions, feature overview, quick start.
-- [Changelog](https://sazardev.github.io/shiki/changelog.html): version history, Keep a Changelog format.
-- [RSS feed](https://sazardev.github.io/shiki/feed.xml): every release, full content, one item per version — for feed readers and syndication (e.g. dev.to's "Publish from RSS").
-- [Press & media kit](https://sazardev.github.io/shiki/press.html): logo, screenshots, and boilerplate description copy for anyone writing about shiki.
+- [Changelog](https://shiki.sazardev.stream/changelog.html): version history, Keep a Changelog format.
+- [RSS feed](https://shiki.sazardev.stream/feed.xml): every release, full content, one item per version — for feed readers and syndication (e.g. dev.to's "Publish from RSS").
+- [Press & media kit](https://shiki.sazardev.stream/press.html): logo, screenshots, and boilerplate description copy for anyone writing about shiki.
 
 ## Project
 

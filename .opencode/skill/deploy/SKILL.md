@@ -154,7 +154,7 @@ the site stale. Replicate them locally:
 - [ ] Homebrew: tap formula `version "X.Y.Z"` + arm/intel sha256 match release.
 - [ ] Scoop: both manifests version X.Y.Z, hash matches the Windows zip, `extract_dir` matches the
       zip's top-level folder, and the two files are byte-identical.
-- [ ] Site: `pages.yml` deploy green; `https://sazardev.github.io/shiki/` `softwareVersion` =
+- [ ] Site: `pages.yml` deploy green; `https://shiki.sazardev.stream/` `softwareVersion` =
       X.Y.Z; `/changelog/X.Y.Z.html`, `/assets/og/X.Y.Z.png`, `/feed.xml` all HTTP 200.
 
 ## Phase 10 — clean up
