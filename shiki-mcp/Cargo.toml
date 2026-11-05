@@ -30,4 +30,4 @@ chrono.workspace = true
 # "stay synchronous" convention.
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
 rmcp = { version = "3", features = ["server", "transport-io"] }
-schemars = "0.8"
+schemars = "1.2"
