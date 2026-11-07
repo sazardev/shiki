@@ -1,0 +1,51 @@
+name: Push AUR (one-off)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  aur:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Push to AUR
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AUR_SSH_PRIVATE_KEY}" ]; then
+            echo "::error::AUR_SSH_PRIVATE_KEY is not set"
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          for pair in "shiki-bin:packaging/aur" "shiki:packaging/aur-src"; do
+            aur_repo="${pair%%:*}"
+            local_dir="${pair#*:}"
+            clone_dir="/tmp/aur-${aur_repo}"
+            rm -rf "$clone_dir"
+            git clone "ssh://aur@aur.archlinux.org/${aur_repo}.git" "$clone_dir"
+            cp "$local_dir/PKGBUILD" "$local_dir/.SRCINFO" "$clone_dir/"
+            (
+              cd "$clone_dir"
+              git add PKGBUILD .SRCINFO
+              if git diff --cached --quiet; then
+                echo "No AUR changes to push for ${aur_repo}"
+              else
+                git commit -m "Update to v0.10.4"
+                git push origin master
+              fi
+            )
+          done
