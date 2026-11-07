@@ -257,15 +257,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: main
-          # main requires a pull request for everything pushed with the
-          # default GITHUB_TOKEN (branch protection added after this job
-          # already existed) — RELEASE_TAG_PAT belongs to a real repo admin,
-          # so pushing with it bypasses that requirement the same legitimate
-          # way a human admin's own push would. Falls back to the default
-          # token when the secret isn't set yet, so checkout itself never
-          # fails; the "Commit updated manifests" step below fails loudly
-          # instead, right when it actually needs to push.
-          token: ${{ secrets.RELEASE_TAG_PAT || github.token }}
+          # Checkout only needs read access — use the default token here.
+          # Using RELEASE_TAG_PAT in `actions/checkout`'s `token:` input was
+          # failing the whole job at the very first step with
+          # "could not read Username for 'https://github.com'" on the
+          # v0.10.4 release (twice, including a rerun), even though the same
+          # PAT successfully pushed the tag in auto-tag.yml. The "Commit
+          # updated manifests" step below rewrites `origin` with the PAT
+          # right before pushing, which is the credential path that's
+          # actually been proven to work.
 
       - name: Download release checksums
         run: |
@@ -413,6 +413,9 @@ jobs:
             exit 1
           else
             git commit -m "packaging: update manifests for ${{ needs.resolve-tag.outputs.tag }}"
+            # Checkout above used the default read-only token; switch origin
+            # to the PAT for the actual push (main requires admin/PAT).
+            git remote set-url origin "https://x-access-token:${HAS_PAT}@github.com/${GITHUB_REPOSITORY}.git"
             git push origin HEAD:main
           fi
 
