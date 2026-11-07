@@ -101,7 +101,7 @@ pub(crate) struct SyntaxPalette {
 const ANSI_MARKER_R: u8 = 0x53; // 'S'
 const ANSI_MARKER_B: u8 = 0x49; // 'I'
 const ANSI_MARKER_G_NAMED: u8 = 0x48; // 'H'
-const ANSI_MARKER_G_INDEXED: u8 = 0x49; // 'I'
+const ANSI_MARKER_G_INDEXED: u8 = 0x4A; // 'J'
 
 /// `Reset`/the 16 ANSI names, in the order used by the marker's alpha byte.
 fn named_color(index: u8) -> Option<Color> {
@@ -174,15 +174,20 @@ fn ansi_sentinel(color: Color) -> Option<SyntectColor> {
 /// an ANSI/`Reset` marker becomes the exact `ratatui::Color` the terminal
 /// should resolve itself.
 fn ratatui_color(color: SyntectColor) -> Color {
-    if color.r == ANSI_MARKER_R && color.b == ANSI_MARKER_B && color.a != 0xFF {
+    if color.r == ANSI_MARKER_R && color.b == ANSI_MARKER_B {
         match color.g {
-            ANSI_MARKER_G_NAMED => named_color(color.a).unwrap_or(Color::Reset),
-            ANSI_MARKER_G_INDEXED => Color::Indexed(color.a),
-            _ => Color::Rgb(color.r, color.g, color.b),
+            // Named/Reset markers always carry an alpha in 0..=16, so they
+            // can't collide with a real RGB slot (always alpha 0xFF).
+            ANSI_MARKER_G_NAMED if color.a != 0xFF => {
+                return named_color(color.a).unwrap_or(Color::Reset);
+            }
+            // Indexed(255) legitimately uses alpha 0xFF, so the `g` marker
+            // (not the alpha) is what identifies this branch.
+            ANSI_MARKER_G_INDEXED => return Color::Indexed(color.a),
+            _ => {}
         }
-    } else {
-        Color::Rgb(color.r, color.g, color.b)
     }
+    Color::Rgb(color.r, color.g, color.b)
 }
 
 /// Approximates an RGB `ratatui::Color` as a concrete RGB `syntect` can use;
@@ -472,6 +477,7 @@ mod tests {
             Color::LightCyan,
             Color::White,
             Color::Indexed(42),
+            Color::Indexed(255),
         ] {
             assert_eq!(
                 ratatui_color(to_syntect_color(color)),
