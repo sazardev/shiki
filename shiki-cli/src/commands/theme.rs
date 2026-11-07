@@ -2,7 +2,12 @@ use anyhow::Result;
 use shiki_config::Config;
 
 pub fn list(config: &Config) -> Result<()> {
-    let mut themes: Vec<_> = shiki_config::themes::all()
+    let mut all = shiki_config::themes::all();
+    // `auto` is a real selectable value (`shiki theme set auto`) but not a
+    // palette in `themes::all()` — insert it before `default`, which `all()`
+    // keeps last, so this list matches the TUI picker's grouping.
+    all.insert(all.len() - 1, shiki_config::Theme::auto_entry());
+    let mut themes: Vec<_> = all
         .into_iter()
         .map(|t| {
             let marker = if t.name == config.theme.name {
@@ -33,14 +38,16 @@ pub fn list(config: &Config) -> Result<()> {
 }
 
 pub fn set(config: &mut Config, name: &str, notebook: Option<&str>) -> Result<()> {
-    if shiki_config::themes::by_name(name).is_none() {
+    if name != "auto" && shiki_config::themes::by_name(name).is_none() {
         anyhow::bail!("unknown theme '{name}' — run `shiki theme list` to see available themes");
     }
     // The "currently committed base" differs for per-notebook overrides, so
     // only reset overrides when the *effective* base actually changes —
     // re-running `set` on the theme that's already active used to silently
-    // wipe any hand-written custom colors for no reason.
-    let committed_base = config.theme_for(notebook).name;
+    // wipe any hand-written custom colors for no reason. Uses the configured
+    // name (`"auto"` included), not the resolved palette, so re-selecting
+    // auto doesn't reset overrides just because the terminal is light today.
+    let committed_base = config.theme_name_for(notebook).to_string();
     let base_changed = committed_base != name;
     match notebook {
         Some(nb) => {
@@ -72,9 +79,13 @@ pub fn set(config: &mut Config, name: &str, notebook: Option<&str>) -> Result<()
 /// whichever theme is currently active (globally, or for `notebook`) if not
 /// given.
 pub fn create(config: &mut Config, from: Option<&str>, notebook: Option<&str>) -> Result<()> {
-    let base_name = from
-        .map(str::to_string)
-        .unwrap_or_else(|| config.theme_for(notebook).name);
+    let base_name = match from {
+        // "auto" isn't a palette of its own — scaffold from whichever half
+        // is active right now (dark when no terminal detection is available).
+        Some("auto") => config.theme_for(notebook).name,
+        Some(name) => name.to_string(),
+        None => config.theme_for(notebook).name,
+    };
     let base = shiki_config::themes::by_name(&base_name).ok_or_else(|| {
         anyhow::anyhow!(
             "unknown theme '{base_name}' — run `shiki theme list` to see available themes"

@@ -50,13 +50,10 @@ pub fn git_status_suffix(gs: &shiki_core::git::GitStatus) -> String {
 }
 
 /// Whether a resolved theme color reads as "dark" (perceptual luminance
-/// under half) — feeds `syntax::SyntaxPalette.dark`, which only matters for
-/// `Color::Reset`/`Color::Indexed` theme slots (the "default" theme's
-/// terminal-native colors, which have no fixed RGB `syntect` can use): a
-/// dark-background terminal gets a light fallback text color for code-fence
-/// tokens that inherit those slots, and vice versa. `Reset` itself defaults
-/// to `true` — most terminals default to a dark background, and a wrong
-/// guess here only affects code-fence coloring, not correctness.
+/// under half). Used to classify the terminal's queried background into a
+/// light/dark scheme for `theme.name = "auto"` (`term_colors::scheme_from_colors`).
+/// `Reset` itself defaults to `true` — most terminals default to a dark
+/// background.
 pub fn is_dark_color(color: Color) -> bool {
     match color {
         Color::Rgb(r, g, b) => {
@@ -1028,7 +1025,6 @@ mod tests {
         tag: Color::Magenta,
         success: Color::Green,
         warning: Color::Yellow,
-        dark: true,
     };
 
     fn line_text(line: &Line) -> String {

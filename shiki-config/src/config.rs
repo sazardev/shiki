@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::theme::Theme;
+use crate::theme::{Theme, ThemeScheme};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -929,12 +929,32 @@ pub struct ThemeConfig {
     /// config written before `theme_name` existed keeps working unchanged.
     #[serde(default)]
     pub notebooks: std::collections::BTreeMap<String, String>,
+    /// When `name = "auto"`, the built-in theme used while the terminal's
+    /// background is dark. The TUI reads that background over OSC 11 and
+    /// re-resolves the theme live when the terminal color scheme changes —
+    /// see `Config::theme_for_scheme`. Ignored when `name` is a concrete
+    /// palette; `shiki theme set auto` (or the picker's System → auto row)
+    /// switches to it.
+    #[serde(default = "default_auto_dark")]
+    pub auto_dark: String,
+    /// Companion to `auto_dark`: the theme used while the terminal background
+    /// is light.
+    #[serde(default = "default_auto_light")]
+    pub auto_light: String,
     #[serde(flatten)]
     pub overrides: ThemeOverrides,
 }
 
 fn default_theme_name() -> String {
     "gruvbox-dark".into()
+}
+
+fn default_auto_dark() -> String {
+    "gruvbox-dark".into()
+}
+
+fn default_auto_light() -> String {
+    "gruvbox-light".into()
 }
 
 /// One `Option<String>` per `Theme` color slot — every field is optional
@@ -1100,6 +1120,8 @@ impl Default for ThemeConfig {
             name: default_theme_name(),
             icons: default_true(),
             notebooks: std::collections::BTreeMap::new(),
+            auto_dark: default_auto_dark(),
+            auto_light: default_auto_light(),
             overrides: ThemeOverrides::default(),
         }
     }
@@ -1121,13 +1143,40 @@ impl ThemeConfig {
     /// `Config::theme_for` instead, which also layers `[notebooks.<name>]`'s
     /// `theme_name`/`theme_overrides` on top of what this method alone can see.
     pub fn resolve_for(&self, notebook: Option<&str>) -> Theme {
-        let base_name = notebook
+        self.resolve_for_scheme(notebook, None)
+    }
+
+    /// `resolve_for`, with `"auto"` resolved to `auto_dark`/`auto_light` from
+    /// the terminal's current light/dark scheme. `None` means "not detected
+    /// yet", which deliberately resolves to `auto_dark` — the same dark
+    /// default a fresh install already gets, and the safe choice on terminals
+    /// that don't answer OSC 11 at all.
+    pub fn resolve_for_scheme(&self, notebook: Option<&str>, scheme: Option<ThemeScheme>) -> Theme {
+        let configured = notebook
             .and_then(|nb| self.notebooks.get(nb))
             .map(String::as_str)
             .unwrap_or(&self.name);
+        let base_name = self.resolve_auto_name(configured, scheme);
         let mut theme = crate::themes::by_name(base_name).unwrap_or_else(Theme::terminal_default);
         self.overrides.apply_to(&mut theme);
         theme
+    }
+
+    /// Turns a configured base name into the palette that actually renders:
+    /// every concrete name is returned untouched, while `"auto"` becomes one
+    /// of the two configured halves depending on `scheme`.
+    fn resolve_auto_name<'a>(
+        &'a self,
+        configured: &'a str,
+        scheme: Option<ThemeScheme>,
+    ) -> &'a str {
+        if configured != "auto" {
+            return configured;
+        }
+        match scheme {
+            Some(ThemeScheme::Light) => &self.auto_light,
+            Some(ThemeScheme::Dark) | None => &self.auto_dark,
+        }
     }
 }
 
@@ -1585,6 +1634,21 @@ impl Config {
     pub fn encrypt_for(&self, notebook_name: &str) -> bool {
         self.notebooks.get(notebook_name).is_some_and(|o| o.encrypt)
     }
+    /// The configured base theme name for `notebook`, before any `"auto"`
+    /// resolution — this notebook's `theme_name` (or the legacy
+    /// `[theme.notebooks]` map), else the global `theme.name`. The picker
+    /// uses it to keep its cursor on the `auto` row while the resolved
+    /// palette underneath changes with the terminal scheme.
+    pub fn theme_name_for(&self, notebook: Option<&str>) -> &str {
+        let over = notebook.and_then(|nb| self.notebooks.get(nb));
+        over.and_then(|o| o.theme_name.as_deref())
+            .or_else(|| {
+                notebook
+                    .and_then(|nb| self.theme.notebooks.get(nb))
+                    .map(String::as_str)
+            })
+            .unwrap_or(self.theme.name.as_str())
+    }
     /// Resolves the effective theme for `notebook` — the single method every
     /// UI/CLI call site should use instead of `theme.resolve_for` directly
     /// once a notebook is involved, since a per-notebook theme depends on
@@ -1594,16 +1658,21 @@ impl Config {
     /// whichever base theme won — this notebook's `theme_name` (or, for a
     /// config written before that field existed, the legacy
     /// `theme.notebooks` map), or else the global `theme.name`.
+    ///
+    /// `"auto"` is resolved as dark (see `theme_for_scheme`); callers that
+    /// know the terminal's current light/dark state should use that instead.
     pub fn theme_for(&self, notebook: Option<&str>) -> Theme {
+        self.theme_for_scheme(notebook, None)
+    }
+    /// `theme_for`, with `"auto"` resolved against the terminal's current
+    /// light/dark scheme (`None` = not detected yet, treated as dark). Every
+    /// other base name ignores `scheme` entirely, and per-notebook overrides
+    /// always win, so a notebook with its own concrete `theme_name` never
+    /// follows the system.
+    pub fn theme_for_scheme(&self, notebook: Option<&str>, scheme: Option<ThemeScheme>) -> Theme {
         let over = notebook.and_then(|nb| self.notebooks.get(nb));
-        let base_name = over
-            .and_then(|o| o.theme_name.as_deref())
-            .or_else(|| {
-                notebook
-                    .and_then(|nb| self.theme.notebooks.get(nb))
-                    .map(String::as_str)
-            })
-            .unwrap_or(self.theme.name.as_str());
+        let configured = self.theme_name_for(notebook);
+        let base_name = self.theme.resolve_auto_name(configured, scheme);
         let mut theme = crate::themes::by_name(base_name).unwrap_or_else(Theme::terminal_default);
         self.theme.overrides.apply_to(&mut theme);
         if let Some(o) = over {
@@ -1917,18 +1986,23 @@ fn section_comment(line: &str) -> Option<&'static str> {
         }
         "[theme]" => {
             "\
-# `name` picks a built-in theme (`shiki theme list` shows every name). Every
-# one of a theme's 19 color slots can be overridden individually under
+# `name` picks a built-in theme (`shiki theme list` shows every name).
+# `name = \"auto\"` follows the terminal's own light/dark scheme in real time:
+# `auto_dark` is used while the terminal background is dark, `auto_light`
+# while it is light (the TUI re-reads the background over OSC 11 while idle,
+# so switching the terminal/OS theme re-themes shiki without a restart).
+# Every one of a theme's 19 color slots can be overridden individually under
 # [theme.overrides] — accent, bg, fg, selection, border, statusbar,
 # highlight, error, warning, success, inactive, scrollbar, tab_active,
 # tab_inactive, panel_title, cursor, link, tag, muted. Anything left unset
-# falls back to `name`'s own value for that slot. `selection` also accepts
+# falls back to `name`'s own value for that slot (for `auto`, to whichever
+# configured half is active). `selection` also accepts
 # \"auto\" — a 20%-alpha blend of `fg` over `bg`, which the terminal-inherit
 # `default` theme uses so its selected-row band matches the system color
-# scheme (the terminal's real fg/bg are queried over OSC 10/11 at startup;
-# unsupported terminals fall back to a fixed gray). `shiki theme create
-# [--from <theme>]` scaffolds all 19 here at once from a real palette,
-# instead of hand-typing hex codes with no example to copy from.
+# scheme (the terminal's real fg/bg are queried over OSC 10/11; unsupported
+# terminals fall back to a fixed gray). `shiki theme create [--from <theme>]`
+# scaffolds all 19 here at once from a real palette, instead of hand-typing
+# hex codes with no example to copy from.
 # - icons: when false, every Nerd Font glyph falls back to plain text —
 #   for a terminal font that isn't Nerd-Fonts-patched. Defaults to true."
         }
@@ -2202,6 +2276,7 @@ mod tests {
             icons: true,
             notebooks: std::collections::BTreeMap::new(),
             overrides,
+            ..ThemeConfig::default()
         };
         // Every one of `Theme`'s 19 color fields — including the 14 that
         // used to have no override path at all — must resolve back to
@@ -2221,6 +2296,7 @@ mod tests {
             icons: true,
             notebooks: std::collections::BTreeMap::new(),
             overrides,
+            ..ThemeConfig::default()
         };
         let base = crate::themes::by_name("nord").unwrap();
         let resolved = config.resolve();
@@ -2237,10 +2313,85 @@ mod tests {
             icons: true,
             notebooks,
             overrides: ThemeOverrides::default(),
+            ..ThemeConfig::default()
         };
         assert_eq!(config.resolve().name, "nord");
         assert_eq!(config.resolve_for(Some("work")).name, "Matrix");
         assert_eq!(config.resolve_for(Some("personal")).name, "nord");
+    }
+
+    #[test]
+    fn auto_theme_resolves_to_the_configured_light_and_dark_halves() {
+        let mut config = Config::default();
+        config.theme.name = "auto".into();
+        config.theme.auto_dark = "nord".into();
+        config.theme.auto_light = "gruvbox-light".into();
+
+        assert_eq!(config.theme_name_for(None), "auto");
+        assert_eq!(
+            config.theme_for_scheme(None, Some(ThemeScheme::Dark)).name,
+            "nord"
+        );
+        assert_eq!(
+            config.theme_for_scheme(None, Some(ThemeScheme::Light)).name,
+            "gruvbox-light"
+        );
+        // No reply from the terminal yet: the dark half is the safe default,
+        // matching what a fresh install shows.
+        assert_eq!(config.theme_for(None).name, "nord");
+    }
+
+    #[test]
+    fn concrete_theme_ignores_the_terminal_scheme() {
+        let mut config = Config::default();
+        config.theme.name = "nord".into();
+        assert_eq!(
+            config.theme_for_scheme(None, Some(ThemeScheme::Light)).name,
+            "nord"
+        );
+        assert_eq!(
+            config.theme_for_scheme(None, Some(ThemeScheme::Dark)).name,
+            "nord"
+        );
+    }
+
+    #[test]
+    fn a_notebook_theme_name_wins_over_the_global_auto_theme() {
+        let mut config = Config::default();
+        config.theme.name = "auto".into();
+        config.theme.auto_light = "gruvbox-light".into();
+        config.notebooks.insert(
+            "work".to_string(),
+            NotebookGitOverride {
+                theme_name: Some("dracula".into()),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(config.theme_name_for(Some("work")), "dracula");
+        assert_eq!(
+            config
+                .theme_for_scheme(Some("work"), Some(ThemeScheme::Light))
+                .name,
+            "dracula"
+        );
+        assert_eq!(
+            config
+                .theme_for_scheme(Some("personal"), Some(ThemeScheme::Light))
+                .name,
+            "gruvbox-light"
+        );
+    }
+
+    #[test]
+    fn auto_theme_with_an_unknown_half_falls_back_to_terminal_default() {
+        let mut config = Config::default();
+        config.theme.name = "auto".into();
+        config.theme.auto_light = "not-a-theme".into();
+        assert_eq!(
+            config.theme_for_scheme(None, Some(ThemeScheme::Light)).name,
+            "default"
+        );
     }
 
     #[test]

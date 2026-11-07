@@ -82,8 +82,9 @@ the [website](https://shiki.sazardev.stream/#themes).
   default branch.
 - **37 built-in themes** (Catppuccin Mocha, Tokyo Night, Gruvbox ×6, Solarized Dark, Nord,
   Dracula, One Dark, Monokai, League of Legends champions, video-game and hacker/cyberpunk
-  palettes, and a
-  terminal-native default that inherits your terminal's own palette) with a live-preview picker.
+  palettes, and a terminal-native default that inherits your terminal's own palette) with a
+  live-preview picker. An **`auto`** mode follows the terminal's light/dark scheme in real time,
+  switching between a configured dark and light palette as you change themes.
 - **Config-driven keybindings**, scoped by focus, fully remappable in `config.toml` — nothing
   hardcoded except plain navigation.
 - **Mouse drag-to-select and copy** in PREVIEW — drag over a note's rendered body to highlight and

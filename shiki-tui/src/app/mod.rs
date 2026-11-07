@@ -1,5 +1,5 @@
 use std::io;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crossterm::event::{self, Event, KeyEventKind};
 use ratatui::backend::Backend;
@@ -7,7 +7,7 @@ use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use ratatui::style::Color;
 use ratatui::text::Line;
 use ratatui::Terminal;
-use shiki_config::{Config, Theme};
+use shiki_config::{Config, Theme, ThemeScheme};
 use shiki_core::search::SearchHit;
 use shiki_core::{Note, Notebook, NotebookStore, SearchEngine, TagIndex};
 
@@ -33,12 +33,19 @@ pub(crate) use types::{
 pub struct App {
     pub config: Config,
     pub theme: Theme,
-    /// The terminal's own foreground/background colors, queried once at TUI
-    /// startup over OSC 10/11 (`term_colors::query_fg_bg`), or `None` when
-    /// the terminal never answered. Only consumed by the `"auto"` selection
-    /// slot of the terminal-inherit theme — see `render::selection_bg`; the
-    /// 36 hex palettes ignore it entirely.
+    /// The terminal's own foreground/background colors, queried over OSC
+    /// 10/11 (`term_colors::query_fg_bg` at startup, then periodically while
+    /// idle — see `run`), or `None` when the terminal never answered. Used by
+    /// the `"auto"` selection slot of the terminal-inherit theme (see
+    /// `render::selection_bg`) and to pick the light/dark half of
+    /// `theme.name = "auto"`.
     pub terminal_colors: Option<(Color, Color)>,
+    /// Dark/light classification derived from `terminal_colors`, or `None`
+    /// before the first reply. `refresh_theme_for_selected_notebook` passes
+    /// it to `Config::theme_for_scheme`, so an `"auto"` theme switches halves
+    /// the moment the terminal background changes. Concrete theme names
+    /// ignore it entirely.
+    pub terminal_scheme: Option<ThemeScheme>,
     pub store: NotebookStore,
     pub notebooks: Vec<Notebook>,
     pub selected_notebook: usize,
@@ -942,7 +949,15 @@ impl App {
         if let Some(root) = &trash_root {
             shiki_core::trash::purge_older_than(root, config.general.trash_retention_days);
         }
-        let available_themes = shiki_config::themes::all();
+        let available_themes = {
+            let mut themes = shiki_config::themes::all();
+            // `auto` is a picker-only entry, not a palette in `themes::all()`:
+            // choosing it stores `name = "auto"`, and resolution swaps in
+            // `auto_dark`/`auto_light` based on the terminal scheme.
+            // Inserted before `default`, which `all()` keeps last.
+            themes.insert(themes.len() - 1, Theme::auto_entry());
+            themes
+        };
         let theme_index = available_themes
             .iter()
             .position(|t| t.name == theme.name)
@@ -954,6 +969,7 @@ impl App {
             config,
             theme,
             terminal_colors: None,
+            terminal_scheme: None,
             store,
             notebooks,
             selected_notebook: 0,
@@ -1456,7 +1472,9 @@ impl App {
     /// NOTEBOOKS-tab `icons` override or running apply-to-all.
     pub(crate) fn refresh_theme_for_selected_notebook(&mut self) {
         let notebook = self.selected_notebook().map(|nb| nb.name.clone());
-        self.theme = self.config.theme_for(notebook.as_deref());
+        self.theme = self
+            .config
+            .theme_for_scheme(notebook.as_deref(), self.terminal_scheme);
         self.theme_index = self
             .available_themes
             .iter()
@@ -1561,13 +1579,43 @@ impl App {
         }
     }
 
-    /// Hands `App` the terminal's own fg/bg from the one startup OSC 10/11
-    /// query (`shiki-cli/src/tui.rs`) — a separate setter rather than an
-    /// `App::new` parameter because the query is real terminal I/O that has
-    /// no place in unit tests, and because it's only needed by the `"auto"`
-    /// selection slot (see `render::selection_bg`).
-    pub fn set_terminal_colors(&mut self, colors: Option<(Color, Color)>) {
+    /// Hands `App` the terminal's own fg/bg from an OSC 10/11 query — the
+    /// startup one (`shiki-cli/src/tui.rs`) and every periodic re-query from
+    /// `run`. A separate setter rather than an `App::new` parameter because
+    /// the query is real terminal I/O that has no place in unit tests, and
+    /// because it's only needed by the `"auto"` selection slot (see
+    /// `render::selection_bg`) and `theme.name = "auto"` resolution.
+    ///
+    /// Returns whether the detected light/dark scheme changed. Re-resolves
+    /// the active theme on a change (so `"auto"` switches halves live), except
+    /// while the theme picker is open — there `self.theme` is a live preview,
+    /// and yanking it back to the configured theme mid-browse would be wrong.
+    pub fn set_terminal_colors(&mut self, colors: Option<(Color, Color)>) -> bool {
+        let scheme = colors.map(crate::term_colors::scheme_from_colors);
         self.terminal_colors = colors;
+        let changed = scheme != self.terminal_scheme;
+        self.terminal_scheme = scheme;
+        if changed && !self.show_theme_picker {
+            self.refresh_theme_for_selected_notebook();
+        }
+        changed
+    }
+
+    /// Whether the active configuration (or a live preview) depends on the
+    /// terminal's colors — the gate for the periodic OSC 11 re-query in
+    /// `run`. Fixed hex palettes with an explicit `selection` slot don't, so
+    /// they never pay for the query.
+    pub fn needs_terminal_color_watch(&self) -> bool {
+        let notebook = self.selected_notebook().map(|nb| nb.name.as_str());
+        self.config.theme_name_for(notebook) == "auto" || self.theme.selection == "auto"
+    }
+
+    /// Whether the configured base theme for the focused notebook is the
+    /// live `"auto"` mode (as opposed to a concrete palette that merely uses
+    /// the `"auto"` selection band).
+    pub(crate) fn auto_theme_active(&self) -> bool {
+        let notebook = self.selected_notebook().map(|nb| nb.name.as_str());
+        self.config.theme_name_for(notebook) == "auto"
     }
 
     /// Background every selected/highlighted row should paint — the theme's
@@ -1901,7 +1949,7 @@ impl App {
 
     pub(crate) fn apply_config(&mut self, new_config: Config) {
         let notebook = self.selected_notebook().map(|nb| nb.name.clone());
-        self.theme = new_config.theme_for(notebook.as_deref());
+        self.theme = new_config.theme_for_scheme(notebook.as_deref(), self.terminal_scheme);
         self.theme_index = self
             .available_themes
             .iter()
@@ -2107,7 +2155,6 @@ impl App {
         }
         let folded = self.details_folded_for(&path);
         let body = note.body.clone();
-        let dark = crate::render::is_dark_color(colors[4]);
         let palette = crate::syntax::SyntaxPalette {
             fg: colors[0],
             accent: colors[1],
@@ -2116,7 +2163,6 @@ impl App {
             tag: colors[5],
             success: colors[6],
             warning: colors[7],
-            dark,
         };
         let preview_images = self.config.general.preview_images;
         let image_scale = self.config.general.preview_image_scale.clamp(0.05, 1.0);
@@ -2654,10 +2700,30 @@ pub fn global_search_layout(popup_area: Rect) -> (Rect, Rect) {
     (chunks[0], chunks[1])
 }
 
+/// How often the idle event loop re-reads the terminal background while an
+/// `"auto"` theme (or the terminal-inherit `default` theme's `"auto"`
+/// selection) is active. Short enough that changing the terminal/OS scheme
+/// feels live, long enough that the query is negligible.
+const SCHEME_POLL_INTERVAL: Duration = Duration::from_millis(1_500);
+/// Only query after this much input-free time. Polling while the user is
+/// actively typing would risk swallowing a keystroke that lands in the same
+/// `/dev/tty` read as the OSC reply.
+const SCHEME_POLL_IDLE: Duration = Duration::from_millis(400);
+/// A responsive terminal answers OSC 11 in a few milliseconds; this runs on
+/// the UI thread, so keep the failure budget small.
+const SCHEME_QUERY_TIMEOUT: Duration = Duration::from_millis(35);
+/// Terminals that never answer (tmux without passthrough, non-VT consoles,
+/// Windows) must not cost 35 ms of input latency every 1.5 s forever — back
+/// off to this ceiling and stay there.
+const SCHEME_POLL_MAX_BACKOFF: Duration = Duration::from_secs(30);
+
 pub fn run<B: Backend<Error = io::Error>>(
     terminal: &mut Terminal<B>,
     app: &mut App,
 ) -> io::Result<()> {
+    let mut last_input = Instant::now();
+    let mut last_scheme_poll = Instant::now();
+    let mut scheme_poll_every = SCHEME_POLL_INTERVAL;
     while !app.should_quit {
         if let Ok(size) = terminal.size() {
             app.last_frame_area = Rect::new(0, 0, size.width, size.height);
@@ -2716,6 +2782,7 @@ pub fn run<B: Backend<Error = io::Error>>(
         }
 
         if event::poll(Duration::from_millis(100))? {
+            last_input = Instant::now();
             match event::read()? {
                 Event::Key(key) => {
                     // Accept Press and Repeat, only drop Release — some
@@ -2730,6 +2797,38 @@ pub fn run<B: Backend<Error = io::Error>>(
                 Event::Paste(text) => app.on_paste(text),
                 _ => {}
             }
+        }
+
+        // Live terminal-scheme watch: re-read OSC 11 only while the config
+        // actually depends on it and nothing has been typed for a moment.
+        // Done here, on the main thread, between crossterm polls — see
+        // `term_colors`' module docs for why a background thread would race
+        // crossterm for the reply and corrupt input.
+        if app.needs_terminal_color_watch()
+            && last_input.elapsed() >= SCHEME_POLL_IDLE
+            && last_scheme_poll.elapsed() >= scheme_poll_every
+            // Last-instant re-check: if a key landed between the timed poll
+            // and here, handle it first rather than risking it sharing the
+            // `/dev/tty` read with the OSC reply.
+            && !event::poll(Duration::ZERO)?
+        {
+            let colors = crate::term_colors::query_fg_bg_with_timeout(SCHEME_QUERY_TIMEOUT);
+            // A timeout after we already had colors is a transient miss, not
+            // "the terminal forgot its scheme" — keep the last known pair
+            // rather than flashing back to dark/fallback for one frame.
+            let scheme_changed = colors
+                .map(|colors| app.set_terminal_colors(Some(colors)))
+                .unwrap_or(false);
+            if scheme_changed && app.auto_theme_active() {
+                let scheme = app.terminal_scheme.map(|s| s.label()).unwrap_or("dark");
+                app.set_status(format!("theme: {} (auto · {scheme})", app.theme.name));
+            }
+            scheme_poll_every = if colors.is_some() {
+                SCHEME_POLL_INTERVAL
+            } else {
+                (scheme_poll_every * 2).min(SCHEME_POLL_MAX_BACKOFF)
+            };
+            last_scheme_poll = Instant::now();
         }
     }
     app.save_session();
