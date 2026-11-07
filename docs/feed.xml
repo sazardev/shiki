@@ -12,33 +12,51 @@
       <link>https://shiki.sazardev.stream/changelog.html</link>
     </image>
     <item>
+      <title>shiki v0.10.4</title>
+      <link>https://shiki.sazardev.stream/changelog/0.10.4.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.10.4.html</guid>
+      <pubDate>Sat, 07 Nov 2026 00:00:00 +0000</pubDate>
+      <description>Live system light/dark theme ([theme] name = &quot;auto&quot;). shiki now follows the terminal&#x27;s own color scheme in real time instead of needing a restart: auto_dark…</description>
+      <content:encoded><![CDATA[<h4>Added</h4>
+<ul>
+<li><strong>Live system light/dark theme (<code>[theme] name = &quot;auto&quot;</code>).</strong> shiki now follows the terminal&#x27;s own color scheme in real time instead of needing a restart: <code>auto_dark</code> (default <code>gruvbox-dark</code>) is used while the terminal background is dark and <code>auto_light</code> (default <code>gruvbox-light</code>) while it is light. The TUI re-reads the background over OSC 11 roughly every 1.5 s, only after ~400 ms with no input and only on the main thread between crossterm polls — a background reader would race crossterm for the reply and corrupt keystrokes, and querying while typing could swallow one. Terminals that don&#x27;t answer (tmux without passthrough, non-VT consoles, Windows) back off to one probe every 30 s and stay on the dark half. <code>auto</code> is selectable from the theme picker (System group) and <code>shiki theme set auto</code>; per-notebook <code>theme_name</code> overrides still win, and a concrete theme name ignores the detected scheme entirely. The status line confirms each live switch (<code>theme: gruvbox-light (auto · light)</code>), and <code>shiki doctor</code> validates both configured halves.</li>
+<li><strong>Code fences in the <code>default</code> (terminal-inherit) theme now use the terminal&#x27;s own palette.</strong> Its ANSI names/<code>&quot;reset&quot;</code> slots used to be approximated with fixed RGB values before reaching syntect, so code highlighting never matched the rest of the inherited UI. Non-RGB slots are now carried through the highlighter as a sentinel and decoded back to native <code>ratatui::Color</code>s — keywords use the terminal&#x27;s blue, strings its green, comments its dark-gray, etc., and plain code text defers to <code>Reset</code>. Hex-based themes are unchanged.</li>
+<li><strong><code>scripts/theme-demo.sh</code></strong>, a one-command live-theme demo: it builds the release binary, seeds a throwaway multi-notebook dataset in an isolated XDG environment with <code>theme.name = &quot;auto&quot;</code> enabled, and launches it (<code>--launch</code>), so switching the terminal&#x27;s light/dark theme can be seen without touching real notebooks or config.</li>
+</ul>
+<h4>Fixed</h4>
+<ul>
+<li><strong>PREVIEW no longer flickers while a note is open.</strong> The <code>notify</code>-based live-reload watcher (<code>shiki-tui/src/fs_watch.rs</code>) watched <code>OPEN</code> events as well as real writes, and shiki itself opens every note when listing a directory. That made a feedback loop: list notes → <code>Open</code> events → reload after the 300 ms debounce → list again → more <code>Open</code> events, with PREVIEW&#x27;s cache dropped on every reload and visibly clearing/redrawing about every 0.4 s. Read-side access events (<code>Open</code>, <code>Close(Read)</code>, …) are now ignored; <code>Modify</code>, <code>Create</code>, <code>Remove</code> and <code>Close(Write)</code> still trigger a reload, so external edits keep showing up live.</li>
+</ul>]]></content:encoded>
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.10.4.png" type="image/png" />
+    </item>
+    <item>
       <title>shiki v0.10.3</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.10.3.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.10.3.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.10.3.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.10.3.html</guid>
       <pubDate>Fri, 30 Oct 2026 00:00:00 +0000</pubDate>
       <description>macOS: startup no longer opens the Rename dialog with the terminal&#x27;s OSC 10/11 reply in the input. Darwin&#x27;s poll(2) reports POLLNVAL for /dev/tty (and other…</description>
       <content:encoded><![CDATA[<h4>Fixed</h4>
 <ul>
 <li><strong>macOS: startup no longer opens the Rename dialog with the terminal&#x27;s OSC 10/11 reply in the input.</strong> Darwin&#x27;s <code>poll(2)</code> reports <code>POLLNVAL</code> for <code>/dev/tty</code> (and other tty/pty fds), so the startup color query returned before reading either answer; crossterm then parsed the late bytes as <code>Alt+]</code> plus stray characters — with NOTES focused, the <code>r</code> in <code>rgb:</code> triggered Rename. The readiness wait now uses <code>select(2)</code> on macOS (<code>shiki-tui/src/term_colors.rs</code>), the same workaround crossterm&#x27;s <code>filedescriptor</code> dependency uses, and the <code>&quot;auto&quot;</code> selection band resolves correctly there instead of always falling back to <code>darkgray</code>. (#114)</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.10.3.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.10.3.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.10.2</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.10.2.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.10.2.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.10.2.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.10.2.html</guid>
       <pubDate>Thu, 29 Oct 2026 00:00:00 +0000</pubDate>
       <description>Dependency updates for new RUSTSEC advisories (CI&#x27;s cargo audit job had started failing). Bumped the patched, semver-compatible crates — pulldown-cmark 0.13.…</description>
       <content:encoded><![CDATA[<h4>Security</h4>
 <ul>
 <li><strong>Dependency updates for new RUSTSEC advisories</strong> (CI&#x27;s <code>cargo audit</code> job had started failing). Bumped the patched, semver-compatible crates — <code>pulldown-cmark</code> 0.13.5 (exponential event growth with wikilinks enabled), <code>quinn-proto</code> 0.11.19, <code>rustls</code> 0.23.46, <code>rustls-webpki</code> 0.103.16, <code>webpki-roots</code>/<code>webpki-root-certs</code> 1.0.11, <code>libz-sys</code> 1.1.31, <code>tokio</code> 1.54.1 — and moved the direct <code>zip</code> dependency (Notion import) from 8 to 9. Advisories only upstream can fix (transitive <code>zip</code> &lt;9 via <code>self_update</code>, <code>crypto-bigint</code> via <code>age</code>) are allowlisted in <code>.cargo/audit.toml</code> with the condition for removing each entry.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.10.2.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.10.2.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.10.1</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.10.1.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.10.1.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.10.1.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.10.1.html</guid>
       <pubDate>Thu, 29 Oct 2026 00:00:00 +0000</pubDate>
       <description>Live reload when notes change on disk. shiki now watches the selected notebook&#x27;s directory (notify, shiki-tui/src/fs_watch.rs) and re-lists NOTES when a file…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -55,12 +73,12 @@
 <li><strong>Document-format compatibility patch</strong>: notebooks now tolerate <code>.qmd</code> (Quarto), <code>.rmd</code> (R Markdown, Quarto&#x27;s direct predecessor), and <code>.markdown</code> (the verbose spelling some static-site generators default to) files alongside <code>.md</code>/<code>.mdx</code>/<code>.txt</code> when listing/reading notes (<code>Notebook::list_dir</code>&#x27;s <code>NOTE_EXTENSIONS</code>), the same way <code>.mdx</code>/<code>.txt</code> support for Obsidian vaults landed in 0.9.0 — a notebook pointed at an existing Quarto/R-Markdown/Jekyll project now shows those files instead of silently hiding them. All of these are just Markdown with optional YAML frontmatter under a different name, so no new per-format parsing was needed. The extension match is now case-insensitive, since R Markdown&#x27;s real-world convention is capital-R <code>.Rmd</code>, not <code>.rmd</code> — without that, adding <code>.rmd</code> to the list wouldn&#x27;t have actually recognized the files it was for. New notes are still always created as <code>.md</code>; renaming a non-<code>.md</code> note preserves its original extension, original case included, instead of converting it to <code>.md</code>. (#96)</li>
 <li><strong><code>general.note_extra_extensions</code></strong> — a new Settings modal (GENERAL tab) option letting a notebook treat arbitrary extra file extensions (source code, plain text, anything else shaped like content with optional YAML frontmatter) as notes too, on top of the built-in <code>md</code>/<code>mdx</code>/<code>txt</code>/<code>qmd</code>/<code>rmd</code>/<code>markdown</code> list — e.g. <code>py, org</code> to also pick up Python scripts or Org-mode files. Empty by default (this is for genuinely user-chosen formats, not something shiki opts a notebook into on its own), matched case-insensitively, edited as a comma-separated list the same way every other GENERAL text field already is. <code>Notebook::with_extra_extensions</code>/ <code>NotebookStore::extra_extensions</code> propagate it to every <code>Notebook</code> a store hands out, and editing it in the Settings modal takes effect immediately — no restart needed. (#96)</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.10.1.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.10.1.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.10.0</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.10.0.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.10.0.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.10.0.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.10.0.html</guid>
       <pubDate>Tue, 22 Sep 2026 00:00:00 +0000</pubDate>
       <description>shiki agent status/connect &lt;client|--all&gt;/disconnect — one-command auto-connect for agentic coding tools. Registers shiki-mcp (see below) straight into Claud…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -72,12 +90,12 @@
 <li><strong>Task due-date reminders</strong> — a background thread (<code>general.enable_reminders</code>, on by default) periodically scans every notebook for <code>@due(...)</code> checkbox tasks that are due today or overdue and fires a real OS desktop notification for each, once per calendar day. Works in an already-running TUI and headless via <code>shiki daemon</code> alike, so it doesn&#x27;t depend on the TUI being open. <code>reminder_check_interval_secs</code> (default 300s) controls the scan frequency and applies live to an already-running checker with no restart; <code>shiki doctor</code> reports whether OS notification delivery is likely to work on the current machine.</li>
 <li><strong><code>@</code> in the inline editor opens a due-date/recurrence suggestion menu</strong> (<code>general. due_date_autocomplete</code>, on by default) — 14 curated entries (<code>@due(today)</code>, <code>@due(tomorrow)</code>, every weekday, <code>@due(+1w)</code>, and <code>@every(day/week/month/year)</code>), anchored under the cursor the same way <code>[[wikilink]]</code> autocomplete and the <code>/</code>-menu already are. The same 14 entries are also regular <code>/</code>-menu commands, searchable and overridable via <code>[snippets.&lt;trigger&gt;]</code> like any other snippet — so <code>/due</code> finds them too, not just <code>@</code>.</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.10.0.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.10.0.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.9.7</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.9.7.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.9.7.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.9.7.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.9.7.html</guid>
       <pubDate>Mon, 21 Sep 2026 00:00:00 +0000</pubDate>
       <description>Full per-notebook theme customization — every notebook can now have its own base theme, all 19 individual color-slot overrides, and its own icons toggle, not…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -90,12 +108,12 @@
 <ul>
 <li><strong><code>shiki-core</code>/<code>shiki-config</code> are now genuinely portable to a non-native target, not just decoupled from <code>shiki-tui</code>.</strong> <code>git2</code>, <code>self_update</code>, <code>libc</code>, and <code>directories</code> are real optional Cargo features on <code>shiki-core</code> (<code>git2-backend</code>/<code>self-update</code>/<code>unix-process-check</code>/ <code>home-dir-expand</code>, all default-on — every existing consumer is unaffected). Filesystem access and git-repo detection/init are injectable via new <code>fs::FileStore</code>/<code>vcs::VcsPort</code> traits (<code>NotebookStore::new_with_backends</code>), with <code>LocalFs</code>/<code>NativeVcs</code> as the unchanged default; the same seam was added to <code>shiki-config</code> (<code>ConfigFileStore</code>) independently, without adding a cross-crate dependency between the two. <code>cargo check -p shiki-core --no-default-features</code> and <code>-p shiki-config</code>, both <code>--target wasm32-unknown-unknown</code>, now compile clean and are enforced by a dedicated CI job — fixed two real incompatibilities found getting there (<code>age</code>&#x27;s transitive <code>getrandom</code> needing its <code>js</code> feature; <code>comrak</code>&#x27;s default <code>syntect-onig</code> pulling in Oniguruma, a C library that can&#x27;t cross-compile to wasm) and one real gap (<code>browser::open_url</code> had no fallback branch for a platform that isn&#x27;t Linux/macOS/Windows). Removed <code>shiki-tui</code>&#x27;s long-unused <code>comrak</code> dependency in the process (never actually called from its source).</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.9.7.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.9.7.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.9.6</title>
-      <link>https://sazardev.github.io/shiki/changelog/0.9.6.html</link>
-      <guid isPermaLink="true">https://sazardev.github.io/shiki/changelog/0.9.6.html</guid>
+      <link>https://shiki.sazardev.stream/changelog/0.9.6.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.9.6.html</guid>
       <pubDate>Sun, 20 Sep 2026 00:00:00 +0000</pubDate>
       <description>The default (terminal-inherit) theme&#x27;s selected-row highlight now adapts to the terminal&#x27;s own color scheme instead of a fixed ANSI darkgray that could be in…</description>
       <content:encoded><![CDATA[<h4>Added</h4>
@@ -127,7 +145,7 @@
 <ul>
 <li><code>--locked</code> on <code>check</code>/<code>test</code>/<code>clippy</code> (the lockfile is committed on purpose), explicit <code>contents: read</code> permissions on the desktop/nix workflows, and desktop builds fall back to an unsigned build when the Tauri signing secrets aren&#x27;t available (which made every Dependabot PR red).</li>
 </ul>]]></content:encoded>
-      <enclosure url="https://sazardev.github.io/shiki/assets/og/0.9.6.png" type="image/png" />
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.9.6.png" type="image/png" />
     </item>
     <item>
       <title>shiki v0.9.5</title>

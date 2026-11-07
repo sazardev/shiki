@@ -1,0 +1,154 @@
+<!--
+  Per-version release page template. `scripts/generate_release_pages.py`
+  fills in every {{PLACEHOLDER}} with plain string substitution and writes
+  the result to docs/changelog/0.10.4.html. Paths inside are written
+  relative to that output location (one level under docs/), i.e. `../css/`,
+  `../assets/`, `../index.html` etc. — not relative to this template file.
+
+  Unlike changelog.html (which fetches CHANGELOG.md live via JS so it can
+  never drift, see docs/js/main.js), this page's changelog body is baked in
+  statically at generation time — it has to be, since link-unfurlers (the
+  actual point of this page existing) read the raw HTML and never execute
+  JS, so the og:title/og:description/og:image and the visible content must
+  already be correct in the file as committed.
+-->
+<!DOCTYPE html>
+<html lang="en" data-theme="gruvbox-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>shiki v0.10.4 — Release notes</title>
+  <meta name="description" content="Live system light/dark theme ([theme] name = &quot;auto&quot;). shiki now follows the terminal&#x27;s own color scheme in real time instead of needing a restart: auto_dark…" />
+  <meta name="keywords" content="shiki changelog, shiki v0.10.4, shiki release notes" />
+  <meta name="author" content="sazardev" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://shiki.sazardev.stream/changelog/0.10.4.html" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://shiki.sazardev.stream/changelog/0.10.4.html" />
+  <meta property="og:site_name" content="shiki" />
+  <meta property="og:title" content="shiki v0.10.4 — Release notes" />
+  <meta property="og:description" content="Live system light/dark theme ([theme] name = &quot;auto&quot;). shiki now follows the terminal&#x27;s own color scheme in real time instead of needing a restart: auto_dark…" />
+  <meta property="og:image" content="https://shiki.sazardev.stream/assets/og/0.10.4.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="shiki v0.10.4 — release card" />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="shiki v0.10.4 — Release notes" />
+  <meta name="twitter:description" content="Live system light/dark theme ([theme] name = &quot;auto&quot;). shiki now follows the terminal&#x27;s own color scheme in real time instead of needing a restart: auto_dark…" />
+  <meta name="twitter:image" content="https://shiki.sazardev.stream/assets/og/0.10.4.png" />
+  <meta name="twitter:image:alt" content="shiki v0.10.4 — release card" />
+
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+  <link rel="alternate" type="application/rss+xml" title="shiki changelog" href="../feed.xml" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/documentation.css" />
+
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "shiki v0.10.4 — Release notes", "description": "Live system light/dark theme ([theme] name = \"auto\"). shiki now follows the terminal's own color scheme in real time instead of needing a restart: auto_dark…", "image": "https://shiki.sazardev.stream/assets/og/0.10.4.png", "url": "https://shiki.sazardev.stream/changelog/0.10.4.html", "mainEntityOfPage": {"@type": "WebPage", "@id": "https://shiki.sazardev.stream/changelog/0.10.4.html"}, "author": {"@type": "Person", "name": "sazardev", "url": "https://github.com/sazardev"}, "publisher": {"@type": "Organization", "name": "shiki", "logo": {"@type": "ImageObject", "url": "https://shiki.sazardev.stream/assets/favicon-512.png"}}, "datePublished": "2026-11-07", "dateModified": "2026-11-07"}</script>
+</head>
+<body class="doc-page">
+
+  <header class="topbar">
+    <div class="brand"><a href="../index.html" style="color:inherit;text-decoration:none;">shiki (私記)</a><span class="cursor"></span></div>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
+    <nav id="site-nav">
+      <a href="../index.html#themes">Themes</a>
+      <a href="../index.html#features">Features</a>
+      <a href="../index.html#install">Install</a>
+      <a href="../documentation.html">Docs</a>
+      <a href="../changelog.html" class="active">Changelog</a>
+      <a href="../press.html">Press</a>
+      <a href="https://github.com/sazardev/shiki">GitHub</a>
+      <span class="version-chip-wrap" id="version-chip-wrap">
+        <button type="button" class="pill pill-button" id="version-pill" hidden></button>
+        <div class="version-popover" id="version-popover" role="dialog" aria-label="What's new" hidden>
+          <div class="version-popover-header">
+            <strong>What's new</strong>
+            <a href="../changelog.html">Full changelog →</a>
+          </div>
+          <div class="version-popover-body changelog-body" id="version-popover-content">
+            <p class="changelog-loading">Loading changelog…</p>
+          </div>
+        </div>
+      </span>
+    </nav>
+  </header>
+
+  <section class="doc-hero">
+    <div class="container">
+      <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
+      <h1>shiki v0.10.4</h1>
+      <p class="muted" style="max-width: 66ch;">Released 2026-11-07.</p>
+      <div class="release-share-row">
+        <span class="release-share-label">Share:</span>
+        <a class="release-share-link" href="https://twitter.com/intent/tweet?text=shiki%20v0.10.4%3A%20Live%20system%20light%2Fdark%20theme%20%28%5Btheme%5D%20name%20%3D%20%22auto%22%29.%20shiki%20now%20follows%20the%20terminal%27s%20own%20color%20scheme%20in%20real%20time%20instead%20of%20needing%20a%20restart%3A%20auto_dark%E2%80%A6&amp;url=https%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.10.4.html" target="_blank" rel="noopener">X</a>
+        <a class="release-share-link" href="https://bsky.app/intent/compose?text=shiki%20v0.10.4%3A%20Live%20system%20light%2Fdark%20theme%20%28%5Btheme%5D%20name%20%3D%20%22auto%22%29.%20shiki%20now%20follows%20the%20terminal%27s%20own%20color%20scheme%20in%20real%20time%20instead%20of%20needing%20a%20restart%3A%20auto_dark%E2%80%A6%20https%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.10.4.html" target="_blank" rel="noopener">Bluesky</a>
+        <a class="release-share-link" href="https://www.reddit.com/submit?url=https%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.10.4.html&amp;title=shiki%20v0.10.4%3A%20Live%20system%20light%2Fdark%20theme%20%28%5Btheme%5D%20name%20%3D%20%22auto%22%29.%20shiki%20now%20follows%20the%20terminal%27s%20own%20color%20scheme%20in%20real%20time%20instead%20of%20needing%20a%20restart%3A%20auto_dark%E2%80%A6" target="_blank" rel="noopener">Reddit</a>
+        <a class="release-share-link" href="https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.10.4.html&amp;t=shiki%20v0.10.4%3A%20Live%20system%20light%2Fdark%20theme%20%28%5Btheme%5D%20name%20%3D%20%22auto%22%29.%20shiki%20now%20follows%20the%20terminal%27s%20own%20color%20scheme%20in%20real%20time%20instead%20of%20needing%20a%20restart%3A%20auto_dark%E2%80%A6" target="_blank" rel="noopener">Hacker News</a>
+        <a class="release-share-link" href="https://wa.me/?text=shiki%20v0.10.4%3A%20Live%20system%20light%2Fdark%20theme%20%28%5Btheme%5D%20name%20%3D%20%22auto%22%29.%20shiki%20now%20follows%20the%20terminal%27s%20own%20color%20scheme%20in%20real%20time%20instead%20of%20needing%20a%20restart%3A%20auto_dark%E2%80%A6%20https%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.10.4.html" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="release-share-link" href="https://t.me/share/url?url=https%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.10.4.html&amp;text=shiki%20v0.10.4%3A%20Live%20system%20light%2Fdark%20theme%20%28%5Btheme%5D%20name%20%3D%20%22auto%22%29.%20shiki%20now%20follows%20the%20terminal%27s%20own%20color%20scheme%20in%20real%20time%20instead%20of%20needing%20a%20restart%3A%20auto_dark%E2%80%A6" target="_blank" rel="noopener">Telegram</a>
+        <a class="release-share-link" href="mailto:?subject=shiki%20v0.10.4%20released&amp;body=shiki%20v0.10.4%3A%20Live%20system%20light%2Fdark%20theme%20%28%5Btheme%5D%20name%20%3D%20%22auto%22%29.%20shiki%20now%20follows%20the%20terminal%27s%20own%20color%20scheme%20in%20real%20time%20instead%20of%20needing%20a%20restart%3A%20auto_dark%E2%80%A6%0A%0Ahttps%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.10.4.html">Email</a>
+        <button type="button" class="copy-btn copy-btn-inline" data-copy-text="🚀 shiki v0.10.4 is out — Live system light/dark theme ([theme] name = &quot;auto&quot;). shiki now follows the terminal&#x27;s own color scheme in real time instead of needing a restart: auto_dark…
+
+https://shiki.sazardev.stream/changelog/0.10.4.html
+
+#rustlang #TUI #opensource">Copy announcement</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container release-layout">
+      <div class="release-shot">
+        <div class="release-shot-frame">
+          <img src="../assets/screenshots/gruvbox-dark.png" alt="shiki v0.10.4, running in a terminal" loading="lazy" />
+        </div>
+      </div>
+      <div class="changelog-body release-notes">
+<h4>Added</h4>
+<ul>
+<li><strong>Live system light/dark theme (<code>[theme] name = &quot;auto&quot;</code>).</strong> shiki now follows the terminal&#x27;s own color scheme in real time instead of needing a restart: <code>auto_dark</code> (default <code>gruvbox-dark</code>) is used while the terminal background is dark and <code>auto_light</code> (default <code>gruvbox-light</code>) while it is light. The TUI re-reads the background over OSC 11 roughly every 1.5 s, only after ~400 ms with no input and only on the main thread between crossterm polls — a background reader would race crossterm for the reply and corrupt keystrokes, and querying while typing could swallow one. Terminals that don&#x27;t answer (tmux without passthrough, non-VT consoles, Windows) back off to one probe every 30 s and stay on the dark half. <code>auto</code> is selectable from the theme picker (System group) and <code>shiki theme set auto</code>; per-notebook <code>theme_name</code> overrides still win, and a concrete theme name ignores the detected scheme entirely. The status line confirms each live switch (<code>theme: gruvbox-light (auto · light)</code>), and <code>shiki doctor</code> validates both configured halves.</li>
+<li><strong>Code fences in the <code>default</code> (terminal-inherit) theme now use the terminal&#x27;s own palette.</strong> Its ANSI names/<code>&quot;reset&quot;</code> slots used to be approximated with fixed RGB values before reaching syntect, so code highlighting never matched the rest of the inherited UI. Non-RGB slots are now carried through the highlighter as a sentinel and decoded back to native <code>ratatui::Color</code>s — keywords use the terminal&#x27;s blue, strings its green, comments its dark-gray, etc., and plain code text defers to <code>Reset</code>. Hex-based themes are unchanged.</li>
+<li><strong><code>scripts/theme-demo.sh</code></strong>, a one-command live-theme demo: it builds the release binary, seeds a throwaway multi-notebook dataset in an isolated XDG environment with <code>theme.name = &quot;auto&quot;</code> enabled, and launches it (<code>--launch</code>), so switching the terminal&#x27;s light/dark theme can be seen without touching real notebooks or config.</li>
+</ul>
+<h4>Fixed</h4>
+<ul>
+<li><strong>PREVIEW no longer flickers while a note is open.</strong> The <code>notify</code>-based live-reload watcher (<code>shiki-tui/src/fs_watch.rs</code>) watched <code>OPEN</code> events as well as real writes, and shiki itself opens every note when listing a directory. That made a feedback loop: list notes → <code>Open</code> events → reload after the 300 ms debounce → list again → more <code>Open</code> events, with PREVIEW&#x27;s cache dropped on every reload and visibly clearing/redrawing about every 0.4 s. Read-side access events (<code>Open</code>, <code>Close(Read)</code>, …) are now ignored; <code>Modify</code>, <code>Create</code>, <code>Remove</code> and <code>Close(Write)</code> still trigger a reload, so external edits keep showing up live.</li>
+</ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="release-nav">
+    <div class="container release-nav-row">
+      <a href="0.10.3.html" class="release-nav-link">← v0.10.3</a>
+      <a href="../changelog.html" class="release-nav-link">All releases</a>
+      <a href="../changelog.html" class="release-nav-link release-nav-link--disabled">No newer release →</a>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/sazardev/shiki">GitHub</a>
+        <a href="https://github.com/sazardev/shiki/releases/tag/v0.10.4">GitHub Release</a>
+        <a href="https://github.com/sazardev/shiki/issues">Issues</a>
+        <a href="https://github.com/sazardev/shiki/blob/main/LICENSE">MIT License</a>
+        <a class="coffee-link" href="https://buymeacoffee.com/sazarcode">☕ Buy me a coffee</a>
+      </div>
+      <small>shiki (私記) — built by <a href="https://github.com/sazardev">sazardev</a>. Free and open source, forever.</small>
+    </div>
+  </footer>
+
+  <script src="../js/main.js"></script>
+</body>
+</html>
