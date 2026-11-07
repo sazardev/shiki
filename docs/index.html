@@ -51,7 +51,7 @@
     "downloadUrl": "https://github.com/sazardev/shiki/releases/latest",
     "applicationCategory": "Utility",
     "operatingSystem": "Linux, Windows, macOS",
-    "softwareVersion": "0.10.3",
+    "softwareVersion": "0.10.4",
     "programmingLanguage": "Rust",
     "license": "https://github.com/sazardev/shiki/blob/main/LICENSE",
     "codeRepository": "https://github.com/sazardev/shiki",
@@ -215,6 +215,10 @@
         Go on, click around. Whatever you land on is exactly what's waiting for you in your
         terminal — no surprises.
       </p>
+      <p class="muted" style="max-width: 62ch;">
+        Or pick <code>auto</code> and let shiki follow your terminal's live light/dark scheme,
+        switching between a configured dark and light palette without a restart.
+      </p>
 
       <div class="theme-family-filter" id="theme-family-filter" role="tablist" aria-label="Filter themes by family"></div>
       <div class="theme-swatches" id="theme-swatches"></div>
@@ -355,7 +359,8 @@
           <div class="icon">▤</div>
           <h3>Real syntax highlighting for code in your notes</h3>
           <p>Fenced code blocks render with actual per-token coloring in PREVIEW, matched to your
-          active theme's light/dark bias — not flat dimmed text. Mermaid fences get their own
+          active theme's palette — in the terminal-inherit <code>default</code> theme, to your
+          terminal's own ANSI colors — not flat dimmed text. Mermaid fences get their own
           accent treatment instead of blending into a plain blockquote.</p>
         </div>
         <div class="feature-card">

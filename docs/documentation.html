@@ -293,7 +293,7 @@
       <table class="ref-table">
         <thead><tr><th>Key</th><th>Action</th></tr></thead>
         <tbody>
-          <tr><td><code>c</code></td><td>Pick a theme — modal, live preview while browsing, Enter confirms</td></tr>
+          <tr><td><code>c</code></td><td>Pick a theme — modal, live preview while browsing, Enter confirms; the System group's <code>auto</code> row follows the terminal's live light/dark scheme</td></tr>
           <tr><td><code>g</code></td><td>Search all notes (title + body, every notebook) — modal, Enter/click to jump</td></tr>
           <tr><td><code>T</code></td><td>Tags panel — <code>j</code>/<code>k</code> browse tags, <code>Enter</code>/<code>l</code> drills into the notes carrying one, <code>Enter</code>/<code>l</code> there jumps to it, <code>h</code>/<code>Esc</code> goes back a level</td></tr>
           <tr><td><code>l</code></td><td>Logs — persistent scrollback of every status-bar message (survives restarts, <code>~/.config/shiki/shiki.log</code>), including errors that already scrolled past; <code>j</code>/<code>k</code> scroll, <code>y</code>/<code>c</code> copies the whole log to the clipboard (OSC 52), <code>x</code> clears all logs (confirmation required), <code>Esc</code>/<code>q</code> closes</td></tr>
@@ -322,7 +322,7 @@
         </figure>
         <figure class="doc-shot-card">
           <img data-shot="wide-24-syntax-highlighting" width="1260" height="760" loading="lazy" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="A note's fenced Rust code block, rendered with real per-token syntax highlighting in PREVIEW" />
-          <figcaption>Fenced code blocks render with a header row (<code>▌ rust  main.rs</code> — an optional <code>file:</code> token shows the file name), a right-aligned line-number gutter (<code>N │</code>), real per-token syntax highlighting, and no literal <code>```</code> markers. <code>$$…$$</code> math — full blocks and inline mid-line — gets the same treatment: its LaTeX content is prettified to readable Unicode (<code>\frac{\sqrt{\pi}}{2}</code> → <code>√π/2</code>). <code>```mermaid</code> fences render as real diagrams (flowchart trees and sequence-diagram columns) instead of flat text. Nested lists/blockquotes, strikethrough, and indented code blocks all render rather than showing as literal text.</figcaption>
+          <figcaption>Fenced code blocks render with a header row (<code>▌ rust  main.rs</code> — an optional <code>file:</code> token shows the file name), a right-aligned line-number gutter (<code>N │</code>), real per-token syntax highlighting, and no literal <code>```</code> markers. In the <code>default</code> (terminal-inherit) theme those token colors are native ANSI colors, so the terminal's own palette decides the highlighting too. <code>$$…$$</code> math — full blocks and inline mid-line — gets the same treatment: its LaTeX content is prettified to readable Unicode (<code>\frac{\sqrt{\pi}}{2}</code> → <code>√π/2</code>). <code>```mermaid</code> fences render as real diagrams (flowchart trees and sequence-diagram columns) instead of flat text. Nested lists/blockquotes, strikethrough, and indented code blocks all render rather than showing as literal text.</figcaption>
         </figure>
       </div>
 
@@ -338,6 +338,7 @@
           <tr><td><code>p</code></td><td>Git pull (fetch + fast-forward merge from the configured remote)</td></tr>
           <tr><td><code>P</code></td><td>Git pull for every notebook that has a remote configured</td></tr>
           <tr><td><code>R</code></td><td>Set the notebook's git remote (URL or local path)</td></tr>
+          <tr><td><code>G</code></td><td>Git dashboard — branches, recent log and working-tree diff of the selected notebook</td></tr>
           <tr><td><code>Ctrl+C</code></td><td>Cancel whatever git operation (<code>s</code>/<code>u</code>/<code>p</code>/<code>P</code>, an auto-pull, or a new-notebook clone) is currently showing in the footer spinner — only intercepted while one is actually running</td></tr>
         </tbody>
       </table>
@@ -432,6 +433,7 @@
         <tbody>
           <tr><td><code>i</code></td><td>Edit inline (or the OS favorite editor if <code>general.use_favorite_editor</code>)</td></tr>
           <tr><td><code>E</code></td><td>Edit externally ($EDITOR)</td></tr>
+          <tr><td><code>d</code></td><td>Working-tree diff of the selected note — a real unified diff against its last commit (also available from inside the history view for a specific revision)</td></tr>
           <tr><td><code>H</code></td><td>Note history — every commit that changed this specific note, newest first, real git history (not a separate versioning system). <code>j</code>/<code>k</code>/<code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> move, <code>Enter</code> views a revision's full content (frontmatter included, since that's what's actually in the commit), <code>d</code> views a real unified diff of that revision against its parent instead (colored <code>-</code>/<code>+</code> lines; also works from inside the full-content view to switch straight to the diff), <code>r</code> reverts to the highlighted (or currently-viewed) revision — behind a confirmation, since it overwrites the current content. The revert itself doesn't commit; it shows up as a normal pending change, picked up by <code>s</code>/<code>u</code>/<code>auto_sync</code> like any other edit. The footer shows the count while reading a note (<code>{n} changes</code>)</td></tr>
           <tr><td><code>L</code></td><td>Links — the selected note's outgoing <code>[[wikilinks]]</code> (resolved against every note in the notebook, any folder depth), every other note that links back to it, and notes that <em>mention</em> this note's title in plain text without linking to it ("Outgoing"/"Backlinks"/"Mentions (unlinked)" sections; a section with nothing in it is omitted). <code>j</code>/<code>k</code>/<code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> move, <code>Enter</code> jumps to the selected note (an unresolved outgoing link reports that instead of jumping), <code>c</code> on a mention row <em>repairs</em> the missed link — it wraps that note's plain-text mention into a real <code>[[wikilink]]</code> (preserving its casing) and the row visibly migrates to Backlinks — and <code>Esc</code>/<code>q</code> closes. Also reachable globally via leader+<code>B</code></td></tr>
           <tr><td><code>o</code></td><td>Outline — every <code>#</code>..<code>######</code> heading in the selected note, indented by level. <code>j</code>/<code>k</code>/<code>PageUp</code>/<code>PageDown</code>/<code>Home</code>/<code>End</code> move, <code>Enter</code> scrolls PREVIEW to that heading, <code>Esc</code>/<code>q</code> closes. Also reachable as <code>Ctrl+O</code> from inside <code>Mode::Edit</code> itself — there, <code>Enter</code> moves the editor's own cursor to the heading instead of scrolling PREVIEW, and the headings come from the live, possibly-unsaved buffer rather than the note's last-saved body</td></tr>
@@ -565,8 +567,9 @@ shiki extension install             # install the browser-extension native host 
 shiki query 'where status = pending sort due asc'   # Dataview-style filter/sort over frontmatter
 shiki query 'where due &lt; today' --count             # for status bars, like `shiki tasks --count`
 shiki query --saved due-soon                        # run a query saved under [queries] in config.toml
-shiki theme list          # list built-in themes, marking the active one
+shiki theme list          # list built-in themes + the auto mode, marking the active one
 shiki theme set &lt;name&gt;    # switch theme (persisted to config.toml)
+shiki theme set auto      # follow the terminal's live light/dark scheme
 shiki theme create [--from &lt;name&gt;]  # scaffold all 19 color overrides from a real palette
 shiki doctor              # environment check: config, data dir, git, editor, terminal, keybindings, snippets
 shiki agent status                    # which agentic tools (Claude Code, Cursor, ...) are connected
@@ -1126,12 +1129,17 @@ Content in **markdown**.
         <li><strong>Default</strong> — inherits the terminal's own colors (fallback;
           <code>bg</code>/<code>fg</code>/<code>border</code> are <code>"reset"</code>, accents use
           the terminal's native ANSI colors) instead of imposing a fixed palette</li>
+        <li><strong>Auto</strong> — follows the terminal's live light/dark scheme, switching
+          between the configured <code>auto_dark</code> and <code>auto_light</code> palettes
+          without a restart (the TUI re-reads the terminal background over OSC 11 while idle;
+          unsupported terminals stay on the dark half)</li>
       </ul>
       <p class="muted" style="max-width:70ch;">
-        The list is grouped by family in the picker (Classic / LoL / Games / Hacker / System
+        The list is grouped by family in the picker (Classic / Games / Hacker / LoL / System
         headers, with <code>default</code> last); the theme picker (leader+<code>c</code>) has a
-        live filter box that matches both the name and the family — with 37 themes you just type
-        <code>hack</code>/<code>pok</code>/<code>lol</code> or a name to narrow it.</p>
+        live filter box that matches both the name and the family — with 37 built-in palettes plus
+        the <code>auto</code> mode you just type <code>hack</code>/<code>pok</code>/<code>lol</code>
+        or a name to narrow it.</p>
       <p class="muted" style="max-width:70ch;">
         Each theme defines 19 configurable color slots: <code>bg</code>, <code>fg</code>,
         <code>accent</code>, <code>selection</code>, <code>border</code>, <code>statusbar</code>,
@@ -1252,14 +1260,19 @@ Content in **markdown**.
       <table class="ref-table config-ref-table">
         <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
         <tbody>
-          <tr><td><code>name</code></td><td><code>"gruvbox-dark"</code></td><td>Which built-in theme to use as the base (<code>shiki theme list</code> shows every name)</td></tr>
+          <tr><td><code>name</code></td><td><code>"gruvbox-dark"</code></td><td>Which built-in theme to use as the base (<code>shiki theme list</code> shows every name). <code>"auto"</code> follows the terminal's live light/dark scheme</td></tr>
           <tr><td><code>icons</code></td><td><code>true</code></td><td>When false, every Nerd Font glyph (notebook/note icons, git status, the list-selection marker, …) falls back to plain text — for a terminal font that isn't Nerd-Fonts-patched</td></tr>
+          <tr><td><code>auto_dark</code></td><td><code>"gruvbox-dark"</code></td><td>Base palette used while the terminal background is dark, when <code>name = "auto"</code>. The background is re-read over OSC 11 while idle, so this switches live</td></tr>
+          <tr><td><code>auto_light</code></td><td><code>"gruvbox-light"</code></td><td>Companion to <code>auto_dark</code> for a light terminal background</td></tr>
           <tr><td><code>notebooks</code></td><td>unset</td><td>Legacy per-notebook base-theme-name map — superseded by <code>[notebooks.&lt;name&gt;] theme_name</code> below, which also covers colors and icons. Nothing writes here anymore; still read for a config saved before that field existed</td></tr>
-          <tr><td><code>[theme.overrides]</code></td><td>all unset</td><td>Override any of the 19 color slots (see <a href="#themes-ref">Included themes</a>) individually — anything left unset falls back to <code>name</code>'s own value for that slot</td></tr>
+          <tr><td><code>[theme.overrides]</code></td><td>all unset</td><td>Override any of the 19 color slots (see <a href="#themes-ref">Included themes</a>) individually — anything left unset falls back to <code>name</code>'s own value for that slot (for <code>auto</code>, to whichever configured half is active)</td></tr>
         </tbody>
       </table>
       <pre class="code">[theme]
 name = "gruvbox-dark"
+# name = "auto"          # follow the terminal's live light/dark scheme
+# auto_dark = "gruvbox-dark"
+# auto_light = "gruvbox-light"
 icons = true
 
 [theme.overrides]
@@ -1610,6 +1623,8 @@ pull = "p"
 pull_all = "P"
 set_remote = "R"
 push = "u"
+# Git dashboard — branches, log and diff of the selected notebook.
+git_dash = "G"
 
 [keybindings.notes]
 new = "a"
@@ -1633,6 +1648,8 @@ metadata = "M"
 edit_inline = "i"
 edit_external = "E"
 history = "H"
+# Working-tree diff of the selected note.
+diff = "d"
 links = "L"
 outline = "o"
 # Same metadata editor as NOTES scope, bound here too.
@@ -1641,6 +1658,13 @@ metadata = "M"
 [theme]
 name = "gruvbox-dark"
 icons = true  # false falls back to plain text — no Nerd Font glyphs anywhere
+# `name = "auto"` follows the terminal's own light/dark scheme in real time:
+# auto_dark is used while the terminal background is dark, auto_light while it
+# is light. The TUI re-reads the background over OSC 11 while idle (never while
+# you're typing), so switching the terminal/OS theme re-themes shiki without a
+# restart. Unsupported terminals stay on auto_dark.
+auto_dark = "gruvbox-dark"
+auto_light = "gruvbox-light"
 # Every one of a theme's 19 color slots can be overridden individually —
 # accent, bg, fg, selection, border, statusbar, highlight, error, warning,
 # success, inactive, scrollbar, tab_active, tab_inactive, panel_title,

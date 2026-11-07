@@ -202,7 +202,7 @@ search, tree view) using the same list/selection they already navigate with `j`/
 
 | Key | Action |
 |---|---|
-| `c` | Pick a theme — modal, live preview while browsing, Enter confirms |
+| `c` | Pick a theme — modal, live preview while browsing, Enter confirms; the System group's `auto` row follows the terminal's live light/dark scheme |
 | `g` | Search all notes (title + body, every notebook) — modal, Enter/click to jump |
 | `T` | Tags panel — `j`/`k` browse tags, `Enter`/`l` drills into the notes carrying one, `Enter`/`l` there jumps to it, `h`/`Esc` goes back a level |
 | `l` | Logs — persistent scrollback of every status-bar message (survives restarts, `~/.config/shiki/shiki.log`), including errors that already scrolled past; `j`/`k` scroll, `y`/`c` copies the whole log to the clipboard (OSC 52), `x` clears all logs (confirmation required), `Esc`/`q` closes |
@@ -232,6 +232,7 @@ search, tree view) using the same list/selection they already navigate with `j`/
 | `p` | Git pull (fetch + fast-forward merge from the configured remote) |
 | `P` | Git pull for every notebook that has a remote configured |
 | `R` | Set the notebook's git remote (URL or local path) |
+| `G` | Git dashboard — branches, recent log and working-tree diff of the selected notebook |
 | `Ctrl+C` | Cancel whatever git operation (`s`/`u`/`p`/`P`, an auto-pull, or a new-notebook clone) is currently showing in the footer spinner — only intercepted while one is actually running |
 
 The footer spinner shown while any of these run in the background also displays elapsed seconds
@@ -295,6 +296,7 @@ resolver instead of attempting a second pull.
 |---|---|
 | `i` | Edit inline (or the OS favorite editor if `general.use_favorite_editor`) |
 | `E` | Edit externally ($EDITOR) |
+| `d` | Working-tree diff of the selected note — a real unified diff against its last commit (also available from inside the history view for a specific revision) |
 | `H` | Note history — every commit that changed this specific note, newest first, real git history (not a separate versioning system). `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` views a revision's full content (frontmatter included, since that's what's actually in the commit), `d` views a real unified diff of that revision against its parent instead (colored `-`/`+` lines, computed by libgit2 itself, not a hand-rolled line algorithm — the first commit in a note's history has no parent, so every line comes back as an addition) — `d` also works from inside the full-content view to switch straight to the diff of the same revision, `r` reverts to the highlighted (or currently-viewed, either view) revision — behind a confirmation, since it overwrites the current content. The revert itself doesn't commit; it shows up as a normal pending change, picked up by `s`/`u`/`auto_sync` like any other edit. The footer shows the count while reading a note (`{n} changes`) |
 | `L` | Links — the selected note's outgoing `[[wikilinks]]` (resolved against every note in the notebook, any folder depth), every other note that links back to it, and notes that *mention* this note's title in plain text without linking to it ("Outgoing"/"Backlinks"/"Mentions (unlinked)" sections; a section with nothing in it is omitted). `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` jumps to the selected note (an unresolved outgoing link reports that instead of jumping), `c` on a mention row *repairs* the missed link — it wraps that note's plain-text mention into a real `[[wikilink]]` (preserving its casing) and the row visibly migrates to Backlinks — and `Esc`/`q` closes. Also reachable globally via leader+`B` |
 | `o` | Outline — every `#`..`######` heading in the selected note, indented by level. Type to filter the list live (case-insensitive substring, matching the which-key modal's own filter), `j`/`k`/`PageUp`/`PageDown`/`Home`/`End` move, `Enter` scrolls PREVIEW to that heading, `Esc` closes (the filter resets). Also reachable as `Ctrl+O` from inside `Mode::Edit` itself — there, `Enter` moves the editor's own cursor to the heading instead of scrolling PREVIEW, and the headings come from the live, possibly-unsaved buffer rather than the note's last-saved body |
@@ -349,7 +351,9 @@ reports whether `chafa` is available.
 Every code fence renders as a block: a header row (`▌ rust  main.rs`, with an optional `file:`
 token), per-token syntax highlighting, and a right-aligned line-number gutter (`N │ `) that resets
 per fence — so code in PREVIEW reads like a real editor view, and discussing "line 3" of a
-highlighted block is unambiguous.
+highlighted block is unambiguous. The `default` (terminal-inherit) theme keeps every token color
+as a native ANSI color instead of a fixed RGB approximation, so the terminal's own palette decides
+how code is highlighted too.
 
 Lists, blockquotes, and code render at any nesting depth: a list item indented two spaces per
 level keeps its indentation and steps the bullet glyph `•` → `◦` → `▪` (ordered items keep their
@@ -553,8 +557,9 @@ shiki notebook rekey <name>         # change the passphrase (verifies the old on
 shiki query 'where status = pending sort due asc'   # Dataview-style filter/sort over frontmatter
 shiki query 'where due < today' --count             # for status bars, like `shiki tasks --count`
 shiki query --saved due-soon                        # run a query saved under [queries] in config.toml
-shiki theme list          # list built-in themes, marking the active one
+shiki theme list          # list built-in themes + the auto mode, marking the active one
 shiki theme set <name>    # switch theme (persisted to config.toml)
+shiki theme set auto      # follow the terminal's live light/dark scheme
 shiki theme create [--from <name>]  # scaffold all 19 color overrides from a real palette
 shiki import obsidian ~/vaults/personal          # adopt a vault in-place as notebook "personal"
 shiki import obsidian ~/vaults/work --copy --tags --git-init  # copy in, merge inline #tags, git init
@@ -1054,9 +1059,14 @@ immediately, no restart needed.
 - **Default** — inherits the terminal's own colors (fallback; `bg`/`fg`/`border` are
   `"reset"`, accents use the terminal's native ANSI colors) instead of imposing a
   fixed palette
+- **Auto** — follows the terminal's live light/dark scheme, switching between the
+  configured `auto_dark` and `auto_light` palettes without a restart (the TUI
+  re-reads the terminal background over OSC 11 while idle; unsupported terminals
+  stay on the dark half)
 
-The list is alphabetical in the picker (default stays last); the theme picker (leader+`c`) has a
-live filter box, so with 37 themes you just type to narrow it down.
+The list is grouped by family in the picker (Classic / Games / Hacker / LoL / System, with
+`default` last); the theme picker (leader+`c`) has a live filter box, so with 37 built-in palettes
+plus the `auto` mode you just type to narrow it down.
 
 Each theme defines ~20 configurable color slots:
 `bg`, `fg`, `accent`, `selection`, `border`, `statusbar`,
@@ -1251,6 +1261,13 @@ metadata = "M"
 [theme]
 name = "gruvbox-dark"
 icons = true  # false falls back to plain text — no Nerd Font glyphs anywhere
+# `name = "auto"` follows the terminal's own light/dark scheme in real time:
+# auto_dark is used while the terminal background is dark, auto_light while it
+# is light. The TUI re-reads the background over OSC 11 while idle (never while
+# you're typing), so switching the terminal/OS theme re-themes shiki without a
+# restart. Unsupported terminals stay on auto_dark.
+auto_dark = "gruvbox-dark"
+auto_light = "gruvbox-light"
 # Every one of a theme's 19 color slots can be overridden individually —
 # accent, bg, fg, selection, border, statusbar, highlight, error, warning,
 # success, inactive, scrollbar, tab_active, tab_inactive, panel_title,

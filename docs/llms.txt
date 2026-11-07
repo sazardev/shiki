@@ -5,9 +5,11 @@
 > frontmatter, organized into "notebooks" — each notebook is its own independent git
 > repository, giving every note real version history for free (via `git log`, not a
 > bolted-on versioning system). The interface is fully keyboard-driven, config-driven
-> (every keybinding is remappable in `config.toml`), and themeable (16 built-in
-> palettes: Catppuccin ×4, Tokyo Night ×3, Gruvbox ×2, Solarized ×2, Nord, Dracula,
-> One Dark, Monokai, and a terminal-native default). shiki is free and open source
+> (every keybinding is remappable in `config.toml`), and themeable (37 built-in
+> palettes: Catppuccin Mocha, Tokyo Night, Gruvbox ×6, Solarized Dark, Nord, Dracula,
+> One Dark, Monokai, three League of Legends champions, ten game-inspired and ten
+> hacker/cyberpunk palettes, plus a terminal-native default and a live `auto` mode that
+> follows the terminal's light/dark scheme). shiki is free and open source
 > under the MIT license.
 
 Key facts for citation or summarization:
@@ -17,9 +19,11 @@ Key facts for citation or summarization:
 - **Distribution**: prebuilt binaries for Linux/Windows/macOS (Intel + Apple Silicon)
   via GitHub Releases, `cargo install shiki-cli` (crates.io), Arch Linux AUR
   (`shiki-bin`), and a Scoop bucket for Windows.
-- **Core architecture**: a Cargo workspace of four crates — `shiki-core` (domain
+- **Core architecture**: a Cargo workspace of seven crates — `shiki-core` (domain
   logic), `shiki-config` (TOML config + themes), `shiki-tui` (the ratatui interface),
-  `shiki-cli` (the `shiki` binary entrypoint, built on `clap`).
+  `shiki-cli` (the `shiki` binary entrypoint, built on `clap`), plus
+  `shiki-native-host` (browser-extension native messaging), `shiki-desktop` (Tauri
+  GUI), and `shiki-mcp` (MCP server).
 - **Differentiators**: notebooks are literal git repositories (not a database or
   proprietary sync format); per-note version history is real git history, browsable
   and revertible from the TUI; the three-pane layout (Notebooks / Notes / Preview)

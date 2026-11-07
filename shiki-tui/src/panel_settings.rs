@@ -520,15 +520,20 @@ pub(crate) fn theme_rows(app: &App) -> Vec<Line<'static>> {
     let focused_name = app.selected_notebook().map(|nb| nb.name.as_str());
     // Show the theme actually active for the focused notebook — a
     // per-notebook override (new `[notebooks.<name>] theme_name`, or the
-    // legacy `[theme.notebooks]` map) wins over the global `name` there.
-    let effective = cfg.theme_for(focused_name);
+    // legacy `[theme.notebooks]` map) wins over the global `name` there, and
+    // an `auto` base resolves against the terminal's live light/dark scheme.
+    let effective = cfg.theme_for_scheme(focused_name, app.terminal_scheme);
+    let base_name = cfg.theme_name_for(focused_name);
     let has_name_override = focused_name.is_some_and(|nb| {
         cfg.notebooks
             .get(nb)
             .is_some_and(|o| o.theme_name.is_some())
             || cfg.theme.notebooks.contains_key(nb)
     });
-    let name_label = if has_name_override {
+    let name_label = if base_name == "auto" {
+        let scheme = app.terminal_scheme.map(|s| s.label()).unwrap_or("dark");
+        format!("auto → {} ({scheme})", effective.name)
+    } else if has_name_override {
         format!("{} (this notebook)", effective.name)
     } else {
         effective.name

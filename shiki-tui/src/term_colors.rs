@@ -1,5 +1,9 @@
-//! Queries the terminal's own foreground/background colors (OSC 10/11) once
-//! at TUI startup.
+//! Queries the terminal's own foreground/background colors (OSC 10/11).
+//!
+//! The first query happens once at TUI startup (`shiki-cli/src/tui.rs`); the
+//! `"auto"` theme mode then re-queries periodically from the idle event loop
+//! (`shiki-tui/src/app/mod.rs::run`) so switching the terminal/OS light/dark
+//! scheme re-themes shiki live instead of requiring a restart.
 //!
 //! SGR colors have no alpha channel, so the `default` (terminal-inherit)
 //! theme's `selection = "auto"` can't literally ask the terminal for "the
@@ -21,6 +25,12 @@
 //! query returned before reading either reply — which then reached crossterm
 //! as `Alt+]` plus stray characters (#93, #114). `select` handles those fds;
 //! crossterm's own `filedescriptor` dependency uses the same workaround.
+//!
+//! The periodic re-query is deliberately performed from the *main* thread,
+//! only after an idle stretch with no input pending, and never concurrently
+//! with crossterm's own read: a second thread reading `/dev/tty` would race
+//! crossterm's event source for the reply, and losing that race means the
+//! reply is parsed as keystrokes (exactly the startup bug above).
 
 use ratatui::style::Color;
 
@@ -28,8 +38,9 @@ use ratatui::style::Color;
 use std::io::{Read, Write};
 #[cfg(unix)]
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::time::Duration;
 #[cfg(unix)]
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// How long to wait for the terminal's reply before giving up — one 120 ms
 /// budget for both responses, paid only once per process at startup.
@@ -46,12 +57,21 @@ pub const SELECTION_ALPHA_PERCENT: u8 = 20;
 /// answers in a format this doesn't recognize.
 #[cfg(unix)]
 pub fn query_fg_bg() -> Option<(Color, Color)> {
+    query_fg_bg_with_timeout(QUERY_TIMEOUT)
+}
+
+/// Same query with a caller-chosen timeout — the periodic live re-query uses
+/// a much shorter budget (a responsive terminal answers in a few milliseconds,
+/// and this runs on the UI thread), while startup keeps the more forgiving
+/// 120 ms.
+#[cfg(unix)]
+pub fn query_fg_bg_with_timeout(timeout: Duration) -> Option<(Color, Color)> {
     let mut tty = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
         .open("/dev/tty")
         .ok()?;
-    query_fg_bg_on(&mut tty, QUERY_TIMEOUT)
+    query_fg_bg_on(&mut tty, timeout)
 }
 
 /// The I/O half of `query_fg_bg`, split out so the Unix unit tests can drive
@@ -166,6 +186,13 @@ pub fn query_fg_bg() -> Option<(Color, Color)> {
     None
 }
 
+/// Non-Unix stub for the periodic live re-query — the `"auto"` theme mode
+/// stays on its dark half.
+#[cfg(not(unix))]
+pub fn query_fg_bg_with_timeout(_timeout: Duration) -> Option<(Color, Color)> {
+    None
+}
+
 /// Extracts both OSC 10 and OSC 11 replies from the raw bytes read off the
 /// tty. Either reply missing (or unparseable) means the whole query is
 /// treated as failed — a half-known pair would blend against the wrong
@@ -261,6 +288,20 @@ pub fn blend_fg_over_bg(fg: (u8, u8, u8), bg: (u8, u8, u8), percent: u8) -> (u8,
     (mix(fg.0, bg.0), mix(fg.1, bg.1), mix(fg.2, bg.2))
 }
 
+/// Classifies the terminal's light/dark scheme from its queried fg/bg pair.
+/// Only the background matters (that's what "scheme" means for readability),
+/// and it uses the same perceptual luminance threshold as
+/// `render::is_dark_color`, so `"auto"`'s chosen half agrees with the syntax
+/// highlighter's own dark/light bias. `Reset`/ANSI colors are classified as
+/// dark, same default as everywhere else.
+pub fn scheme_from_colors((_fg, bg): (Color, Color)) -> shiki_config::ThemeScheme {
+    if crate::render::is_dark_color(bg) {
+        shiki_config::ThemeScheme::Dark
+    } else {
+        shiki_config::ThemeScheme::Light
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,6 +372,25 @@ mod tests {
         assert_eq!(blend_fg_over_bg(fg, bg, 100), fg);
         // Clamped rather than wrapping.
         assert_eq!(blend_fg_over_bg(fg, bg, 255), fg);
+    }
+
+    #[test]
+    fn scheme_is_classified_from_the_background_luminance() {
+        use shiki_config::ThemeScheme;
+        assert_eq!(
+            scheme_from_colors((Color::Rgb(220, 220, 220), Color::Rgb(24, 26, 31))),
+            ThemeScheme::Dark
+        );
+        assert_eq!(
+            scheme_from_colors((Color::Rgb(24, 26, 31), Color::Rgb(250, 250, 245))),
+            ThemeScheme::Light
+        );
+        // A terminal that didn't identify its colors is treated as dark, the
+        // same fallback the rest of the TUI already uses.
+        assert_eq!(
+            scheme_from_colors((Color::Reset, Color::Reset)),
+            ThemeScheme::Dark
+        );
     }
 
     #[cfg(unix)]

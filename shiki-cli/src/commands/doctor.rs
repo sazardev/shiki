@@ -796,7 +796,7 @@ fn collect_unknown_keys(
 
 fn check_theme_health(config: &Config, r: &mut Report) {
     let name = &config.theme.name;
-    if name != "default" && shiki_config::themes::by_name(name).is_none() {
+    if name != "default" && name != "auto" && shiki_config::themes::by_name(name).is_none() {
         r.warn(
             "theme",
             format!(
@@ -806,6 +806,23 @@ fn check_theme_health(config: &Config, r: &mut Report) {
         );
     } else {
         r.pass("theme", format!("\"{name}\""));
+    }
+
+    if name == "auto" {
+        for (field, value) in [
+            ("auto_dark", &config.theme.auto_dark),
+            ("auto_light", &config.theme.auto_light),
+        ] {
+            if shiki_config::themes::by_name(value).is_none() {
+                r.warn(
+                    "theme",
+                    format!(
+                        "theme.{field} = \"{value}\" doesn't match any built-in theme \u{2014} \
+                         that half of `name = \"auto\"` falls back to \"default\""
+                    ),
+                );
+            }
+        }
     }
 
     let overrides: [(&str, &Option<String>); 19] = [

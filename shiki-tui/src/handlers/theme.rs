@@ -8,11 +8,16 @@ impl App {
         self.theme_search.clear();
         // The list is displayed grouped by family, so position the cursor on
         // the current theme's row within that grouped order rather than its
-        // `theme_index` in the flat `all()` list.
+        // `theme_index` in the flat `all()` list. Use the *configured* base
+        // name, not `self.theme.name`: under `name = "auto"` the resolved
+        // palette changes with the terminal scheme, while the picker's cursor
+        // should stay on the `auto` row.
+        let notebook = self.selected_notebook().map(|nb| nb.name.as_str());
+        let active_name = self.config.theme_name_for(notebook).to_string();
         self.theme_picker_index = self
             .theme_picker_filtered()
             .iter()
-            .position(|t| t.name == self.theme.name)
+            .position(|t| t.name == active_name)
             .unwrap_or(0);
         self.show_theme_picker = true;
     }
@@ -71,24 +76,19 @@ impl App {
                 let Some(t) = filtered.get(self.theme_picker_index) else {
                     return;
                 };
-                self.theme = t.clone();
-                self.theme_index = self
-                    .available_themes
-                    .iter()
-                    .position(|a| a.name == t.name)
-                    .unwrap_or(self.theme_index);
+                let picked = t.clone();
                 // Only reset overrides when actually switching to a
-                // different base theme — compared against the *committed*
+                // different base theme — compared against the *configured*
                 // value (the last theme actually saved for the current
                 // notebook, or the global `name`), not `self.theme.name`
-                // (the live-preview value while browsing). Re-confirming
-                // the theme that was already active with no real change
-                // used to silently wipe any hand-written custom colors.
+                // (the live-preview value while browsing). `auto` counts as
+                // its own base name even though `self.theme` currently holds
+                // the resolved light/dark palette.
                 let committed_base = self
                     .config
-                    .theme_for(self.selected_notebook().map(|nb| nb.name.as_str()))
-                    .name;
-                let base_changed = committed_base != t.name;
+                    .theme_name_for(self.selected_notebook().map(|nb| nb.name.as_str()))
+                    .to_string();
+                let base_changed = committed_base != picked.name;
                 // A focused notebook gets its own `[notebooks.<name>]`
                 // entry (base name and this notebook's own color overrides
                 // reset together, since they're this notebook's state) —
@@ -99,14 +99,14 @@ impl App {
                     Some(nb) => {
                         let name = nb.name.clone();
                         let over = self.config.notebooks.entry(name.clone()).or_default();
-                        over.theme_name = Some(t.name.clone());
+                        over.theme_name = Some(picked.name.clone());
                         if base_changed {
                             over.theme_overrides = Default::default();
                         }
                         format!(" for notebook '{name}'")
                     }
                     None => {
-                        self.config.theme.name = t.name.clone();
+                        self.config.theme.name = picked.name.clone();
                         if base_changed {
                             self.config.theme.overrides = Default::default();
                         }
@@ -116,6 +116,11 @@ impl App {
                 if let Ok(path) = Config::default_path() {
                     let _ = self.config.save(&path);
                 }
+                // Re-resolve instead of keeping `picked` verbatim: for
+                // `"auto"` the palette depends on the live terminal scheme,
+                // and this also re-derives `theme_index` for the concrete
+                // palette that will actually render.
+                self.refresh_theme_for_selected_notebook();
                 self.set_status(format!("theme: {}{scope}", self.theme.name));
                 self.close_theme_picker();
             }
@@ -148,6 +153,11 @@ impl App {
     pub(crate) fn close_theme_picker(&mut self) {
         self.show_theme_picker = false;
         self.theme_search.clear();
+        // The terminal scheme may have changed while the picker was open (its
+        // live preview intentionally wins over the background watch); now
+        // that the preview is over, resolve the committed config again
+        // against the current scheme so `auto` never closes on a stale half.
+        self.refresh_theme_for_selected_notebook();
         if self.reopen_settings_after_theme_picker {
             self.reopen_settings_after_theme_picker = false;
             self.show_settings = true;
@@ -164,8 +174,8 @@ impl App {
             return;
         }
         self.theme_picker_index = shift(self.theme_picker_index, delta, filtered.len());
-        if let Some(t) = filtered.get(self.theme_picker_index) {
-            self.theme = t.clone();
+        if let Some(t) = filtered.get(self.theme_picker_index).cloned() {
+            self.preview_theme(t);
         }
     }
 
@@ -178,8 +188,21 @@ impl App {
             return;
         }
         self.theme_picker_index = idx.min(filtered.len() - 1);
-        if let Some(t) = filtered.get(self.theme_picker_index) {
-            self.theme = t.clone();
+        if let Some(t) = filtered.get(self.theme_picker_index).cloned() {
+            self.preview_theme(t);
+        }
+    }
+
+    /// Applies a picker row as the live preview. The synthetic `auto` entry
+    /// is a marker, not a palette: preview what its configured dark/light
+    /// half would actually look like right now, so browsing onto `auto`
+    /// doesn't flash the terminal-default stand-in before Enter.
+    fn preview_theme(&mut self, theme: shiki_config::Theme) {
+        if theme.name == "auto" {
+            let notebook = self.selected_notebook().map(|nb| nb.name.as_str());
+            self.theme = self.config.theme_for_scheme(notebook, self.terminal_scheme);
+        } else {
+            self.theme = theme;
         }
     }
 }

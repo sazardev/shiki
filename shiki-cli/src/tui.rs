@@ -27,8 +27,10 @@ pub fn launch(config: Config, store: NotebookStore) -> Result<()> {
     let mut app = App::new(config, store)?;
     // Ask the terminal for its own fg/bg (OSC 10/11) once, after raw mode is
     // on — the `default` theme's `"auto"` selection derives its 20%-alpha
-    // highlight band from those real colors. Unsupported terminals return
-    // `None` and the band falls back to a fixed dark gray.
+    // highlight band from those real colors, and `theme.name = "auto"` picks
+    // its dark/light half from the background. `app::run` re-queries while
+    // idle so changing the terminal/OS scheme re-themes the TUI live.
+    // Unsupported terminals return `None` and both features fall back.
     app.set_terminal_colors(shiki_tui::term_colors::query_fg_bg());
     let result = shiki_tui::app::run(&mut terminal, &mut app);
 

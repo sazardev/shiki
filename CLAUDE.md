@@ -24,7 +24,7 @@ cargo test -p shiki-tui clicking_the_button_row   # single test by (substring of
 cargo audit                          # CI runs this too; ignore list is .cargo/audit.toml
 ```
 
-There are 504 `#[test]`s: 242 in `shiki-core`, 27 in `shiki-config`, 196 in `shiki-tui`, 33 in
+There are 521 `#[test]`s: 243 in `shiki-core`, 33 in `shiki-config`, 206 in `shiki-tui`, 33 in
 `shiki-cli`, plus 1 in `shiki-native-host` and 5 in `shiki-desktop` (`shiki-mcp` has none yet — its
 tool bodies are thin wrappers over already-tested `shiki-core` logic, verified instead by a manual
 stdio protocol smoke test) — `cargo test --workspace` is green. They're all inline `#[cfg(test)]`
@@ -378,7 +378,7 @@ at AI assistants/crawlers that check for it directly, the same way search engine
 
 ## Architecture
 
-Cargo workspace, six members. The four terminal crates form a strict one-way dependency chain:
+Cargo workspace, seven members. The four terminal crates form a strict one-way dependency chain:
 
 ```
 shiki-core   (pure domain logic, no TUI, no config crate dependency)
@@ -465,14 +465,44 @@ selected row now carries `48;2;60;56;54`, exactly `#3c3836`). Those ~29 call sit
 through `App::selection_bg()`/`App::selection_fg()` instead of reading the slot inline — see the
 `"auto"` paragraph below.
 
+**`theme.name = "auto"` follows the terminal's own light/dark scheme live.** `ThemeConfig` carries
+`auto_dark`/`auto_light` (defaults `gruvbox-dark`/`gruvbox-light`); `Config::theme_name_for`
+returns the *configured* base name (`"auto"` included) and `Config::theme_for_scheme` swaps that
+for the right half, so every actual palette lookup stays a plain built-in theme. Per-notebook
+`theme_name` still wins over the global `auto`, and a concrete theme name ignores the detected
+scheme entirely. The TUI derives the scheme from the OSC 11 background (`term_colors::
+query_fg_bg_with_timeout` + `scheme_from_colors`, same luminance threshold as
+`render::is_dark_color`) and `App::set_terminal_colors` re-resolves the active theme whenever the
+scheme flips. `app::run` re-queries every ~1.5 s but *only* after ~400 ms with no input and only
+on the main thread between crossterm polls: a background reader would race crossterm's
+`/dev/tty` reader for the OSC reply (the loser parses it as `Alt+]` + keystrokes), and querying
+while typing could swallow a keystroke that lands in the same read. Unsupported terminals back
+off to 30 s and stay on the dark half. The picker's `auto` row is a synthetic `Theme::auto_entry`
+inserted into `App::available_themes` only — never into `themes::all()`, so the docs-site theme
+catalog stays exactly the 37 real palettes; CLI `theme list` inserts the same marker entry.
+`close_theme_picker` re-resolves after the preview because the background watch deliberately
+doesn't yank a live preview out from under the picker.
+
+**Code fences in the `default` theme keep native ANSI colors instead of a fixed RGB guess.**
+`syntax.rs` builds a runtime syntect theme from the active theme's slots, but syntect only stores
+RGBA; the old `to_syntect_color` approximated `Color::Blue`/`Reset`/`Indexed` with hardcoded RGB,
+so `default` code highlighting never matched the rest of the terminal-inherit UI. Non-RGB slots
+are now encoded as a private sentinel (`ANSI_MARKER_*`, alpha carries the variant, real RGB slots
+always have `a == 0xFF` so `#534849` can't collide) and decoded back to the exact
+`ratatui::Color` in `highlight()`. Plain text uses `Reset`, keywords the theme's `accent`
+(blue), strings `success` (green), comments `muted` (dark gray, italic), etc. Hex themes are
+byte-for-byte unaffected — verified live: `default` emitted only `38;5;N` SGRs, gruvbox-dark
+still emitted truecolor `38;2;…`, for the same Rust fence.
+
 **The `default` (terminal-inherit) theme's `selection` is `"auto"`, not a color.** SGR has no
 alpha, so "the text color at 20%" is precomputed: `render::selection_bg` blends the theme's `fg`
 over its `bg` at 20% (integer math, `term_colors::SELECTION_ALPHA_PERCENT`) — and since `default`
 has both slots as `"reset"`, `shiki-cli/src/tui.rs` queries the terminal's real fg/bg over
-OSC 10/11 once at startup (`shiki-tui/src/term_colors.rs`: `/dev/tty` directly, not stdin, so a
+OSC 10/11 at startup (`shiki-tui/src/term_colors.rs`: `/dev/tty` directly, not stdin, so a
 reply that loses the race with the 120 ms timeout can't be misparsed by crossterm as `Alt+]` plus
-stray characters; a final non-blocking drain catches late ones) and `App::set_terminal_colors`
-stores the pair. That readiness wait is `select(2)` on macOS, not `poll(2)`: Darwin's `poll`
+stray characters; a final non-blocking drain catches late ones), `app::run` re-queries the same
+pair while idle so the band and `theme.name = "auto"` follow a live scheme change, and
+`App::set_terminal_colors` stores the pair. That readiness wait is `select(2)` on macOS, not `poll(2)`: Darwin's `poll`
 reports `POLLNVAL` for `/dev/tty` and other tty/pty fds, so the query returned before reading
 either reply — the late bytes then reached crossterm as `Alt+]` plus stray characters, and with
 NOTES focused the `r` in `rgb:` opened the Rename dialog on startup (#93, #114). `select` handles

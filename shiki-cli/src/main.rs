@@ -640,7 +640,7 @@ enum FolderAction {
 
 #[derive(Subcommand)]
 enum ThemeAction {
-    /// Lists all built-in themes, marking the active one
+    /// Lists all built-in themes and the live `auto` mode, marking the active one
     List,
     /// Sets the active theme by name (see `shiki theme list`). With
     /// `--notebook <name>`, sets that notebook's override instead of the

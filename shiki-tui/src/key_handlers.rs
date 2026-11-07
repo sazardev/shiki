@@ -986,7 +986,9 @@ impl App {
     /// explicitly set of its own for this to work, since it clones the
     /// *resolved* theme, not just whatever override fields happen to be set.
     fn apply_theme_to_all_notebooks(&mut self, source: &str) {
-        let resolved = self.config.theme_for(Some(source));
+        let resolved = self
+            .config
+            .theme_for_scheme(Some(source), self.terminal_scheme);
         let icons = self.config.icons_for(Some(source));
         let overrides = shiki_config::config::ThemeOverrides::from_theme(&resolved);
         let targets: Vec<String> = self
