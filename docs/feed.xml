@@ -12,6 +12,19 @@
       <link>https://shiki.sazardev.stream/changelog.html</link>
     </image>
     <item>
+      <title>shiki v0.10.5</title>
+      <link>https://shiki.sazardev.stream/changelog/0.10.5.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.10.5.html</guid>
+      <pubDate>Sun, 15 Nov 2026 00:00:00 +0000</pubDate>
+      <description>A malformed terminal color reply can no longer crash the TUI. The OSC 10/11 parser&#x27;s #RRGGBB branch sliced the reply by byte index; a non-ASCII six-byte payl…</description>
+      <content:encoded><![CDATA[<h4>Fixed</h4>
+<ul>
+<li><strong>A malformed terminal color reply can no longer crash the TUI.</strong> The OSC 10/11 parser&#x27;s <code>#RRGGBB</code> branch sliced the reply by byte index; a non-ASCII six-byte payload could split a multi-byte character and panic. Non-ASCII hex payloads are now rejected up front (and the query buffer/drain are capped so a flooding tty can&#x27;t grow them without bound).</li>
+<li><strong>Live reload now also reacts to backend rescan events.</strong> An inotify overflow or FSEvents history gap arrives as a path-less rescan event; it now schedules the same debounced reload as a real write instead of waiting for the next file change.</li>
+</ul>]]></content:encoded>
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.10.5.png" type="image/png" />
+    </item>
+    <item>
       <title>shiki v0.10.4</title>
       <link>https://shiki.sazardev.stream/changelog/0.10.4.html</link>
       <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.10.4.html</guid>
