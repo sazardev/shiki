@@ -27,4 +27,10 @@ ignore = [
     # crypto-bigint 0.5.5 timing variability, via age -> p256/elliptic-curve (and hpke). Needs
     # >= 0.7.6, a semver-incompatible bump that only upstream age can take. Remove once age updates.
     "RUSTSEC-2026-0387",
+    # glib 0.18.5 unsoundness in VariantStrIter (RUSTSEC-2024-0429) — pulled transitively by the
+    # GTK3/tauri desktop stack (shiki-desktop). Upgrading to glib >= 0.20 requires a coordinated
+    # tauri/wry/webkit2gtk/gtk-rs ecosystem bump that is not feasible as a patch release. shiki's
+    # own code does not use glib::VariantStrIter directly. Remove once the desktop stack moves off
+    # glib 0.18.
+    "RUSTSEC-2024-0429",
 ]

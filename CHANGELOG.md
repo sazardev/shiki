@@ -6,6 +6,16 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+## [0.10.6] - 2026-11-15
+
+### Security
+
+- **Dependency and `cargo audit` fixes.** Updated `rmcp` to 3.10.0 (addresses RUSTSEC-2026-0462),
+  refreshed compatible dependency patches in `Cargo.lock` (including `rustix`, `lru`, `notify-rust`,
+  `zip`, and others), and allowlisted transitive `glib` 0.18.5 (RUSTSEC-2024-0429) in
+  `.cargo/audit.toml` because the GTK3/tauri desktop stack cannot move to glib >= 0.20 as a patch
+  release and shiki does not use `glib::VariantStrIter` directly.
+
 ## [0.10.5] - 2026-11-15
 
 ### Fixed
