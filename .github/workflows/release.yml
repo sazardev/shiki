@@ -262,10 +262,11 @@ jobs:
           # failing the whole job at the very first step with
           # "could not read Username for 'https://github.com'" on the
           # v0.10.4 release (twice, including a rerun), even though the same
-          # PAT successfully pushed the tag in auto-tag.yml. The "Commit
-          # updated manifests" step below rewrites `origin` with the PAT
-          # right before pushing, which is the credential path that's
-          # actually been proven to work.
+          # PAT successfully pushed the tag in auto-tag.yml. Don't persist
+          # any credentials: the "Commit updated manifests" step below
+          # rewrites `origin` with the PAT right before pushing, which is
+          # the credential path that's actually been proven to work.
+          persist-credentials: false
 
       - name: Download release checksums
         run: |
@@ -504,7 +505,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: main
-          token: ${{ secrets.RELEASE_TAG_PAT || github.token }}
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -573,7 +574,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: main
-          token: ${{ secrets.RELEASE_TAG_PAT || github.token }}
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -646,7 +647,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: main
-          token: ${{ secrets.RELEASE_TAG_PAT || github.token }}
+          # Read-only checkout; the push below rewrites origin with the PAT.
+          persist-credentials: false
 
       - name: Download generated assets
         uses: actions/download-artifact@v8
@@ -719,6 +721,7 @@ jobs:
             exit 1
           else
             git commit -m "docs: refresh screenshots and demo gif for ${{ needs.resolve-tag.outputs.tag }}"
+            git remote set-url origin "https://x-access-token:${HAS_PAT}@github.com/${GITHUB_REPOSITORY}.git"
             git push origin HEAD:main
           fi
 
@@ -738,7 +741,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: main
-          token: ${{ secrets.RELEASE_TAG_PAT || github.token }}
+          # Read-only checkout; the push below rewrites origin with the PAT.
+          persist-credentials: false
 
       - uses: actions/setup-python@v7
         with:
@@ -782,6 +786,7 @@ jobs:
             exit 1
           else
             git commit -m "docs: add release page and OG card for ${{ needs.resolve-tag.outputs.tag }}"
+            git remote set-url origin "https://x-access-token:${HAS_PAT}@github.com/${GITHUB_REPOSITORY}.git"
             git push origin HEAD:main
           fi
 

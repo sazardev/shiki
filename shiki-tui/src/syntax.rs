@@ -102,6 +102,7 @@ const ANSI_MARKER_R: u8 = 0x53; // 'S'
 const ANSI_MARKER_B: u8 = 0x49; // 'I'
 const ANSI_MARKER_G_NAMED: u8 = 0x48; // 'H'
 const ANSI_MARKER_G_INDEXED: u8 = 0x4A; // 'J'
+const ANSI_MARKER_G_INDEXED_255: u8 = 0x4B; // 'K' (see the alpha note below)
 
 /// `Reset`/the 16 ANSI names, in the order used by the marker's alpha byte.
 fn named_color(index: u8) -> Option<Color> {
@@ -160,6 +161,14 @@ fn ansi_sentinel(color: Color) -> Option<SyntectColor> {
         });
     }
     match color {
+        Color::Indexed(255) => Some(SyntectColor {
+            r: ANSI_MARKER_R,
+            // Indexed(255) can't use alpha 255 (the real-RGB marker), so it
+            // gets its own `g` byte and alpha 0.
+            g: ANSI_MARKER_G_INDEXED_255,
+            b: ANSI_MARKER_B,
+            a: 0,
+        }),
         Color::Indexed(index) => Some(SyntectColor {
             r: ANSI_MARKER_R,
             g: ANSI_MARKER_G_INDEXED,
@@ -174,16 +183,14 @@ fn ansi_sentinel(color: Color) -> Option<SyntectColor> {
 /// an ANSI/`Reset` marker becomes the exact `ratatui::Color` the terminal
 /// should resolve itself.
 fn ratatui_color(color: SyntectColor) -> Color {
-    if color.r == ANSI_MARKER_R && color.b == ANSI_MARKER_B {
+    // Every sentinel uses alpha < 0xFF; real theme RGB slots always go
+    // through with alpha 0xFF, so a marker-like #534A49 still round-trips as
+    // itself instead of being mistaken for Indexed(255).
+    if color.r == ANSI_MARKER_R && color.b == ANSI_MARKER_B && color.a != 0xFF {
         match color.g {
-            // Named/Reset markers always carry an alpha in 0..=16, so they
-            // can't collide with a real RGB slot (always alpha 0xFF).
-            ANSI_MARKER_G_NAMED if color.a != 0xFF => {
-                return named_color(color.a).unwrap_or(Color::Reset);
-            }
-            // Indexed(255) legitimately uses alpha 0xFF, so the `g` marker
-            // (not the alpha) is what identifies this branch.
+            ANSI_MARKER_G_NAMED => return named_color(color.a).unwrap_or(Color::Reset),
             ANSI_MARKER_G_INDEXED => return Color::Indexed(color.a),
+            ANSI_MARKER_G_INDEXED_255 => return Color::Indexed(255),
             _ => {}
         }
     }
@@ -486,9 +493,15 @@ mod tests {
             );
         }
 
-        // A real hex slot is never mistaken for the marker.
-        let real = Color::Rgb(ANSI_MARKER_R, ANSI_MARKER_G_NAMED, ANSI_MARKER_B);
-        assert_eq!(ratatui_color(to_syntect_color(real)), real);
+        // Real hex slots are never mistaken for a marker, even when they
+        // happen to share the marker's r/b bytes.
+        for real in [
+            Color::Rgb(ANSI_MARKER_R, ANSI_MARKER_G_NAMED, ANSI_MARKER_B),
+            Color::Rgb(ANSI_MARKER_R, ANSI_MARKER_G_INDEXED, ANSI_MARKER_B),
+            Color::Rgb(ANSI_MARKER_R, ANSI_MARKER_G_INDEXED_255, ANSI_MARKER_B),
+        ] {
+            assert_eq!(ratatui_color(to_syntect_color(real)), real);
+        }
     }
 
     #[test]
