@@ -12,6 +12,18 @@
       <link>https://shiki.sazardev.stream/changelog.html</link>
     </image>
     <item>
+      <title>shiki v0.10.6</title>
+      <link>https://shiki.sazardev.stream/changelog/0.10.6.html</link>
+      <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.10.6.html</guid>
+      <pubDate>Sun, 15 Nov 2026 00:00:00 +0000</pubDate>
+      <description>Dependency and cargo audit fixes. Updated rmcp to 3.10.0 (addresses RUSTSEC-2026-0462), refreshed compatible dependency patches in Cargo.lock (including rust…</description>
+      <content:encoded><![CDATA[<h4>Security</h4>
+<ul>
+<li><strong>Dependency and <code>cargo audit</code> fixes.</strong> Updated <code>rmcp</code> to 3.10.0 (addresses RUSTSEC-2026-0462), refreshed compatible dependency patches in <code>Cargo.lock</code> (including <code>rustix</code>, <code>lru</code>, <code>notify-rust</code>, <code>zip</code>, and others), and allowlisted transitive <code>glib</code> 0.18.5 (RUSTSEC-2024-0429) in <code>.cargo/audit.toml</code> because the GTK3/tauri desktop stack cannot move to glib &gt;= 0.20 as a patch release and shiki does not use <code>glib::VariantStrIter</code> directly.</li>
+</ul>]]></content:encoded>
+      <enclosure url="https://shiki.sazardev.stream/assets/og/0.10.6.png" type="image/png" />
+    </item>
+    <item>
       <title>shiki v0.10.5</title>
       <link>https://shiki.sazardev.stream/changelog/0.10.5.html</link>
       <guid isPermaLink="true">https://shiki.sazardev.stream/changelog/0.10.5.html</guid>
