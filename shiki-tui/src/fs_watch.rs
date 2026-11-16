@@ -65,6 +65,13 @@ fn is_relevant(path: &Path) -> bool {
 fn is_change_event(event: &Event) -> bool {
     use notify::event::{AccessKind, AccessMode, EventKind};
 
+    // A backend rescan (inotify overflow, FSEvents history gap) means events
+    // may have been missed; reload even when the rescan event carries no
+    // paths, instead of staying stale until the next real write.
+    if event.need_rescan() {
+        return true;
+    }
+
     let read_access = matches!(
         event.kind,
         EventKind::Access(
@@ -92,7 +99,7 @@ mod tests {
 
     #[test]
     fn access_events_from_our_own_reads_are_ignored() {
-        use notify::event::{AccessKind, AccessMode, EventKind, ModifyKind};
+        use notify::event::{AccessKind, AccessMode, EventKind, Flag, ModifyKind};
 
         let event = |kind| Event {
             kind,
@@ -121,5 +128,14 @@ mod tests {
         assert!(is_change_event(&event(EventKind::Create(
             notify::event::CreateKind::File
         ))));
+        // A backend rescan (events may have been missed) counts even with no
+        // paths attached.
+        let rescan = Event {
+            kind: EventKind::Other,
+            paths: Vec::new(),
+            attrs: Default::default(),
+        }
+        .set_flag(Flag::Rescan);
+        assert!(is_change_event(&rescan));
     }
 }

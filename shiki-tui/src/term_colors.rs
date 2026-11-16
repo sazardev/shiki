@@ -100,6 +100,13 @@ fn query_fg_bg_on<T: Read + Write + AsRawFd>(
                 if parse_fg_bg(&buf).is_some() {
                     break;
                 }
+                // A real OSC 10/11 pair is well under 100 bytes. Cap the
+                // buffer so a terminal that floods input during the query
+                // window can't make this unbounded, even within the
+                // (short) deadline.
+                if buf.len() > 4096 {
+                    break;
+                }
             }
         }
     }
@@ -247,6 +254,12 @@ fn parse_color_spec(spec: &str) -> Option<(u8, u8, u8)> {
         return Some((r, g, b));
     }
     let hex = spec.strip_prefix('#')?;
+    // The 6-digit branch below slices `hex` by byte index; reject anything
+    // non-ASCII first so a malformed multi-byte reply can't panic on a
+    // non-char-boundary slice.
+    if !hex.is_ascii() {
+        return None;
+    }
     match hex.len() {
         3 => {
             let expand = |c: char| -> Option<u8> {
@@ -331,6 +344,14 @@ mod tests {
             parse_fg_bg(b"\x1b]10;rgb:ffff/0/8080\x1b\\\x1b]11;#000\x1b\\"),
             Some((Color::Rgb(0xff, 0x00, 0x80), Color::Rgb(0, 0, 0)))
         );
+    }
+
+    #[test]
+    fn malformed_multibyte_hex_is_rejected_without_panicking() {
+        // Six bytes, but the second is the middle of a multi-byte char —
+        // byte-index slicing in the old #RRGGBB parser would have panicked.
+        assert_eq!(parse_color_spec("#aééb"), None);
+        assert_eq!(parse_color_spec("#ééab"), None);
     }
 
     #[test]
