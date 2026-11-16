@@ -1,17 +1,17 @@
 class Shiki < Formula
   desc "TUI note-taking app with a Yazi-inspired three-pane layout and git-backed notebooks"
   homepage "https://github.com/sazardev/shiki"
-  version "0.10.4"
+  version "0.10.5"
   license "MIT"
 
   on_macos do
     on_arm do
-      url "https://github.com/sazardev/shiki/releases/download/v0.10.4/shiki-v0.10.4-aarch64-apple-darwin.tar.gz"
-      sha256 "88b04c081d6151adfcbfdbd1fcf82173d8e18a44c888132ad91305e2b5de5945"
+      url "https://github.com/sazardev/shiki/releases/download/v0.10.5/shiki-v0.10.5-aarch64-apple-darwin.tar.gz"
+      sha256 "abff6d4689889b25e3633db13ccd96d2b314968f81d558f8ca938bb94ebc635c"
     end
     on_intel do
-      url "https://github.com/sazardev/shiki/releases/download/v0.10.4/shiki-v0.10.4-x86_64-apple-darwin.tar.gz"
-      sha256 "345e959d4ac3bb1407cb1e869e5c6815b2f383bac304f796cfa1aa5e0f831411"
+      url "https://github.com/sazardev/shiki/releases/download/v0.10.5/shiki-v0.10.5-x86_64-apple-darwin.tar.gz"
+      sha256 "cf609aa0ab8395bd40803a169a73d5cd55121fc1eb2c1e6b88408e2bb0f9c194"
     end
   end
 
