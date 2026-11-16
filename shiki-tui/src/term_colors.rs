@@ -113,11 +113,14 @@ fn query_fg_bg_on<T: Read + Write + AsRawFd>(
 
     // A response that arrived right at the deadline (or after both were
     // already parsed) must not be left in the tty queue for crossterm to
-    // misparse as keystrokes — drain whatever is immediately available.
-    while wait_readable(fd, Duration::ZERO) {
+    // misparse as keystrokes — drain whatever is immediately available, but
+    // cap the drain so a continuously-readable tty (auto-repeat, a paste, a
+    // misbehaving pty writer) can't keep this loop alive indefinitely.
+    let mut drained = 0usize;
+    while drained < 4096 && wait_readable(fd, Duration::ZERO) {
         match tty.read(&mut chunk) {
             Ok(0) | Err(_) => break,
-            Ok(_) => {}
+            Ok(n) => drained += n,
         }
     }
 

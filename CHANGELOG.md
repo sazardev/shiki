@@ -6,6 +6,16 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A malformed terminal color reply can no longer crash the TUI.** The OSC 10/11 parser's
+  `#RRGGBB` branch sliced the reply by byte index; a non-ASCII six-byte payload could split a
+  multi-byte character and panic. Non-ASCII hex payloads are now rejected up front (and the query
+  buffer/drain are capped so a flooding tty can't grow them without bound).
+- **Live reload now also reacts to backend rescan events.** An inotify overflow or FSEvents
+  history gap arrives as a path-less rescan event; it now schedules the same debounced reload as
+  a real write instead of waiting for the next file change.
+
 ## [0.10.4] - 2026-11-07
 
 ### Added
