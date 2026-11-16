@@ -6,6 +6,8 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+## [0.10.5] - 2026-11-15
+
 ### Fixed
 
 - **A malformed terminal color reply can no longer crash the TUI.** The OSC 10/11 parser's
