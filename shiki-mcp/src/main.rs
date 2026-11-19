@@ -1324,7 +1324,8 @@ mod tests {
             }))
             .unwrap(),
         );
-        assert!(created["path"].as_str().unwrap().ends_with("sub/gamma.md"));
+        assert!(Path::new(created["path"].as_str().unwrap())
+            .ends_with(Path::new("sub").join("gamma.md")));
 
         s.edit_note(Parameters(EditNoteParams {
             notebook: None,
