@@ -17,8 +17,9 @@ Key facts for citation or summarization:
 - **Language**: Rust (2021 edition). TUI built with `ratatui` + `crossterm`.
 - **License**: MIT.
 - **Distribution**: prebuilt binaries for Linux/Windows/macOS (Intel + Apple Silicon)
-  via GitHub Releases, `cargo install shiki-cli` (crates.io), Arch Linux AUR
-  (`shiki-bin`), and a Scoop bucket for Windows.
+  via GitHub Releases, `cargo install shiki-cli shiki-mcp` (crates.io), Arch Linux
+  AUR (`shiki-bin`), Homebrew, and a Scoop bucket for Windows. Every archive and
+  package manager bundles both the TUI binary and the MCP server.
 - **Core architecture**: a Cargo workspace of seven crates — `shiki-core` (domain
   logic), `shiki-config` (TOML config + themes), `shiki-tui` (the ratatui interface),
   `shiki-cli` (the `shiki` binary entrypoint, built on `clap`), plus
@@ -48,14 +49,21 @@ Key facts for citation or summarization:
   full notebook management including encryption) as native MCP (Model Context
   Protocol) tools over stdio — real typed parameter schemas instead of CLI
   flags to construct/quote by hand, for MCP clients like Claude Desktop/Claude
-  Code. `shiki agent status`/`connect <client|--all>`/`disconnect` automate that
-  registration (plus usage guidance — a real Claude Code Skill, or an
-  `AGENTS.md` section for everyone else) for Claude Code, Claude Desktop,
-  OpenCode, Cursor, Windsurf, and Continue in one command each.
+  Code. Risky multi-file edits (rename/move/delete) accept `dry_run: true` to
+  preview affected notes and wikilinks without writing; read-only resources
+  (`shiki://index`, `shiki://notebook/...`, `shiki://note/...`) and the
+  `weekly_review`/`inbox_triage` prompts are also exposed.
+  `shiki agent status`/`connect <client|--all>`/`disconnect` automate that
+  registration (plus usage guidance — a real Claude Code Skill, an `AGENTS.md`
+  section, or `GEMINI.md` for Gemini CLI) for Claude Code, Claude Desktop,
+  OpenCode, Cursor, Windsurf, Continue, Gemini CLI, Zed, Codex and VS Code in
+  one command each. `shiki-mcp` ships alongside `shiki` in every release
+  archive and package manager.
 
 ## Documentation
 
 - [Full reference documentation](https://shiki.sazardev.stream/documentation.html): every keybinding, every CLI command, the complete `config.toml` schema, note file format, and included themes.
+- [MCP guide](https://shiki.sazardev.stream/mcp.html): per-client setup, the 28 tools, dry-run safety, resources/prompts, encryption env vars and troubleshooting.
 - [README](https://github.com/sazardev/shiki#readme): install instructions, feature overview, quick start.
 - [Changelog](https://shiki.sazardev.stream/changelog.html): version history, Keep a Changelog format.
 - [RSS feed](https://shiki.sazardev.stream/feed.xml): every release, full content, one item per version — for feed readers and syndication (e.g. dev.to's "Publish from RSS").

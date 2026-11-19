@@ -49,6 +49,7 @@
       <a href="index.html#features">Features</a>
       <a href="index.html#install">Install</a>
       <a href="documentation.html" class="active">Docs</a>
+      <a href="mcp.html">MCP</a>
       <a href="changelog.html">Changelog</a>
       <a href="press.html">Press</a>
       <a href="https://github.com/sazardev/shiki">GitHub</a>
@@ -653,7 +654,8 @@ shiki agent disconnect cursor         # reverses connect — removes the MCP ent
         Context Protocol) tools — an AI client calls them directly with structured,
         schema-validated JSON arguments over stdio, instead of shelling out to <code>shiki</code>
         and quoting/parsing text. It calls straight into <code>shiki-core</code>, never the
-        <code>shiki</code> binary itself. Register it with any MCP client by pointing at the built
+        <code>shiki</code> binary itself, and ships alongside <code>shiki</code> in every release
+        archive and package manager. Register it with any MCP client by pointing at the built
         binary — no port or daemon to manage:
       </p>
       <pre class="code">{
@@ -676,14 +678,25 @@ shiki agent disconnect cursor         # reverses connect — removes the MCP ent
         and the <code>{total, offset, limit, returned, has_more, items}</code> response shape match
         the CLI's own exactly; <code>delete_note</code>/<code>delete_folder</code>/
         <code>delete_notebook</code> require an explicit <code>confirm: true</code> argument, the
-        tool-call equivalent of <code>--yes</code>. <strong>Writes are never auto-committed</strong>
-        — call <code>sync_notebook</code> after a batch of changes to actually commit (and push, if
-        enabled) them, same as the CLI's own <code>shiki sync</code>; the server's tool
-        descriptions tell the calling AI this directly. Encrypted notebooks resolve their
-        passphrase from <code>SHIKI_PASSPHRASE</code> (and <code>SHIKI_NEW_PASSPHRASE</code> for
+        tool-call equivalent of <code>--yes</code>. <code>rename_note</code>,
+        <code>move_note</code>, <code>move_folder</code>, <code>delete_folder</code> and
+        <code>delete_notebook</code> also accept <code>dry_run: true</code>, which returns the
+        exact notes/wikilinks that would change without writing anything. <strong>Writes are never
+        auto-committed</strong> — call <code>sync_notebook</code> after a batch of changes to
+        actually commit (and push, if enabled) them, same as the CLI's own <code>shiki sync</code>;
+        the server's tool descriptions tell the calling AI this directly. Read-only resources
+        (<code>shiki://index</code>, <code>shiki://notebook/&lt;name&gt;</code>,
+        <code>shiki://note/&lt;notebook&gt;/&lt;path&gt;</code>) and the
+        <code>weekly_review</code>/<code>inbox_triage</code> prompts are available to clients that
+        support them. Encrypted notebooks resolve their passphrase from
+        <code>SHIKI_PASSPHRASE</code> (and <code>SHIKI_NEW_PASSPHRASE</code> for
         <code>encrypt_notebook</code>/<code>rekey_notebook</code>) in the server's own environment
         — the only source available, since an MCP server has no TTY to ever fall back to a prompt
         on.
+      </p>
+      <p style="max-width:70ch;">
+        The dedicated <a href="mcp.html">MCP guide</a> has per-client setup, the safety model and
+        troubleshooting.
       </p>
       <h3 id="agent-connect">Agent auto-connect (<code>shiki agent</code>)</h3>
       <p style="max-width:70ch;">
@@ -691,21 +704,25 @@ shiki agent disconnect cursor         # reverses connect — removes the MCP ent
         <code>disconnect &lt;client|--all&gt;</code> register <code>shiki-mcp</code> with a
         specific agentic tool's own config <em>and</em> drop in usage guidance, in one command —
         <strong>Claude Code</strong>, <strong>Claude Desktop</strong>, <strong>OpenCode</strong>,
-        <strong>Cursor</strong>, <strong>Windsurf</strong>, and <strong>Continue</strong> today,
-        plus <code>connect generic</code> for anything else (prints the plain snippet above,
-        writes nothing). Each client defaults to its user/global config scope — shiki notebooks
-        aren't bound to any one project — except Continue, which is project-only by its own
-        convention; <code>--project</code> switches to the current directory's config where a
-        client supports it.
+        <strong>Cursor</strong>, <strong>Windsurf</strong>, <strong>Continue</strong>,
+        <strong>Gemini CLI</strong>, <strong>Zed</strong>, <strong>Codex</strong> and
+        <strong>VS Code</strong> today, plus <code>connect generic</code> for anything else (prints
+        the plain snippet above, writes nothing). Each client defaults to its user/global config
+        scope — shiki notebooks aren't bound to any one project — except Continue (project-only by
+        its own convention) and Codex (project config is only read for trusted projects);
+        <code>--project</code> switches to the current directory's config where a client supports
+        it.
       </p>
       <p style="max-width:70ch;">
         Usage guidance travels with the connection: Claude Code gets a real Skill
         (<code>~/.claude/skills/shiki/SKILL.md</code>), every other client gets a marked,
-        idempotent section appended to the current directory's <code>AGENTS.md</code> — the one
-        convention they all already read. Every config merge only ever touches the one JSON key it
-        owns (<code>mcpServers.shiki</code>, or <code>mcp.shiki</code> for OpenCode); if an
-        existing file doesn't parse as clean JSON, nothing is touched at all — the exact snippet to
-        paste by hand is printed instead. <code>disconnect</code> reverses both halves.
+        idempotent section appended to the current directory's <code>AGENTS.md</code> — except
+        Gemini CLI, which reads <code>GEMINI.md</code>. Every config merge only ever touches the
+        one key it owns (<code>mcpServers.shiki</code>, <code>mcp.shiki</code> for OpenCode,
+        <code>context_servers.shiki</code> for Zed, or the <code>[mcp_servers.shiki]</code> table
+        for Codex); if an existing file doesn't parse cleanly, nothing is touched at all — the
+        exact snippet to paste by hand is printed instead. <code>disconnect</code> reverses both
+        halves.
       </p>
     </div>
   </section>

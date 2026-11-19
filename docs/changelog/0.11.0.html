@@ -1,0 +1,158 @@
+<!--
+  Per-version release page template. `scripts/generate_release_pages.py`
+  fills in every {{PLACEHOLDER}} with plain string substitution and writes
+  the result to docs/changelog/0.11.0.html. Paths inside are written
+  relative to that output location (one level under docs/), i.e. `../css/`,
+  `../assets/`, `../index.html` etc. — not relative to this template file.
+
+  Unlike changelog.html (which fetches CHANGELOG.md live via JS so it can
+  never drift, see docs/js/main.js), this page's changelog body is baked in
+  statically at generation time — it has to be, since link-unfurlers (the
+  actual point of this page existing) read the raw HTML and never execute
+  JS, so the og:title/og:description/og:image and the visible content must
+  already be correct in the file as committed.
+-->
+<!DOCTYPE html>
+<html lang="en" data-theme="gruvbox-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>shiki v0.11.0 — Release notes</title>
+  <meta name="description" content="shiki-mcp now ships with shiki everywhere. The release tarballs/zip, both AUR packages, the Homebrew formula and both Scoop manifests install both binaries,…" />
+  <meta name="keywords" content="shiki changelog, shiki v0.11.0, shiki release notes" />
+  <meta name="author" content="sazardev" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://shiki.sazardev.stream/changelog/0.11.0.html" />
+
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://shiki.sazardev.stream/changelog/0.11.0.html" />
+  <meta property="og:site_name" content="shiki" />
+  <meta property="og:title" content="shiki v0.11.0 — Release notes" />
+  <meta property="og:description" content="shiki-mcp now ships with shiki everywhere. The release tarballs/zip, both AUR packages, the Homebrew formula and both Scoop manifests install both binaries,…" />
+  <meta property="og:image" content="https://shiki.sazardev.stream/assets/og/0.11.0.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="shiki v0.11.0 — release card" />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="shiki v0.11.0 — Release notes" />
+  <meta name="twitter:description" content="shiki-mcp now ships with shiki everywhere. The release tarballs/zip, both AUR packages, the Homebrew formula and both Scoop manifests install both binaries,…" />
+  <meta name="twitter:image" content="https://shiki.sazardev.stream/assets/og/0.11.0.png" />
+  <meta name="twitter:image:alt" content="shiki v0.11.0 — release card" />
+
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png" />
+  <link rel="alternate" type="application/rss+xml" title="shiki changelog" href="../feed.xml" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="../css/documentation.css" />
+
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "shiki v0.11.0 — Release notes", "description": "shiki-mcp now ships with shiki everywhere. The release tarballs/zip, both AUR packages, the Homebrew formula and both Scoop manifests install both binaries,…", "image": "https://shiki.sazardev.stream/assets/og/0.11.0.png", "url": "https://shiki.sazardev.stream/changelog/0.11.0.html", "mainEntityOfPage": {"@type": "WebPage", "@id": "https://shiki.sazardev.stream/changelog/0.11.0.html"}, "author": {"@type": "Person", "name": "sazardev", "url": "https://github.com/sazardev"}, "publisher": {"@type": "Organization", "name": "shiki", "logo": {"@type": "ImageObject", "url": "https://shiki.sazardev.stream/assets/favicon-512.png"}}, "datePublished": "2026-11-19", "dateModified": "2026-11-19"}</script>
+</head>
+<body class="doc-page">
+
+  <header class="topbar">
+    <div class="brand"><a href="../index.html" style="color:inherit;text-decoration:none;">shiki (私記)</a><span class="cursor"></span></div>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
+    <nav id="site-nav">
+      <a href="../index.html#themes">Themes</a>
+      <a href="../index.html#features">Features</a>
+      <a href="../index.html#install">Install</a>
+      <a href="../documentation.html">Docs</a>
+      <a href="../changelog.html" class="active">Changelog</a>
+      <a href="../press.html">Press</a>
+      <a href="https://github.com/sazardev/shiki">GitHub</a>
+      <span class="version-chip-wrap" id="version-chip-wrap">
+        <button type="button" class="pill pill-button" id="version-pill" hidden></button>
+        <div class="version-popover" id="version-popover" role="dialog" aria-label="What's new" hidden>
+          <div class="version-popover-header">
+            <strong>What's new</strong>
+            <a href="../changelog.html">Full changelog →</a>
+          </div>
+          <div class="version-popover-body changelog-body" id="version-popover-content">
+            <p class="changelog-loading">Loading changelog…</p>
+          </div>
+        </div>
+      </span>
+    </nav>
+  </header>
+
+  <section class="doc-hero">
+    <div class="container">
+      <span class="eyebrow"><a href="../changelog.html">← Full changelog</a></span>
+      <h1>shiki v0.11.0</h1>
+      <p class="muted" style="max-width: 66ch;">Released 2026-11-19.</p>
+      <div class="release-share-row">
+        <span class="release-share-label">Share:</span>
+        <a class="release-share-link" href="https://twitter.com/intent/tweet?text=shiki%20v0.11.0%3A%20shiki-mcp%20now%20ships%20with%20shiki%20everywhere.%20The%20release%20tarballs%2Fzip%2C%20both%20AUR%20packages%2C%20the%20Homebrew%20formula%20and%20both%20Scoop%20manifests%20install%20both%20binaries%2C%E2%80%A6&amp;url=https%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.11.0.html" target="_blank" rel="noopener">X</a>
+        <a class="release-share-link" href="https://bsky.app/intent/compose?text=shiki%20v0.11.0%3A%20shiki-mcp%20now%20ships%20with%20shiki%20everywhere.%20The%20release%20tarballs%2Fzip%2C%20both%20AUR%20packages%2C%20the%20Homebrew%20formula%20and%20both%20Scoop%20manifests%20install%20both%20binaries%2C%E2%80%A6%20https%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.11.0.html" target="_blank" rel="noopener">Bluesky</a>
+        <a class="release-share-link" href="https://www.reddit.com/submit?url=https%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.11.0.html&amp;title=shiki%20v0.11.0%3A%20shiki-mcp%20now%20ships%20with%20shiki%20everywhere.%20The%20release%20tarballs%2Fzip%2C%20both%20AUR%20packages%2C%20the%20Homebrew%20formula%20and%20both%20Scoop%20manifests%20install%20both%20binaries%2C%E2%80%A6" target="_blank" rel="noopener">Reddit</a>
+        <a class="release-share-link" href="https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.11.0.html&amp;t=shiki%20v0.11.0%3A%20shiki-mcp%20now%20ships%20with%20shiki%20everywhere.%20The%20release%20tarballs%2Fzip%2C%20both%20AUR%20packages%2C%20the%20Homebrew%20formula%20and%20both%20Scoop%20manifests%20install%20both%20binaries%2C%E2%80%A6" target="_blank" rel="noopener">Hacker News</a>
+        <a class="release-share-link" href="https://wa.me/?text=shiki%20v0.11.0%3A%20shiki-mcp%20now%20ships%20with%20shiki%20everywhere.%20The%20release%20tarballs%2Fzip%2C%20both%20AUR%20packages%2C%20the%20Homebrew%20formula%20and%20both%20Scoop%20manifests%20install%20both%20binaries%2C%E2%80%A6%20https%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.11.0.html" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="release-share-link" href="https://t.me/share/url?url=https%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.11.0.html&amp;text=shiki%20v0.11.0%3A%20shiki-mcp%20now%20ships%20with%20shiki%20everywhere.%20The%20release%20tarballs%2Fzip%2C%20both%20AUR%20packages%2C%20the%20Homebrew%20formula%20and%20both%20Scoop%20manifests%20install%20both%20binaries%2C%E2%80%A6" target="_blank" rel="noopener">Telegram</a>
+        <a class="release-share-link" href="mailto:?subject=shiki%20v0.11.0%20released&amp;body=shiki%20v0.11.0%3A%20shiki-mcp%20now%20ships%20with%20shiki%20everywhere.%20The%20release%20tarballs%2Fzip%2C%20both%20AUR%20packages%2C%20the%20Homebrew%20formula%20and%20both%20Scoop%20manifests%20install%20both%20binaries%2C%E2%80%A6%0A%0Ahttps%3A%2F%2Fshiki.sazardev.stream%2Fchangelog%2F0.11.0.html">Email</a>
+        <button type="button" class="copy-btn copy-btn-inline" data-copy-text="🚀 shiki v0.11.0 is out — shiki-mcp now ships with shiki everywhere. The release tarballs/zip, both AUR packages, the Homebrew formula and both Scoop manifests install both binaries,…
+
+https://shiki.sazardev.stream/changelog/0.11.0.html
+
+#rustlang #TUI #opensource">Copy announcement</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container release-layout">
+      <div class="release-shot">
+        <div class="release-shot-frame">
+          <img src="../assets/screenshots/gruvbox-dark.png" alt="shiki v0.11.0, running in a terminal" loading="lazy" />
+        </div>
+      </div>
+      <div class="changelog-body release-notes">
+<h4>Added</h4>
+<ul>
+<li><strong><code>shiki-mcp</code> now ships with <code>shiki</code> everywhere.</strong> The release tarballs/zip, both AUR packages, the Homebrew formula and both Scoop manifests install both binaries, so <code>shiki agent connect</code> works out of the box instead of pointing at a server the user still has to <code>cargo install</code> separately. <code>shiki-mcp --version</code>/<code>--help</code> work before any config is loaded, and a new CI <code>package-smoke</code> job builds both release binaries on every push.</li>
+<li><strong><code>dry_run: true</code> previews on the multi-file/destructive MCP tools.</strong> <code>rename_note</code> reports the new path plus every note whose <code>[[wikilinks]]</code> would be rewritten; <code>move_note</code>/<code>move_folder</code> report the resolved destinations and collisions; <code>delete_folder</code>/<code>delete_notebook</code> report the notes that would be destroyed. Dry runs never write and don&#x27;t require <code>confirm</code>.</li>
+<li><strong>MCP resources and prompts.</strong> <code>shiki://index</code>, <code>shiki://notebook/&lt;name&gt;</code> and <code>shiki://note/&lt;notebook&gt;/&lt;path&gt;</code> expose read-only notes to clients that support resources; <code>weekly_review</code> and <code>inbox_triage</code> prompts preload open tasks/daily notes or captures.</li>
+<li><strong>Four more <code>shiki agent connect</code> clients:</strong> Gemini CLI (<code>~/.gemini/settings.json</code>, <code>GEMINI.md</code> guidance), Zed (<code>context_servers</code> in <code>settings.json</code>), Codex (<code>~/.codex/config.toml</code>, format-preserving TOML merge) and VS Code&#x27;s current Copilot harness (<code>mcp-config.json</code>/<code>.mcp.json</code> with <code>&quot;type&quot;: &quot;stdio&quot;</code>).</li>
+<li><strong>19 <code>shiki-mcp</code> tests</strong>, including an in-process <code>tokio::io::duplex</code> MCP round trip covering <code>tools/list</code>, resources, prompts and a real tool call.</li>
+<li><strong>Version-skew detection:</strong> <code>shiki doctor</code> and <code>shiki agent status</code> compare the <code>shiki-mcp</code> on <code>$PATH</code> against the running <code>shiki</code> and warn when a partial upgrade left them out of sync.</li>
+</ul>
+<h4>Changed</h4>
+<ul>
+<li><code>shiki agent connect --all</code> now includes Gemini CLI, Zed, Codex and VS Code; guidance is written to <code>GEMINI.md</code> for Gemini and <code>AGENTS.md</code> for everyone else.</li>
+<li><code>shiki agent connect codex</code> is user-scope only (Codex only reads a project <code>.codex/config.toml</code> for trusted projects). <code>vscode</code> targets the current Copilot config rather than the deprecated editor-managed <code>.vscode/mcp.json</code> format.</li>
+</ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="release-nav">
+    <div class="container release-nav-row">
+      <a href="0.10.6.html" class="release-nav-link">← v0.10.6</a>
+      <a href="../changelog.html" class="release-nav-link">All releases</a>
+      <a href="../changelog.html" class="release-nav-link release-nav-link--disabled">No newer release →</a>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/sazardev/shiki">GitHub</a>
+        <a href="https://github.com/sazardev/shiki/releases/tag/v0.11.0">GitHub Release</a>
+        <a href="https://github.com/sazardev/shiki/issues">Issues</a>
+        <a href="https://github.com/sazardev/shiki/blob/main/LICENSE">MIT License</a>
+        <a class="coffee-link" href="https://buymeacoffee.com/sazarcode">☕ Buy me a coffee</a>
+      </div>
+      <small>shiki (私記) — built by <a href="https://github.com/sazardev">sazardev</a>. Free and open source, forever.</small>
+    </div>
+  </footer>
+
+  <script src="../js/main.js"></script>
+</body>
+</html>

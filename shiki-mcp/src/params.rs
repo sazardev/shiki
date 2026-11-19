@@ -161,6 +161,11 @@ pub struct RenameNoteParams {
     /// Rewrites every inbound `[[wikilink]]` to this note so it still
     /// resolves under the new title. Defaults to true.
     pub rewrite_links: Option<bool>,
+    /// Reports the new path and every note whose links would be rewritten,
+    /// without modifying anything. Use it before a rename that touches
+    /// many notes.
+    #[serde(default)]
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -176,6 +181,10 @@ pub struct MoveNoteParams {
     /// Copies instead of moving — the source note is left in place.
     #[serde(default)]
     pub copy: bool,
+    /// Reports the resolved destination path and whether it already exists,
+    /// without writing anything.
+    #[serde(default)]
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -227,8 +236,14 @@ pub struct DeleteFolderParams {
     pub notebook: Option<String>,
     pub path: String,
     /// Must be explicitly `true` — this recursively deletes the folder
-    /// and everything inside it, with no trash/undo.
+    /// and everything inside it, with no trash/undo. Not required when
+    /// `dry_run` is true.
+    #[serde(default)]
     pub confirm: bool,
+    /// Lists every note inside the folder that would be deleted, without
+    /// deleting anything. `confirm` isn't needed for a dry run.
+    #[serde(default)]
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -273,8 +288,13 @@ pub struct RenameNotebookParams {
 pub struct DeleteNotebookParams {
     pub name: String,
     /// Must be explicitly `true` — permanently deletes the notebook and
-    /// every note in it, no trash/undo.
+    /// every note in it, no trash/undo. Not required when `dry_run` is true.
+    #[serde(default)]
     pub confirm: bool,
+    /// Reports how many notes the notebook contains and where it lives,
+    /// without deleting anything. `confirm` isn't needed for a dry run.
+    #[serde(default)]
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -293,4 +313,35 @@ pub struct MoveFolderParams {
     /// Copies instead of moving.
     #[serde(default)]
     pub copy: bool,
+    /// Reports every note that would move (source and destination path)
+    /// plus any destination collision, without writing anything.
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn delete_dry_run_params_can_omit_confirm() {
+        let folder: DeleteFolderParams =
+            serde_json::from_value(serde_json::json!({"path": "archive", "dry_run": true}))
+                .unwrap();
+        assert!(folder.dry_run);
+        assert!(!folder.confirm);
+
+        let notebook: DeleteNotebookParams =
+            serde_json::from_value(serde_json::json!({"name": "work", "dry_run": true})).unwrap();
+        assert!(notebook.dry_run);
+        assert!(!notebook.confirm);
+    }
+
+    #[test]
+    fn page_defaults_to_fifty_and_offset_zero() {
+        let page: Page = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert_eq!(page.effective_limit(), Some(50));
+        assert_eq!(page.offset, 0);
+        assert!(!page.no_limit);
+    }
 }

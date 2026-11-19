@@ -10,7 +10,7 @@
             "extract_dir": "shiki-v0.10.6-x86_64-pc-windows-msvc"
         }
     },
-    "bin": "shiki.exe",
+    "bin": ["shiki.exe", "shiki-mcp.exe"],
     "checkver": {
         "github": "https://github.com/sazardev/shiki"
     },

@@ -36,6 +36,27 @@ switching. Regenerated automatically after every release (same `update-screensho
 [`release.yml`](.github/workflows/release.yml) that refreshes the screenshots below), so it's
 always recorded against that release's own binary — not a workflow from several versions ago.
 
+## Built for agents too
+
+`shiki-mcp` is a real MCP (Model Context Protocol) server that calls straight into the same core
+as the TUI and CLI. It ships next to `shiki` in every release archive and every package manager,
+so connecting an agent is one command:
+
+```sh
+shiki agent connect --all
+```
+
+That registers the server in Claude Code, Claude Desktop, Cursor, Windsurf, OpenCode, Continue,
+Gemini CLI, Zed, Codex, and VS Code's Copilot harness (or `shiki agent connect generic` prints a
+snippet for anything else), plus usage guidance so the agent knows to paginate, preview with
+`dry_run`, and call `sync_notebook` after a batch of changes. The 28 typed tools cover notes,
+folders, tasks, queries, git, encryption, and notebook management; encrypted notebooks read their
+passphrase from the server's own `SHIKI_PASSPHRASE` (there is no TTY to prompt on). Read-only
+resources (`shiki://index`, `shiki://note/...`) and the `weekly_review` / `inbox_triage` prompts
+are available to clients that support them.
+
+See [the MCP guide](docs/mcp.html) for per-client setup, the safety model, and troubleshooting.
+
 ## Screenshots
 
 <table>
@@ -178,14 +199,14 @@ brew install sazardev/shiki/shiki
 **Prebuilt binary (Linux/Windows/macOS), no package manager:**
 
 Download the archive for your platform from the
-[latest release](https://github.com/sazardev/shiki/releases/latest), extract it, and put the
-`shiki`/`shiki.exe` binary on your `$PATH`.
+[latest release](https://github.com/sazardev/shiki/releases/latest), extract it, and put both
+`shiki` and `shiki-mcp` (`.exe` on Windows) on your `$PATH`.
 
 **With `cargo`, from [crates.io](https://crates.io/crates/shiki-cli) (any platform with a Rust
 toolchain):**
 
 ```sh
-cargo install shiki-cli
+cargo install shiki-cli shiki-mcp
 ```
 
 Or straight from a clone, if you want to build from a specific branch/commit instead:
@@ -194,12 +215,15 @@ Or straight from a clone, if you want to build from a specific branch/commit ins
 git clone https://github.com/sazardev/shiki
 cd shiki
 cargo install --path shiki-cli
+cargo install --path shiki-mcp
 ```
 
-Either way this builds the `shiki` binary in release mode and installs it to `~/.cargo/bin` (make
+Either way this builds both binaries in release mode and installs them to `~/.cargo/bin` (make
 sure that's on your `$PATH` — `cargo install` will tell you if it isn't). libgit2/OpenSSL are
 vendored and built from source (`git2`'s `vendored-libgit2`/`vendored-openssl` features), so
-there's no system libgit2/OpenSSL dependency to install separately on any platform.
+there's no system libgit2/OpenSSL dependency to install separately on any platform. AUR, Scoop,
+Homebrew, and the prebuilt archives already bundle `shiki-mcp`, so `shiki agent connect` works
+without a second install there.
 
 **Prerequisites (source/cargo install only — prebuilt binaries/AUR/Scoop/Homebrew don't need a
 Rust toolchain):**
@@ -222,14 +246,19 @@ needed.
 From the command line instead:
 
 ```sh
-cargo install shiki-cli   # from crates.io — auto-upgrades if a newer version is published
+cargo install shiki-cli shiki-mcp   # from crates.io — installs both binaries
 ```
 
 ```sh
 cd shiki                              # from a source clone
 git pull
 cargo install --path shiki-cli --force
+cargo install --path shiki-mcp --force
 ```
+
+The in-TUI updater only replaces the running `shiki` binary; `shiki doctor` warns if the
+`shiki-mcp` on your `$PATH` is a different version, so update both together after a manual or
+`cargo` upgrade. Package managers update the pair atomically.
 
 If you installed via `yay`/`paru`, Scoop, or Homebrew, prefer their own update command
 (`yay -Syu`/`scoop update shiki`/`brew upgrade shiki`) instead of leader+`U` — the package manager

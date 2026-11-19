@@ -10,6 +10,8 @@
 
 mod helpers;
 mod params;
+mod prompts;
+mod resources;
 
 use std::path::{Path, PathBuf};
 
@@ -19,7 +21,15 @@ use helpers::{
 };
 use params::*;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::{tool, tool_handler, tool_router, ErrorData, ServerHandler, ServiceExt};
+use rmcp::model::{
+    Implementation, ListResourceTemplatesResult, ListResourcesResult, ReadResourceRequestParams,
+    ServerCapabilities, ServerConfig,
+};
+use rmcp::service::RequestContext;
+use rmcp::{
+    prompt_handler, tool, tool_handler, tool_router, ErrorData, RoleServer, ServerHandler,
+    ServiceExt,
+};
 use shiki_config::Config;
 use shiki_core::pagination::{page_json, paginate};
 use shiki_core::{notebook, NotebookStore};
@@ -395,7 +405,9 @@ impl Shiki {
         Ok(serde_json::json!({ "path": note.path, "trashed": trash_path }).to_string())
     }
 
-    #[tool(description = "Renames a note, rewriting every inbound [[wikilink]] to it by default.")]
+    #[tool(
+        description = "Renames a note, rewriting every inbound [[wikilink]] to it by default. Set dry_run: true to preview the new path and affected notes without writing."
+    )]
     fn rename_note(
         &self,
         Parameters(p): Parameters<RenameNoteParams>,
@@ -404,8 +416,30 @@ impl Shiki {
         let nb = get_and_unlock(&self.store, &self.config(), &name)?;
         let old = notebook::find_note(&nb, &p.note).map_err(tool_err)?;
         let rewrite = p.rewrite_links.unwrap_or(true);
+        let old_targets = vec![old.frontmatter.title.clone(), old.file_stem()];
+        if p.dry_run {
+            let new_path = nb
+                .rename_target_path(&old.path, &p.new_title)
+                .map_err(tool_err)?;
+            let plan = if rewrite {
+                let pool = self.store.all_notes().map_err(tool_err)?;
+                shiki_core::wikilinks::plan_rewrite_links_to(&old_targets, &p.new_title, &pool)
+                    .map_err(tool_err)?
+            } else {
+                shiki_core::wikilinks::RewritePlan::default()
+            };
+            return Ok(serde_json::json!({
+                "dry_run": true,
+                "old_path": old.path,
+                "new_path": new_path,
+                "title": p.new_title,
+                "links_would_rewrite": plan.links_rewritten,
+                "notes_would_touch": plan.notes,
+                "notebooks_touched": plan.notebooks,
+            })
+            .to_string());
+        }
         let (links, files) = if rewrite {
-            let old_targets = vec![old.frontmatter.title.clone(), old.file_stem()];
             let pool = self.store.all_notes().map_err(tool_err)?;
             let (links, files, _touched) =
                 shiki_core::wikilinks::rewrite_links_to(&old_targets, &p.new_title, &pool)
@@ -427,7 +461,9 @@ impl Shiki {
         .to_string())
     }
 
-    #[tool(description = "Moves or (with copy: true) copies a note to notebook/path/within.")]
+    #[tool(
+        description = "Moves or (with copy: true) copies a note to notebook/path/within. Set dry_run: true to preview the destination path without writing."
+    )]
     fn move_note(&self, Parameters(p): Parameters<MoveNoteParams>) -> Result<String, ErrorData> {
         let name = resolve_notebook_name(&self.config(), p.notebook.as_deref());
         let source_nb = get_and_unlock(&self.store, &self.config(), &name)?;
@@ -435,6 +471,21 @@ impl Shiki {
         let (dest_notebook, dest_relative) =
             notebook::parse_address(&self.store, &p.destination).map_err(tool_err)?;
         let dest_notebook = get_and_unlock(&self.store, &self.config(), &dest_notebook.name)?;
+        if p.dry_run {
+            let file_name = source_note
+                .path
+                .file_name()
+                .ok_or_else(|| ErrorData::invalid_params("source note has no file name", None))?;
+            let dest_path = dest_notebook.path.join(&dest_relative).join(file_name);
+            return Ok(serde_json::json!({
+                "dry_run": true,
+                "source_path": source_note.path,
+                "dest_path": dest_path,
+                "copied": p.copy,
+                "destination_exists": dest_path.exists(),
+            })
+            .to_string());
+        }
         let result = if p.copy {
             source_nb.copy_note_to(&source_note.path, &dest_notebook, &dest_relative)
         } else {
@@ -528,27 +579,50 @@ impl Shiki {
     }
 
     #[tool(
-        description = "Recursively deletes a folder and everything inside it (no trash). Requires confirm: true."
+        description = "Recursively deletes a folder and everything inside it (no trash). Requires confirm: true; dry_run: true previews the notes affected without deleting."
     )]
     fn delete_folder(
         &self,
         Parameters(p): Parameters<DeleteFolderParams>,
     ) -> Result<String, ErrorData> {
+        let name = resolve_notebook_name(&self.config(), p.notebook.as_deref());
+        let nb = get_and_unlock(&self.store, &self.config(), &name)?;
+        let relative = notebook::validate_relative_path(&p.path).map_err(tool_err)?;
+        if p.dry_run {
+            let dir = nb.path.join(&relative);
+            if !dir.is_dir() {
+                return Err(ErrorData::invalid_params(
+                    format!("folder not found: {}", p.path),
+                    None,
+                ));
+            }
+            let notes: Vec<PathBuf> = nb
+                .all_notes_recursive()
+                .map_err(tool_err)?
+                .into_iter()
+                .filter(|note| note.path.starts_with(&dir))
+                .map(|note| note.path)
+                .collect();
+            return Ok(serde_json::json!({
+                "dry_run": true,
+                "path": dir,
+                "note_count": notes.len(),
+                "notes": notes,
+            })
+            .to_string());
+        }
         if !p.confirm {
             return Err(ErrorData::invalid_params(
                 "this permanently deletes the folder and everything inside it \u{2014} call again with confirm: true",
                 None,
             ));
         }
-        let name = resolve_notebook_name(&self.config(), p.notebook.as_deref());
-        let nb = get_and_unlock(&self.store, &self.config(), &name)?;
-        let relative = notebook::validate_relative_path(&p.path).map_err(tool_err)?;
         nb.delete_folder_at(&relative).map_err(tool_err)?;
         Ok(serde_json::json!({ "path": p.path, "deleted": true }).to_string())
     }
 
     #[tool(
-        description = "Moves or (with copy: true) copies a whole folder to notebook/path/within."
+        description = "Moves or (with copy: true) copies a whole folder to notebook/path/within. Set dry_run: true to preview every affected note without writing."
     )]
     fn move_folder(
         &self,
@@ -560,6 +634,44 @@ impl Shiki {
         let (dest_notebook, dest_relative) =
             notebook::parse_address(&self.store, &p.destination).map_err(tool_err)?;
         let dest_notebook = get_and_unlock(&self.store, &self.config(), &dest_notebook.name)?;
+        if p.dry_run {
+            let source_dir = nb.path.join(&relative);
+            if !source_dir.is_dir() {
+                return Err(ErrorData::invalid_params(
+                    format!("folder not found: {}", p.path),
+                    None,
+                ));
+            }
+            let folder_name = relative.file_name().ok_or_else(|| {
+                ErrorData::invalid_params(format!("'{}' has no folder name", p.path), None)
+            })?;
+            let dest_dir = dest_notebook.path.join(&dest_relative).join(folder_name);
+            let notes: Vec<serde_json::Value> = nb
+                .all_notes_recursive()
+                .map_err(tool_err)?
+                .into_iter()
+                .filter_map(|note| {
+                    let within = note.path.strip_prefix(&source_dir).ok()?.to_path_buf();
+                    let to = dest_dir.join(&within);
+                    Some(serde_json::json!({
+                        "from": note.path,
+                        "to": to,
+                        "destination_exists": to.exists(),
+                    }))
+                })
+                .collect();
+            return Ok(serde_json::json!({
+                "dry_run": true,
+                "source": source_dir,
+                "destination": dest_dir,
+                "copied": p.copy,
+                "destination_exists": dest_dir.exists(),
+                "destination_inside_source": dest_dir.starts_with(&source_dir),
+                "note_count": notes.len(),
+                "notes": notes,
+            })
+            .to_string());
+        }
         if p.copy {
             nb.copy_folder_to(&relative, &dest_notebook, &dest_relative)
         } else {
@@ -771,12 +883,23 @@ impl Shiki {
     }
 
     #[tool(
-        description = "Permanently deletes a notebook and every note in it — no trash/undo. Requires confirm: true."
+        description = "Permanently deletes a notebook and every note in it — no trash/undo. Requires confirm: true; dry_run: true reports the note count and path without deleting."
     )]
     fn delete_notebook(
         &self,
         Parameters(p): Parameters<DeleteNotebookParams>,
     ) -> Result<String, ErrorData> {
+        if p.dry_run {
+            let nb = get_and_unlock(&self.store, &self.config(), &p.name)?;
+            let notes = nb.all_notes_recursive().map_err(tool_err)?;
+            return Ok(serde_json::json!({
+                "dry_run": true,
+                "name": nb.name,
+                "path": nb.path,
+                "note_count": notes.len(),
+            })
+            .to_string());
+        }
         if !p.confirm {
             return Err(ErrorData::invalid_params(
                 "this permanently deletes the notebook and every note in it \u{2014} call again with confirm: true",
@@ -990,11 +1113,68 @@ impl Shiki {
     }
 }
 
-#[tool_handler(
-    name = "shiki-mcp",
-    instructions = "Manage the user's shiki notes: notebooks of Markdown files with YAML frontmatter, each notebook its own git repo. Call `index` first to orient (note counts, folders, tags) before list_notes/search_notes/query_notes. Every write tool acts on a specific notebook (defaults to the configured default notebook when omitted) and a note is addressed by its title or filename slug. Destructive tools (delete_note, delete_folder, delete_notebook) require an explicit confirm: true. IMPORTANT: writes are not committed to git automatically \u{2014} call `sync_notebook` after a batch of changes to actually commit (and push, if enabled) them; without it, changes just sit as uncommitted working-tree state. `encrypt_notebook`/`decrypt_notebook`/`rekey_notebook` read passphrases only from this server's own SHIKI_PASSPHRASE/SHIKI_NEW_PASSPHRASE environment variables, never interactively."
-)]
-impl ServerHandler for Shiki {}
+const SERVER_INSTRUCTIONS: &str = "Manage the user's shiki notes: notebooks of Markdown files with YAML frontmatter, each notebook its own git repo. Call `index` first to orient (note counts, folders, tags) before list_notes/search_notes/query_notes. Every write tool acts on a specific notebook (defaults to the configured default notebook when omitted) and a note is addressed by its title or filename slug. Destructive tools (delete_note, delete_folder, delete_notebook) require an explicit confirm: true; set dry_run: true first to preview a rename, move, folder delete or notebook delete, including every note and wikilink it would touch. IMPORTANT: writes are not committed to git automatically \u{2014} call `sync_notebook` after a batch of changes to actually commit (and push, if enabled) them; without it, changes just sit as uncommitted working-tree state. Read-only resources (`shiki://index`, `shiki://notebook/<name>`, `shiki://note/<notebook>/<path>`) expose notes without a tool call, and the `weekly_review`/`inbox_triage` prompts preload the relevant notes. `encrypt_notebook`/`decrypt_notebook`/`rekey_notebook` read passphrases only from this server's own SHIKI_PASSPHRASE/SHIKI_NEW_PASSPHRASE environment variables, never interactively.";
+
+#[tool_handler]
+#[prompt_handler]
+impl ServerHandler for Shiki {
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(
+            ServerCapabilities::builder()
+                .enable_tools()
+                .enable_prompts()
+                .enable_resources()
+                .build(),
+        )
+        .with_server_info(Implementation::new("shiki-mcp", env!("CARGO_PKG_VERSION")))
+        .with_instructions(SERVER_INSTRUCTIONS.to_string())
+    }
+
+    async fn list_resources(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourcesResult, ErrorData> {
+        resources::list(self)
+    }
+
+    async fn list_resource_templates(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourceTemplatesResult, ErrorData> {
+        Ok(resources::list_templates())
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<rmcp::model::ReadResourceResponse, ErrorData> {
+        Ok(resources::read(self, &request.uri)?.into())
+    }
+}
+
+/// `--version`/`--help` are handled before `load_context` so they work even
+/// with a broken or missing config — the same reason `shiki doctor` is
+/// dispatched before `Context::load`. This is also what the release smoke
+/// check uses to prove the packaged `shiki-mcp` binary is runnable.
+fn meta_arg_response(arg: &str) -> Option<String> {
+    match arg {
+        "-V" | "--version" => Some(format!("shiki-mcp {}", env!("CARGO_PKG_VERSION"))),
+        "-h" | "--help" => Some(format!(
+            "shiki-mcp {} \u{2014} MCP server for shiki notes (stdio transport)\n\n\
+Usage: shiki-mcp [--version|--help]\n\n\
+With no arguments it speaks MCP over stdin/stdout; register it with a client\n\
+via `shiki agent connect <client|--all>` or point the client at this binary.\n\
+It advertises 28 tools plus read-only resources and the weekly_review /\n\
+inbox_triage prompts. Encrypted notebooks read SHIKI_PASSPHRASE (and\n\
+SHIKI_NEW_PASSPHRASE for encrypt/rekey) from this process's environment.",
+            env!("CARGO_PKG_VERSION")
+        )),
+        _ => None,
+    }
+}
 
 fn load_context() -> anyhow::Result<Shiki> {
     let config_path = Config::default_path()?;
@@ -1016,8 +1196,419 @@ fn load_context() -> anyhow::Result<Shiki> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    if let Some(arg) = std::env::args().nth(1) {
+        if let Some(response) = meta_arg_response(&arg) {
+            println!("{response}");
+            return Ok(());
+        }
+    }
     let shiki = load_context()?;
     let service = shiki.serve(rmcp::transport::stdio()).await?;
     service.waiting().await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rmcp::model::{
+        CallToolRequestParams, GetPromptRequestParams, ReadResourceRequestParams, ResourceContents,
+    };
+    use std::collections::HashMap;
+    use tempfile::TempDir;
+
+    fn test_server() -> (TempDir, Shiki) {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = Config::default();
+        config.general.default_notebook = "test".to_string();
+        let store = NotebookStore::new(dir.path().to_path_buf());
+        let nb = store.create("test").unwrap();
+        nb.create_note("Alpha", "links to [[Beta]]").unwrap();
+        nb.create_note("Beta", "beta body\n- [ ] ship it @due(2026-01-01)")
+            .unwrap();
+        (
+            dir,
+            Shiki {
+                store,
+                config: std::sync::RwLock::new(config),
+            },
+        )
+    }
+
+    fn page() -> Page {
+        Page {
+            limit: None,
+            offset: 0,
+            no_limit: false,
+        }
+    }
+
+    fn parse(result: String) -> serde_json::Value {
+        serde_json::from_str(&result).unwrap()
+    }
+
+    #[test]
+    fn meta_args_work_without_touching_config() {
+        assert!(meta_arg_response("--version")
+            .unwrap()
+            .contains(env!("CARGO_PKG_VERSION")));
+        assert!(meta_arg_response("--help")
+            .unwrap()
+            .contains("Usage: shiki-mcp"));
+        assert!(meta_arg_response("--unknown").is_none());
+    }
+
+    #[test]
+    fn list_and_show_notes_report_metadata_then_body() {
+        let (_dir, s) = test_server();
+        let listed = parse(
+            s.list_notes(Parameters(ListNotesParams {
+                notebook: None,
+                page: page(),
+            }))
+            .unwrap(),
+        );
+        assert_eq!(listed["total"], 2);
+
+        let shown = parse(
+            s.show_note(Parameters(ShowNoteParams {
+                notebook: None,
+                note: "Alpha".into(),
+            }))
+            .unwrap(),
+        );
+        assert_eq!(shown["title"], "Alpha");
+        assert!(shown["body"].as_str().unwrap().contains("[[Beta]]"));
+    }
+
+    #[test]
+    fn pagination_reports_total_and_has_more() {
+        let (_dir, s) = test_server();
+        let first = parse(
+            s.list_notes(Parameters(ListNotesParams {
+                notebook: None,
+                page: Page {
+                    limit: Some(1),
+                    offset: 0,
+                    no_limit: false,
+                },
+            }))
+            .unwrap(),
+        );
+        assert_eq!(first["returned"], 1);
+        assert_eq!(first["has_more"], true);
+        let second = parse(
+            s.list_notes(Parameters(ListNotesParams {
+                notebook: None,
+                page: Page {
+                    limit: Some(1),
+                    offset: 1,
+                    no_limit: false,
+                },
+            }))
+            .unwrap(),
+        );
+        assert_eq!(second["has_more"], false);
+    }
+
+    #[test]
+    fn new_edit_tag_and_set_field_round_trip() {
+        let (_dir, s) = test_server();
+        let created = parse(
+            s.new_note(Parameters(NewNoteParams {
+                notebook: None,
+                title: "Gamma".into(),
+                body: Some("first".into()),
+                tags: vec!["one".into()],
+                folder: Some("sub".into()),
+            }))
+            .unwrap(),
+        );
+        assert!(created["path"].as_str().unwrap().ends_with("sub/gamma.md"));
+
+        s.edit_note(Parameters(EditNoteParams {
+            notebook: None,
+            note: "Gamma".into(),
+            body: None,
+            append: Some("more".into()),
+        }))
+        .unwrap();
+        let shown = parse(
+            s.show_note(Parameters(ShowNoteParams {
+                notebook: None,
+                note: "Gamma".into(),
+            }))
+            .unwrap(),
+        );
+        assert!(shown["body"].as_str().unwrap().contains("first\nmore"));
+
+        let tagged = parse(
+            s.tag_note(Parameters(TagNoteParams {
+                notebook: None,
+                note: "Gamma".into(),
+                add: vec!["two".into()],
+                remove: vec!["one".into()],
+            }))
+            .unwrap(),
+        );
+        assert_eq!(tagged["tags"], serde_json::json!(["two"]));
+
+        let mut set = HashMap::new();
+        set.insert("priority".to_string(), "3".to_string());
+        let field = parse(
+            s.set_field(Parameters(SetFieldParams {
+                notebook: None,
+                note: "Gamma".into(),
+                set,
+                unset: vec![],
+            }))
+            .unwrap(),
+        );
+        assert_eq!(field["fields"]["priority"], 3);
+    }
+
+    #[test]
+    fn reserved_frontmatter_fields_are_rejected() {
+        let (_dir, s) = test_server();
+        let mut set = HashMap::new();
+        set.insert("title".to_string(), "nope".to_string());
+        let err = s
+            .set_field(Parameters(SetFieldParams {
+                notebook: None,
+                note: "Alpha".into(),
+                set,
+                unset: vec![],
+            }))
+            .unwrap_err();
+        assert!(err.message.contains("rename_note"));
+    }
+
+    #[test]
+    fn rename_rewrites_inbound_wikilinks() {
+        let (_dir, s) = test_server();
+        s.rename_note(Parameters(RenameNoteParams {
+            notebook: None,
+            note: "Beta".into(),
+            new_title: "Gamma".into(),
+            rewrite_links: None,
+            dry_run: false,
+        }))
+        .unwrap();
+        let alpha = parse(
+            s.show_note(Parameters(ShowNoteParams {
+                notebook: None,
+                note: "Alpha".into(),
+            }))
+            .unwrap(),
+        );
+        assert!(alpha["body"].as_str().unwrap().contains("[[Gamma]]"));
+    }
+
+    #[test]
+    fn rename_dry_run_reports_the_plan_and_touches_nothing() {
+        let (_dir, s) = test_server();
+        let out = parse(
+            s.rename_note(Parameters(RenameNoteParams {
+                notebook: None,
+                note: "Beta".into(),
+                new_title: "Gamma".into(),
+                rewrite_links: None,
+                dry_run: true,
+            }))
+            .unwrap(),
+        );
+        assert_eq!(out["dry_run"], true);
+        assert_eq!(out["links_would_rewrite"], 1);
+        assert!(out["new_path"].as_str().unwrap().ends_with("gamma.md"));
+        assert!(!Path::new(out["new_path"].as_str().unwrap()).exists());
+        let alpha = parse(
+            s.show_note(Parameters(ShowNoteParams {
+                notebook: None,
+                note: "Alpha".into(),
+            }))
+            .unwrap(),
+        );
+        assert!(alpha["body"].as_str().unwrap().contains("[[Beta]]"));
+    }
+
+    #[test]
+    fn move_and_delete_dry_runs_report_without_writing() {
+        let (_dir, s) = test_server();
+        s.create_folder(Parameters(CreateFolderParams {
+            notebook: None,
+            path: "bucket".into(),
+        }))
+        .unwrap();
+        s.new_note(Parameters(NewNoteParams {
+            notebook: None,
+            title: "Inside".into(),
+            body: None,
+            tags: vec![],
+            folder: Some("bucket".into()),
+        }))
+        .unwrap();
+
+        let moved = parse(
+            s.move_note(Parameters(MoveNoteParams {
+                notebook: None,
+                note: "Alpha".into(),
+                destination: "test/bucket".into(),
+                copy: false,
+                dry_run: true,
+            }))
+            .unwrap(),
+        );
+        assert_eq!(moved["dry_run"], true);
+        assert!(!Path::new(moved["dest_path"].as_str().unwrap()).exists());
+
+        let folder = parse(
+            s.move_folder(Parameters(MoveFolderParams {
+                notebook: None,
+                path: "bucket".into(),
+                destination: "test/archive".into(),
+                copy: false,
+                dry_run: true,
+            }))
+            .unwrap(),
+        );
+        assert_eq!(folder["dry_run"], true);
+        assert_eq!(folder["note_count"], 1);
+        let from = folder["notes"][0]["from"].as_str().unwrap();
+        assert!(
+            Path::new(from).exists(),
+            "dry run must leave {from} in place"
+        );
+
+        let deleted = parse(
+            s.delete_folder(Parameters(DeleteFolderParams {
+                notebook: None,
+                path: "bucket".into(),
+                confirm: false,
+                dry_run: true,
+            }))
+            .unwrap(),
+        );
+        assert_eq!(deleted["note_count"], 1);
+
+        let notebook = parse(
+            s.delete_notebook(Parameters(DeleteNotebookParams {
+                name: "test".into(),
+                confirm: false,
+                dry_run: true,
+            }))
+            .unwrap(),
+        );
+        assert_eq!(notebook["dry_run"], true);
+        assert!(notebook["note_count"].as_u64().unwrap() >= 3);
+    }
+
+    #[test]
+    fn destructive_tools_still_require_confirm_without_dry_run() {
+        let (_dir, s) = test_server();
+        assert!(s
+            .delete_folder(Parameters(DeleteFolderParams {
+                notebook: None,
+                path: "bucket".into(),
+                confirm: false,
+                dry_run: false,
+            }))
+            .is_err());
+        assert!(s
+            .delete_notebook(Parameters(DeleteNotebookParams {
+                name: "test".into(),
+                confirm: false,
+                dry_run: false,
+            }))
+            .is_err());
+    }
+
+    #[test]
+    fn resources_expose_the_index_notebook_and_a_full_note() {
+        let (_dir, s) = test_server();
+        let list = resources::list(&s).unwrap();
+        assert!(list.resources.iter().any(|r| r.uri == "shiki://index"));
+        assert!(list
+            .resources
+            .iter()
+            .any(|r| r.uri == "shiki://notebook/test"));
+
+        let read = resources::read(&s, "shiki://note/test/alpha.md").unwrap();
+        let ResourceContents::TextResourceContents { text, .. } = &read.contents[0] else {
+            panic!("expected text resource");
+        };
+        assert!(text.contains("title: Alpha"));
+        assert!(text.contains("[[Beta]]"));
+    }
+
+    #[test]
+    fn prompts_preload_tasks_and_capture_notes() {
+        let (_dir, s) = test_server();
+        s.new_note(Parameters(NewNoteParams {
+            notebook: None,
+            title: "Capture idea".into(),
+            body: Some("maybe a project".into()),
+            tags: vec![],
+            folder: None,
+        }))
+        .unwrap();
+        let weekly = s
+            .weekly_review(Parameters(prompts::WeeklyReviewArgs {
+                notebook: None,
+                days: None,
+            }))
+            .unwrap();
+        let weekly_text = weekly[0].content.as_text().unwrap().text.as_str();
+        assert!(weekly_text.contains("Open tasks"));
+        assert!(weekly_text.contains("ship it"));
+
+        let triage = s
+            .inbox_triage(Parameters(prompts::InboxTriageArgs { notebook: None }))
+            .unwrap();
+        let triage_text = triage[0].content.as_text().unwrap().text.as_str();
+        assert!(triage_text.contains("Capture idea"));
+    }
+
+    #[tokio::test]
+    async fn duplex_server_advertises_tools_resources_and_prompts() {
+        let (_dir, shiki) = test_server();
+        let (server_transport, client_transport) = tokio::io::duplex(64 * 1024);
+        let server = tokio::spawn(async move {
+            let service = shiki.serve(server_transport).await.unwrap();
+            service.waiting().await.unwrap();
+        });
+        let client = ().serve(client_transport).await.unwrap();
+
+        assert_eq!(client.list_all_tools().await.unwrap().len(), 28);
+        let listed = client.list_resources(None).await.unwrap();
+        assert!(listed.resources.iter().any(|r| r.uri == "shiki://index"));
+        let read = client
+            .read_resource(ReadResourceRequestParams::new("shiki://note/test/alpha.md"))
+            .await
+            .unwrap();
+        assert!(!read.contents.is_empty());
+
+        let prompts = client.list_prompts(None).await.unwrap();
+        assert!(prompts.prompts.iter().any(|p| p.name == "weekly_review"));
+        let prompt = client
+            .get_prompt(GetPromptRequestParams::new("weekly_review"))
+            .await
+            .unwrap();
+        assert!(!prompt.messages.is_empty());
+
+        let called = client
+            .call_tool(
+                CallToolRequestParams::new("show_note").with_arguments(
+                    serde_json::json!({"note": "Alpha"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ),
+            )
+            .await
+            .unwrap();
+        assert!(!called.content.is_empty());
+
+        client.cancel().await.unwrap();
+        server.await.unwrap();
+    }
 }

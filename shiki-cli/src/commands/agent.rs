@@ -80,8 +80,27 @@ pub fn status(project: bool) -> Result<()> {
     }
     let path_env = std::env::var("PATH").unwrap_or_default();
     match agent_connect::find_shiki_mcp_on_path(&path_env) {
-        Some(p) => println!("\nshiki-mcp: found at {}", p.display()),
-        None => println!("\nshiki-mcp: not found on PATH — run `cargo install shiki-mcp`"),
+        Some(p) => {
+            let version = agent_connect::shiki_mcp_version(&p);
+            match version.as_deref() {
+                Some(v) if v == env!("CARGO_PKG_VERSION") => {
+                    println!("\nshiki-mcp: found at {} (v{v})", p.display());
+                }
+                Some(v) => println!(
+                    "\nshiki-mcp: found at {} (v{v}) \u{2014} shiki is v{}, update both together",
+                    p.display(),
+                    env!("CARGO_PKG_VERSION")
+                ),
+                None => println!(
+                    "\nshiki-mcp: found at {} (didn't answer --version)",
+                    p.display()
+                ),
+            }
+        }
+        None => println!(
+            "\nshiki-mcp: not found on PATH \u{2014} install the packaged binary or run \
+             `cargo install shiki-mcp`"
+        ),
     }
     Ok(())
 }

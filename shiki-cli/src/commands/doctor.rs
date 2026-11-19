@@ -415,6 +415,7 @@ pub fn run() -> Result<()> {
         check_unknown_config_keys(raw, &mut r);
     }
     check_git_config_health(&config, notebook_count > 0, &mut r);
+    check_mcp_health(&mut r);
 
     println!("\n{} ok, {} warning(s), {} failed", r.ok, r.warn, r.fail);
     if r.fail > 0 {
@@ -1041,6 +1042,39 @@ fn check_notebook_git_health(notebooks: &[shiki_core::Notebook], r: &mut Report)
                 );
             }
         }
+    }
+}
+
+/// `shiki-mcp` is a separate binary shipped alongside `shiki`; when it is
+/// installed by hand (cargo, a copied binary) the two can drift after an
+/// in-TUI self-update, which only replaces the running `shiki` executable.
+/// Warning-only: MCP is optional, so a missing or stale server must not make
+/// `doctor` fail.
+fn check_mcp_health(r: &mut Report) {
+    let path_env = std::env::var("PATH").unwrap_or_default();
+    match shiki_core::agent_connect::find_shiki_mcp_on_path(&path_env) {
+        Some(path) => match shiki_core::agent_connect::shiki_mcp_version(&path) {
+            Some(version) if version == env!("CARGO_PKG_VERSION") => {
+                r.pass("shiki-mcp", format!("{} (v{version})", path.display()));
+            }
+            Some(version) => r.warn(
+                "shiki-mcp",
+                format!(
+                    "{} is v{version}, shiki is v{} \u{2014} update both together, or a client \
+                     may call tools the other binary doesn't have",
+                    path.display(),
+                    env!("CARGO_PKG_VERSION")
+                ),
+            ),
+            None => r.warn(
+                "shiki-mcp",
+                format!("{} didn't answer --version", path.display()),
+            ),
+        },
+        None => r.warn(
+            "shiki-mcp",
+            "not found on PATH \u{2014} the MCP server isn't available until it's installed",
+        ),
     }
 }
 

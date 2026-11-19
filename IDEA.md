@@ -640,7 +640,9 @@ typed MCP (Model Context Protocol) tools an AI client calls directly with struct
 schema-validated JSON arguments, over stdio, instead of shelling out to `shiki` and quoting/parsing
 text. It calls straight into `shiki-core` (the same domain logic the TUI and CLI already share),
 never the `shiki` binary itself — `shiki-mcp` is its own workspace member, siblings with
-`shiki-native-host`/`shiki-desktop`, and doesn't depend on `shiki-cli` at all.
+`shiki-native-host`/`shiki-desktop`, and doesn't depend on `shiki-cli` at all. It ships next to
+`shiki` in every release archive, both AUR packages, the Homebrew formula and both Scoop
+manifests, so `shiki agent connect` doesn't depend on a second install step.
 
 Register it with any MCP client by pointing at the built binary, stdio transport, no port or daemon
 to manage:
@@ -672,6 +674,16 @@ has_more, items}` response shape are identical to the CLI's own paginated comman
 learns to page through `list_notes` pages through `search_notes`/`query_notes`/`list_tasks`/
 `log_notebook` the same way, on either interface. `delete_note`/`delete_folder`/`delete_notebook`
 require an explicit `confirm: true` argument, the tool-call equivalent of the CLI's `--yes` gate.
+`rename_note`/`move_note`/`move_folder`/`delete_folder`/`delete_notebook` additionally accept
+`dry_run: true`: the same core planner reports the new path, every note whose `[[wikilinks]]`
+would be rewritten, every note that would move, or the recursive inventory that would be deleted —
+without writing or requiring `confirm`. That is the agent-facing answer to "reorganizing my notes
+sounds useful and slightly terrifying": preview first, apply second.
+
+Read-only MCP **resources** expose `shiki://index`, `shiki://notebook/<name>` and
+`shiki://note/<notebook>/<path>` (a template, path segments percent-encoded); **prompts**
+`weekly_review` and `inbox_triage` preload open tasks/daily notes or captures so a client can offer
+a one-click starting point. Both use the same `get_and_unlock` passphrase path as the tools.
 
 **Writes are never auto-committed** — same as the CLI, `new_note`/`edit_note`/etc. only write the
 file; nothing calls git. `sync_notebook` is what actually commits (and pushes, if that notebook's
@@ -693,35 +705,41 @@ point being that connecting shiki to whichever AI tool someone already uses shou
 command," not "find the right config file format and hand-write it."
 
 Supported clients (`shiki agent status` lists all of them with their live connection state):
-**Claude Code**, **Claude Desktop**, **OpenCode**, **Cursor**, **Windsurf**, **Continue** — plus
-`connect generic`, which prints the plain MCP snippet above and writes nothing, for any client not
-explicitly supported yet. Each client defaults to its user/global config scope (shiki notebooks
-aren't bound to any one project) except Continue, whose own MCP convention is project-only;
-`--project` overrides this to the current directory's own config where that client supports it
-(errors clearly where it doesn't, e.g. `windsurf --project`).
+**Claude Code**, **Claude Desktop**, **OpenCode**, **Cursor**, **Windsurf**, **Continue**,
+**Gemini CLI**, **Zed**, **Codex** and **VS Code** — plus `connect generic`, which prints the plain
+MCP snippet above and writes nothing, for any client not explicitly supported yet. Each client
+defaults to its user/global config scope (shiki notebooks aren't bound to any one project) except
+Continue (project-only by its own convention) and Codex (its `.codex/config.toml` is only read for
+trusted projects, so writing one would silently do nothing for most users); `--project` overrides
+this to the current directory's own config where that client supports it (errors clearly where it
+doesn't, e.g. `windsurf --project`/`codex --project`).
 
 Usage guidance travels with the connection, not just the bare MCP registration: **Claude Code**
 gets a real Skill (`~/.claude/skills/shiki/SKILL.md`, or the project-local equivalent with
-`--project`); every other client gets a marked, idempotent section appended to the current
-directory's `AGENTS.md` (`<!-- shiki:agent-section -->...<!-- /shiki:agent-section -->` —
-re-running `connect` replaces it in place rather than duplicating it) — `AGENTS.md` being the one
-convention all of them already read. Both surfaces render the exact same guidance text (call
-`index` first, paginate, call `sync_notebook` after a batch of changes, the passphrase env vars),
-so it can't drift between the two.
+`--project`); **Gemini CLI** gets a marked section in `GEMINI.md` (its default context file);
+every other client gets a marked, idempotent section appended to the current directory's
+`AGENTS.md` (`<!-- shiki:agent-section -->...<!-- /shiki:agent-section -->` — re-running
+`connect` replaces it in place rather than duplicating it) — the convention Codex, Zed, VS Code,
+Cursor, Windsurf, OpenCode and Continue already read. All surfaces render the exact same guidance
+text (call `index` first, paginate, `dry_run` before multi-file edits, call `sync_notebook` after a
+batch of changes, the passphrase env vars), so it can't drift between them.
 
-**Every config merge only ever touches the one JSON key it owns**
-(`mcpServers.shiki`/`mcp.shiki` — OpenCode alone uses `mcp`, everyone else `mcpServers`) — every
-other key in the file, at any depth, is round-tripped untouched. If an existing file doesn't parse
-as clean JSON, it's never touched at all: `connect` aborts and prints the exact snippet to paste in
-by hand instead of guessing. `continue` doesn't merge into anything — Continue's own MCP config is
+**Every config merge only ever touches the one key it owns** (`mcpServers.shiki`, `mcp.shiki`,
+`context_servers.shiki`, or Codex's `[mcp_servers.shiki]` TOML table) — every other key in the
+file, at any depth, is round-tripped untouched. JSON merges use `serde_json`, Codex's uses
+`toml_edit` so comments and sibling tables survive. If an existing file doesn't parse cleanly,
+it's never touched at all: `connect` aborts and prints the exact snippet to paste in by hand
+instead of guessing. VS Code targets the current Copilot harness
+(`$COPILOT_HOME/mcp-config.json` or a workspace `.mcp.json`, `type: "stdio"`), not the deprecated
+editor-managed `.vscode/mcp.json` format. `continue` doesn't merge into anything — Continue's own MCP config is
 a `.continue/mcpServers/shiki.yaml` directory of one-server-per-file YAML, so it just gets a fresh
-dedicated file, side-stepping the "is this JSON even safe to parse" question entirely.
+dedicated file, side-stepping the "is this YAML even safe to parse" question entirely.
 `shiki-mcp`'s own binary is resolved from `$PATH` at connect time and embedded as an absolute path
 when found (GUI-launched clients commonly inherit a minimal `$PATH`, so a bare command name isn't
 reliable there) — when it isn't found yet, the config is still written with the bare command name
 `shiki-mcp` and a warning to `cargo install shiki-mcp` is printed; nothing is auto-installed.
-`disconnect` reverses both halves — the MCP entry and the guidance (Skill file or `AGENTS.md`
-section) — leaving every unrelated key/section untouched.
+`disconnect` reverses both halves — the MCP entry and the guidance (Skill file, `GEMINI.md`, or
+`AGENTS.md` section) — leaving every unrelated key/section untouched.
 
 ---
 

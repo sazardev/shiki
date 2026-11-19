@@ -1,22 +1,24 @@
 //! `shiki agent connect` — registers the `shiki-mcp` server (see `mcp`'s
 //! docs in `IDEA.md`) with popular AI coding tools' own MCP config files,
-//! and drops in usage guidance (a real Claude Code Skill, or an
-//! `AGENTS.md` section for every other client) so a connected agent
-//! actually discovers *how* to use the tools well — paginate, call
-//! `sync_notebook`, the encrypted-notebook env vars — not just that they
-//! exist.
+//! and drops in usage guidance (a real Claude Code Skill, a `GEMINI.md`
+//! section for Gemini CLI, or an `AGENTS.md` section for everyone else) so
+//! a connected agent actually discovers *how* to use the tools well —
+//! paginate, preview with `dry_run`, call `sync_notebook`, the
+//! encrypted-notebook env vars — not just that they exist.
 //!
 //! Every merge here only ever touches the one nested key it owns
-//! (`mcpServers.shiki` / `mcp.shiki`) via a real JSON parse, never a
+//! (`mcpServers.shiki` / `mcp.shiki` / `context_servers.shiki`, or
+//! `[mcp_servers.shiki]` for Codex's TOML) via a real parse, never a
 //! textual patch — and refuses to touch a file at all if it doesn't parse
-//! as clean JSON, printing the snippet to paste by hand instead. That's
-//! why `Continue` gets a brand-new dedicated file
+//! cleanly, printing the snippet to paste by hand instead. That's why
+//! `Continue` gets a brand-new dedicated file
 //! (`.continue/mcpServers/shiki.yaml`) rather than a merge into its own
 //! `config.yaml`: that file can have comments/anchors this module has no
 //! business trying to parse, so the safer move is picking a file nothing
-//! else owns instead of attempting a risky merge.
+//! else owns instead of attempting a risky merge. Codex's TOML merge uses
+//! `toml_edit` specifically so comments and sibling tables survive.
 //!
-//! Key order in a rewritten file may shift (this crate's `serde_json`
+//! Key order in a rewritten JSON file may shift (this crate's `serde_json`
 //! dependency doesn't enable `preserve_order`, so `Value::Object` sorts
 //! alphabetically on serialize) — a minor diff-noise cosmetic, not data
 //! loss; every sibling key's *value* is always preserved untouched.
@@ -35,16 +37,24 @@ pub enum AgentClient {
     Cursor,
     Windsurf,
     Continue,
+    Gemini,
+    Zed,
+    Codex,
+    VsCode,
 }
 
 impl AgentClient {
-    pub const ALL: [AgentClient; 6] = [
+    pub const ALL: [AgentClient; 10] = [
         AgentClient::ClaudeCode,
         AgentClient::ClaudeDesktop,
         AgentClient::OpenCode,
         AgentClient::Cursor,
         AgentClient::Windsurf,
         AgentClient::Continue,
+        AgentClient::Gemini,
+        AgentClient::Zed,
+        AgentClient::Codex,
+        AgentClient::VsCode,
     ];
 
     pub fn id(self) -> &'static str {
@@ -55,6 +65,10 @@ impl AgentClient {
             AgentClient::Cursor => "cursor",
             AgentClient::Windsurf => "windsurf",
             AgentClient::Continue => "continue",
+            AgentClient::Gemini => "gemini",
+            AgentClient::Zed => "zed",
+            AgentClient::Codex => "codex",
+            AgentClient::VsCode => "vscode",
         }
     }
 
@@ -66,6 +80,10 @@ impl AgentClient {
             AgentClient::Cursor => "Cursor",
             AgentClient::Windsurf => "Windsurf",
             AgentClient::Continue => "Continue",
+            AgentClient::Gemini => "Gemini CLI",
+            AgentClient::Zed => "Zed",
+            AgentClient::Codex => "Codex",
+            AgentClient::VsCode => "VS Code",
         }
     }
 
@@ -73,11 +91,41 @@ impl AgentClient {
         AgentClient::ALL.into_iter().find(|c| c.id() == id)
     }
 
-    /// Claude Code gets a real Skill file instead of an `AGENTS.md`
-    /// section — every other client falls back to `AGENTS.md`, the one
-    /// convention all of them actually read.
+    /// Claude Code gets a real Skill file instead of a plain instruction
+    /// file; every other client gets a marked section in whichever file
+    /// it actually reads (see `guidance_file`).
     pub fn uses_skill_file(self) -> bool {
         matches!(self, AgentClient::ClaudeCode)
+    }
+
+    /// The project-level instruction file this client reads. Gemini CLI's
+    /// default context file is `GEMINI.md`, not `AGENTS.md`; Codex, Zed
+    /// and VS Code all read `AGENTS.md` (Zed also accepts `.rules`, but
+    /// `AGENTS.md` is the shared convention). Claude Code is handled by
+    /// its Skill file instead and never reaches this.
+    fn guidance_file(self) -> &'static str {
+        match self {
+            AgentClient::Gemini => "GEMINI.md",
+            _ => "AGENTS.md",
+        }
+    }
+}
+
+/// How a client's MCP config is serialized. Kept private: callers branch
+/// through the merge helpers below instead of reimplementing a format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConfigFormat {
+    Json,
+    Toml,
+    /// Continue's one-server-per-file YAML convention.
+    Yaml,
+}
+
+fn config_format(client: AgentClient) -> ConfigFormat {
+    match client {
+        AgentClient::Codex => ConfigFormat::Toml,
+        AgentClient::Continue => ConfigFormat::Yaml,
+        _ => ConfigFormat::Json,
     }
 }
 
@@ -94,14 +142,17 @@ pub enum Scope {
 }
 
 /// Not every client supports both scopes — `ClaudeDesktop`/`Windsurf` are
-/// user-only (no project-level config exists for either), and `Continue`'s
-/// own MCP convention is project-only.
+/// user-only (no project-level config exists for either), `Continue`'s own
+/// MCP convention is project-only, and Codex only reads a project
+/// `.codex/config.toml` for projects it already trusts, so writing one
+/// would silently do nothing for most users.
 pub fn supports_scope(client: AgentClient, scope: Scope) -> bool {
     !matches!(
         (client, scope),
         (AgentClient::ClaudeDesktop, Scope::Project)
             | (AgentClient::Windsurf, Scope::Project)
             | (AgentClient::Continue, Scope::User)
+            | (AgentClient::Codex, Scope::Project)
     )
 }
 
@@ -117,7 +168,9 @@ pub fn default_scope(client: AgentClient) -> Scope {
 pub enum MergeError {
     #[error("existing file isn't valid JSON")]
     NotValidJson,
-    #[error("existing file's top level isn't a JSON object")]
+    #[error("existing file isn't valid TOML")]
+    NotValidToml,
+    #[error("existing file's top level isn't an object/table")]
     NotAnObject,
 }
 
@@ -154,12 +207,53 @@ pub fn config_path(
             .join(".continue")
             .join("mcpServers")
             .join("shiki.yaml"),
+        (AgentClient::Gemini, Scope::User) => process::expand_home("~/.gemini/settings.json"),
+        (AgentClient::Gemini, Scope::Project) => project_root.join(".gemini").join("settings.json"),
+        (AgentClient::Zed, Scope::User) => zed_config_path(),
+        (AgentClient::Zed, Scope::Project) => project_root.join(".zed").join("settings.json"),
+        (AgentClient::Codex, Scope::User) => process::expand_home("~/.codex/config.toml"),
+        // VS Code's current Copilot harness reads `$COPILOT_HOME/mcp-config.json`
+        // (falling back to `~/.copilot/mcp-config.json`), or a workspace-root
+        // `.mcp.json`. The editor-managed `.vscode/mcp.json` format is
+        // deprecated and deliberately not written here.
+        (AgentClient::VsCode, Scope::User) => vscode_copilot_config_path(),
+        (AgentClient::VsCode, Scope::Project) => project_root.join(".mcp.json"),
         // Unreachable: every (client, scope) pair not covered above already
         // returned early via the `supports_scope` guard.
         (AgentClient::ClaudeDesktop, Scope::Project)
         | (AgentClient::Windsurf, Scope::Project)
-        | (AgentClient::Continue, Scope::User) => unreachable!(),
+        | (AgentClient::Continue, Scope::User)
+        | (AgentClient::Codex, Scope::Project) => unreachable!(),
     })
+}
+
+fn zed_config_path() -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        process::expand_home("~/.config/zed/settings.json")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let appdata = std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| process::expand_home("~"));
+        appdata.join("Zed").join("settings.json")
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| process::expand_home("~/.config"))
+            .join("zed")
+            .join("settings.json")
+    }
+}
+
+fn vscode_copilot_config_path() -> PathBuf {
+    match std::env::var_os("COPILOT_HOME") {
+        Some(home) => PathBuf::from(home).join("mcp-config.json"),
+        None => process::expand_home("~/.copilot/mcp-config.json"),
+    }
 }
 
 fn scope_label(scope: Scope) -> &'static str {
@@ -188,12 +282,13 @@ fn claude_desktop_config_path() -> PathBuf {
 }
 
 /// `(top-level object key, this server's entry key)` — every JSON-based
-/// client except OpenCode uses `mcpServers`; OpenCode uses `mcp`. Never
-/// called for `Continue`, which doesn't go through the JSON merge path at
-/// all (see the module doc comment).
+/// client except OpenCode (`mcp`) and Zed (`context_servers`) uses
+/// `mcpServers`. Never called for `Continue` or Codex, which don't go
+/// through the JSON merge path at all (see the module doc comment).
 fn entry_key_path(client: AgentClient) -> (&'static str, &'static str) {
     match client {
         AgentClient::OpenCode => ("mcp", "shiki"),
+        AgentClient::Zed => ("context_servers", "shiki"),
         _ => ("mcpServers", "shiki"),
     }
 }
@@ -205,7 +300,9 @@ fn entry_key_path(client: AgentClient) -> (&'static str, &'static str) {
 /// args, everyone else just wants a bare `{command, args}`.
 fn entry_value(client: AgentClient, command: &str) -> serde_json::Value {
     match client {
-        AgentClient::ClaudeCode => serde_json::json!({
+        // Claude Code and the current VS Code/Copilot portable format both
+        // want an explicit stdio discriminator.
+        AgentClient::ClaudeCode | AgentClient::VsCode => serde_json::json!({
             "type": "stdio",
             "command": command,
             "args": [],
@@ -215,6 +312,8 @@ fn entry_value(client: AgentClient, command: &str) -> serde_json::Value {
             "command": [command],
             "enabled": true,
         }),
+        // Gemini, Cursor, Windsurf, Claude Desktop, Zed and Continue all
+        // use the bare command/args pair.
         _ => serde_json::json!({
             "command": command,
             "args": [],
@@ -260,10 +359,48 @@ pub fn remove_mcp_entry(existing: &str, client: AgentClient) -> Result<String, M
     Ok(serde_json::to_string_pretty(&root).expect("Value always serializes"))
 }
 
-/// The exact JSON block to paste by hand — used both for the `generic`
-/// client (which never writes a file) and as the fallback message when a
-/// real client's own config file failed the safety check above.
+/// Codex's TOML equivalent of `upsert_mcp_entry`: only inserts/overwrites
+/// `[mcp_servers.shiki]`, round-tripping every other table, comment and
+/// key order through `toml_edit`'s format-preserving document. Refuses to
+/// guess at a file that isn't valid TOML.
+pub fn upsert_mcp_entry_toml(existing: Option<&str>, command: &str) -> Result<String, MergeError> {
+    let mut doc: toml_edit::DocumentMut = match existing {
+        Some(text) => text.parse().map_err(|_| MergeError::NotValidToml)?,
+        None => toml_edit::DocumentMut::new(),
+    };
+    let servers = doc
+        .entry("mcp_servers")
+        .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()));
+    let Some(table) = servers.as_table_mut() else {
+        return Err(MergeError::NotAnObject);
+    };
+    let mut entry = toml_edit::Table::new();
+    entry.insert("command", toml_edit::value(command));
+    entry.insert("args", toml_edit::value(toml_edit::Array::new()));
+    table.insert("shiki", toml_edit::Item::Table(entry));
+    Ok(doc.to_string())
+}
+
+/// Removes only `[mcp_servers.shiki]` from a Codex config, leaving
+/// comments, ordering and every sibling table untouched.
+pub fn remove_mcp_entry_toml(existing: &str) -> Result<String, MergeError> {
+    let mut doc: toml_edit::DocumentMut = existing.parse().map_err(|_| MergeError::NotValidToml)?;
+    if let Some(table) = doc
+        .get_mut("mcp_servers")
+        .and_then(|item| item.as_table_mut())
+    {
+        table.remove("shiki");
+    }
+    Ok(doc.to_string())
+}
+
+/// The exact block to paste by hand — used both for the `generic` client
+/// (which never writes a file) and as the fallback message when a real
+/// client's own config file failed the safety check above.
 fn manual_snippet(client: AgentClient, command: &str) -> String {
+    if config_format(client) == ConfigFormat::Toml {
+        return format!("[mcp_servers.shiki]\ncommand = {command:?}\nargs = []\n");
+    }
     let (top_key, entry_key) = entry_key_path(client);
     let snippet = serde_json::json!({
         top_key: { entry_key: entry_value(client, command) }
@@ -309,6 +446,11 @@ instead of assuming one call returned everything.\n\
 `sync_notebook` to commit (and push, if that notebook's sync policy allows it) — otherwise \
 changes just sit as uncommitted working-tree state.\n\
 - `delete_note`/`delete_folder`/`delete_notebook` require an explicit `confirm: true` argument.\n\
+- Before a rename, move or delete that touches more than one file, pass `dry_run: true` and show \
+the returned plan to the user; it lists every affected note and wikilink without writing.\n\
+- Read-only MCP resources (`shiki://index`, `shiki://notebook/<name>`, \
+`shiki://note/<notebook>/<path>`) expose notes without a tool call, and the `weekly_review` / \
+`inbox_triage` prompts preload the relevant notes.\n\
 - An encrypted notebook needs `SHIKI_PASSPHRASE` (and `SHIKI_NEW_PASSPHRASE` for \
 `encrypt_notebook`/`rekey_notebook`) set in the MCP server process's own environment — it has no \
 terminal to prompt on."
@@ -385,6 +527,18 @@ fn skill_file_path(scope: Scope, project_root: &Path) -> PathBuf {
     }
 }
 
+/// Where a client's usage guidance goes: Claude Code's Skill file, or the
+/// client's own project instruction file (Gemini's `GEMINI.md`, everyone
+/// else's `AGENTS.md`). Guidance is project-local even for user-scoped MCP
+/// configs, matching the existing convention.
+fn guidance_path(client: AgentClient, scope: Scope, project_root: &Path) -> PathBuf {
+    if client.uses_skill_file() {
+        skill_file_path(scope, project_root)
+    } else {
+        project_root.join(client.guidance_file())
+    }
+}
+
 /// Searches `path_env` (normally `$PATH`, passed in explicitly so this
 /// stays unit-testable) for a `shiki-mcp` binary.
 pub fn find_shiki_mcp_on_path(path_env: &str) -> Option<PathBuf> {
@@ -402,6 +556,32 @@ pub fn find_shiki_mcp_on_path(path_env: &str) -> Option<PathBuf> {
         }
         None
     })
+}
+
+/// Parses `shiki-mcp --version` output (`"shiki-mcp 0.11.0"`) into the bare
+/// version. Kept pure so the CLI's mismatch check is testable without
+/// spawning anything.
+pub fn parse_version_output(output: &str) -> Option<String> {
+    let mut parts = output.split_whitespace();
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some("shiki-mcp"), Some(version), None) => Some(version.to_string()),
+        _ => None,
+    }
+}
+
+/// Runs `<path> --version` and returns the bare version, or `None` when the
+/// binary is missing, fails, or prints something unexpected. This is what
+/// `shiki doctor`/`agent status` use to surface a `shiki`/`shiki-mcp`
+/// version skew after a partial upgrade.
+pub fn shiki_mcp_version(path: &Path) -> Option<String> {
+    let output = std::process::Command::new(path)
+        .arg("--version")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_version_output(&String::from_utf8_lossy(&output.stdout))
 }
 
 pub struct ConnectOutcome {
@@ -445,30 +625,43 @@ pub fn connect(
     let (command, shiki_mcp_found, warning) = resolve_command();
 
     let mcp_config_path = config_path(client, scope, project_root)?;
-    if client == AgentClient::Continue {
-        write_file(&mcp_config_path, &continue_yaml(&command))?;
-    } else {
-        let existing = std::fs::read_to_string(&mcp_config_path).ok();
-        let contents = upsert_mcp_entry(existing.as_deref(), client, &command).map_err(|e| {
-            crate::Error::AgentConnect(format!(
-                "{e} at {} — paste this in by hand instead:\n{}",
-                mcp_config_path.display(),
-                manual_snippet(client, &command)
-            ))
-        })?;
-        write_file(&mcp_config_path, &contents)?;
+    match config_format(client) {
+        ConfigFormat::Yaml => write_file(&mcp_config_path, &continue_yaml(&command))?,
+        ConfigFormat::Json => {
+            let existing = std::fs::read_to_string(&mcp_config_path).ok();
+            let contents =
+                upsert_mcp_entry(existing.as_deref(), client, &command).map_err(|e| {
+                    crate::Error::AgentConnect(format!(
+                        "{e} at {} — paste this in by hand instead:\n{}",
+                        mcp_config_path.display(),
+                        manual_snippet(client, &command)
+                    ))
+                })?;
+            write_file(&mcp_config_path, &contents)?;
+        }
+        ConfigFormat::Toml => {
+            let existing = std::fs::read_to_string(&mcp_config_path).ok();
+            let contents = upsert_mcp_entry_toml(existing.as_deref(), &command).map_err(|e| {
+                crate::Error::AgentConnect(format!(
+                    "{e} at {} — paste this in by hand instead:\n{}",
+                    mcp_config_path.display(),
+                    manual_snippet(client, &command)
+                ))
+            })?;
+            write_file(&mcp_config_path, &contents)?;
+        }
     }
 
-    let guidance_path = if client.uses_skill_file() {
-        let path = skill_file_path(scope, project_root);
-        write_file(&path, &claude_code_skill_md())?;
-        path
+    let guidance_path = guidance_path(client, scope, project_root);
+    if client.uses_skill_file() {
+        write_file(&guidance_path, &claude_code_skill_md())?;
     } else {
-        let path = project_root.join("AGENTS.md");
-        let existing = std::fs::read_to_string(&path).ok();
-        write_file(&path, &upsert_agents_md_section(existing.as_deref()))?;
-        path
-    };
+        let existing = std::fs::read_to_string(&guidance_path).ok();
+        write_file(
+            &guidance_path,
+            &upsert_agents_md_section(existing.as_deref()),
+        )?;
+    }
 
     Ok(ConnectOutcome {
         mcp_config_path,
@@ -491,15 +684,16 @@ pub fn disconnect(
     project_root: &Path,
 ) -> crate::Result<DisconnectOutcome> {
     let mcp_config_path = config_path(client, scope, project_root)?;
-    let mcp_removed = if client == AgentClient::Continue {
-        if mcp_config_path.is_file() {
-            std::fs::remove_file(&mcp_config_path)?;
-            true
-        } else {
-            false
+    let mcp_removed = match config_format(client) {
+        ConfigFormat::Yaml => {
+            if mcp_config_path.is_file() {
+                std::fs::remove_file(&mcp_config_path)?;
+                true
+            } else {
+                false
+            }
         }
-    } else {
-        match std::fs::read_to_string(&mcp_config_path) {
+        ConfigFormat::Json => match std::fs::read_to_string(&mcp_config_path) {
             Ok(existing) => {
                 let updated = remove_mcp_entry(&existing, client).map_err(|e| {
                     crate::Error::AgentConnect(format!(
@@ -511,24 +705,36 @@ pub fn disconnect(
                 true
             }
             Err(_) => false,
-        }
+        },
+        ConfigFormat::Toml => match std::fs::read_to_string(&mcp_config_path) {
+            Ok(existing) => {
+                let updated = remove_mcp_entry_toml(&existing).map_err(|e| {
+                    crate::Error::AgentConnect(format!(
+                        "{e} at {} — remove the [mcp_servers.shiki] table by hand",
+                        mcp_config_path.display()
+                    ))
+                })?;
+                write_file(&mcp_config_path, &updated)?;
+                true
+            }
+            Err(_) => false,
+        },
     };
 
-    let (guidance_path, guidance_removed) = if client.uses_skill_file() {
-        let path = skill_file_path(scope, project_root);
-        let removed = path.is_file();
+    let guidance_path = guidance_path(client, scope, project_root);
+    let guidance_removed = if client.uses_skill_file() {
+        let removed = guidance_path.is_file();
         if removed {
-            std::fs::remove_file(&path)?;
+            std::fs::remove_file(&guidance_path)?;
         }
-        (path, removed)
+        removed
     } else {
-        let path = project_root.join("AGENTS.md");
-        match std::fs::read_to_string(&path) {
+        match std::fs::read_to_string(&guidance_path) {
             Ok(existing) if existing.contains(AGENTS_MD_BEGIN) => {
-                write_file(&path, &remove_agents_md_section(&existing))?;
-                (path, true)
+                write_file(&guidance_path, &remove_agents_md_section(&existing))?;
+                true
             }
-            _ => (path, false),
+            _ => false,
         }
     };
 
@@ -555,17 +761,27 @@ pub fn status(
     let file_exists = path.is_file();
     let shiki_connected = if !file_exists {
         false
-    } else if client == AgentClient::Continue {
-        true
     } else {
-        std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-            .map(|root| {
-                let (top_key, entry_key) = entry_key_path(client);
-                root.get(top_key).and_then(|t| t.get(entry_key)).is_some()
-            })
-            .unwrap_or(false)
+        match config_format(client) {
+            ConfigFormat::Yaml => true,
+            ConfigFormat::Json => std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+                .map(|root| {
+                    let (top_key, entry_key) = entry_key_path(client);
+                    root.get(top_key).and_then(|t| t.get(entry_key)).is_some()
+                })
+                .unwrap_or(false),
+            ConfigFormat::Toml => std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|text| text.parse::<toml_edit::DocumentMut>().ok())
+                .map(|doc| {
+                    doc.get("mcp_servers")
+                        .and_then(|item| item.get("shiki"))
+                        .is_some()
+                })
+                .unwrap_or(false),
+        }
     };
     Ok(ClientStatus {
         config_path: path,
@@ -736,6 +952,28 @@ mod tests {
     }
 
     #[test]
+    fn parses_version_output_and_rejects_noise() {
+        assert_eq!(
+            parse_version_output("shiki-mcp 0.11.0\n"),
+            Some("0.11.0".to_string())
+        );
+        assert_eq!(parse_version_output("shiki 0.11.0"), None);
+        assert_eq!(parse_version_output("shiki-mcp 0.11.0 extra"), None);
+        assert_eq!(parse_version_output(""), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn runs_version_on_a_real_executable() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("shiki-mcp");
+        std::fs::write(&bin, "#!/bin/sh\necho 'shiki-mcp 9.9.9'\n").unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(shiki_mcp_version(&bin), Some("9.9.9".to_string()));
+    }
+
+    #[test]
     fn supports_scope_matches_each_clients_real_capabilities() {
         assert!(!supports_scope(AgentClient::ClaudeDesktop, Scope::Project));
         assert!(!supports_scope(AgentClient::Windsurf, Scope::Project));
@@ -794,5 +1032,95 @@ mod tests {
         let st = status(AgentClient::Cursor, Scope::Project, dir.path()).unwrap();
         assert!(st.file_exists);
         assert!(st.shiki_connected);
+    }
+
+    #[test]
+    fn gemini_uses_mcp_servers_and_its_own_guidance_file() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            config_path(AgentClient::Gemini, Scope::Project, dir.path()).unwrap(),
+            dir.path().join(".gemini").join("settings.json")
+        );
+        let outcome = connect(AgentClient::Gemini, Scope::Project, dir.path()).unwrap();
+        assert_eq!(outcome.guidance_path, dir.path().join("GEMINI.md"));
+        assert!(!dir.path().join("AGENTS.md").exists());
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&outcome.mcp_config_path).unwrap())
+                .unwrap();
+        assert_eq!(v["mcpServers"]["shiki"]["command"], "shiki-mcp");
+        assert!(outcome.guidance_path.is_file());
+    }
+
+    #[test]
+    fn zed_uses_context_servers_and_agents_md() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            config_path(AgentClient::Zed, Scope::Project, dir.path()).unwrap(),
+            dir.path().join(".zed").join("settings.json")
+        );
+        let outcome = connect(AgentClient::Zed, Scope::Project, dir.path()).unwrap();
+        assert_eq!(outcome.guidance_path, dir.path().join("AGENTS.md"));
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&outcome.mcp_config_path).unwrap())
+                .unwrap();
+        assert_eq!(v["context_servers"]["shiki"]["command"], "shiki-mcp");
+    }
+
+    #[test]
+    fn vscode_project_uses_mcp_json_with_stdio_type() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            config_path(AgentClient::VsCode, Scope::Project, dir.path()).unwrap(),
+            dir.path().join(".mcp.json")
+        );
+        let outcome = connect(AgentClient::VsCode, Scope::Project, dir.path()).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&outcome.mcp_config_path).unwrap())
+                .unwrap();
+        assert_eq!(v["mcpServers"]["shiki"]["type"], "stdio");
+    }
+
+    #[test]
+    fn codex_toml_merge_preserves_comments_and_sibling_tables() {
+        let existing =
+            "# my codex config\n[other]\nkey = 1 # keep me\n\n[mcp_servers.other]\ncommand = 'x'\n";
+        let out = upsert_mcp_entry_toml(Some(existing), "/bin/shiki-mcp").unwrap();
+        assert!(out.contains("# my codex config"));
+        assert!(out.contains("# keep me"));
+        assert!(out.contains("[mcp_servers.shiki]"));
+        assert!(out.contains("command = \"/bin/shiki-mcp\""));
+        assert!(out.contains("[mcp_servers.other]"));
+        assert!(out.contains("command = 'x'"));
+
+        let removed = remove_mcp_entry_toml(&out).unwrap();
+        assert!(!removed.contains("[mcp_servers.shiki]"));
+        assert!(removed.contains("[other]"));
+        assert!(removed.contains("[mcp_servers.other]"));
+        assert!(removed.contains("# keep me"));
+    }
+
+    #[test]
+    fn codex_toml_merge_refuses_invalid_toml() {
+        assert_eq!(
+            upsert_mcp_entry_toml(Some("[mcp_servers"), "cmd").unwrap_err(),
+            MergeError::NotValidToml
+        );
+    }
+
+    #[test]
+    fn codex_is_user_scope_only_because_project_config_needs_trust() {
+        assert!(!supports_scope(AgentClient::Codex, Scope::Project));
+        assert!(supports_scope(AgentClient::Codex, Scope::User));
+        assert_eq!(default_scope(AgentClient::Codex), Scope::User);
+    }
+
+    #[test]
+    fn new_clients_have_unique_ids_and_display_names() {
+        let mut ids = std::collections::HashSet::new();
+        for client in AgentClient::ALL {
+            assert!(ids.insert(client.id()), "duplicate id {}", client.id());
+            assert!(!client.display_name().is_empty());
+        }
+        assert_eq!(AgentClient::ALL.len(), 10);
     }
 }

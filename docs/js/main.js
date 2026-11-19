@@ -716,7 +716,7 @@ function detectPlatformKey() {
 // binary download link. Only macOS and Windows have a real package manager
 // shiki actually ships to (Homebrew, Scoop); Linux has no single universal
 // one (Arch's `yay -S shiki-bin` already gets its own card further down the
-// page), so `cargo install shiki-cli` — already the one truly
+// page), so `cargo install shiki-cli shiki-mcp` — already the one truly
 // platform-agnostic install path — stays the quick-install command there
 // and detection failing entirely (unknown UA) falls back to it too.
 // ---------------------------------------------------------------------------

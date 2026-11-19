@@ -24,11 +24,9 @@ cargo test -p shiki-tui clicking_the_button_row   # single test by (substring of
 cargo audit                          # CI runs this too; ignore list is .cargo/audit.toml
 ```
 
-There are 522 `#[test]`s: 243 in `shiki-core`, 33 in `shiki-config`, 207 in `shiki-tui`, 33 in
-`shiki-cli`, plus 1 in `shiki-native-host` and 5 in `shiki-desktop` (`shiki-mcp` has none yet — its
-tool bodies are thin wrappers over already-tested `shiki-core` logic, verified instead by a manual
-stdio protocol smoke test) — `cargo test --workspace` is green. They're all inline `#[cfg(test)]`
-modules inside
+There are 550 tests: 252 in `shiki-core`, 33 in `shiki-config`, 207 in `shiki-tui`, 33 in
+`shiki-cli`, 19 in `shiki-mcp`, plus 1 in `shiki-native-host` and 5 in `shiki-desktop` —
+`cargo test --workspace` is green. They're all inline `#[cfg(test)]` modules inside
 the source files (no `tests/` dirs, no `#[ignore]`, no fixture setup), so the pattern set by
 `panel_drawer::tests` (`shiki-tui/src/panel_drawer.rs`) — covering `drawer_hit_at`'s mouse
 coordinate math as a plain function of numbers, not `&App` — is the norm. When adding tests,
@@ -398,8 +396,10 @@ Three more members sit outside that chain — all depend on `shiki-core`/`shiki-
 - **`shiki-mcp`** — an MCP (Model Context Protocol) server binary exposing note/notebook operations
   as 28 typed tools over stdio (`rmcp`, the official Rust SDK), for AI clients (Claude Desktop,
   Claude Code, etc.) to call directly with structured JSON arguments instead of shelling out to
-  the CLI. Calls straight into `shiki-core`/`shiki-config`, never the `shiki` binary. See the
-  "MCP server" section of `IDEA.md` for the full tool list and setup.
+  the CLI. Also exposes read-only resources (`shiki://index`, `shiki://notebook/<name>`,
+  `shiki://note/<notebook>/<path>`) and `weekly_review`/`inbox_triage` prompts; multi-file and
+  destructive tools accept `dry_run: true`. Calls straight into `shiki-core`/`shiki-config`, never
+  the `shiki` binary. See the "MCP server" section of `IDEA.md` for the full tool list and setup.
 
 `shiki-desktop`/`shiki-mcp` are the only workspace members that pull in `tokio`/async at all — the
 terminal crates (`shiki-core`/`shiki-config`/`shiki-tui`/`shiki-cli`) stay synchronous (`std::thread`
@@ -415,27 +415,35 @@ tool too, and put any genuinely shared logic in `shiki-core`, not in `shiki-cli/
 
 **`shiki agent status`/`connect <client|--all>`/`disconnect` (`shiki_core::agent_connect`,
 `shiki-cli/src/commands/agent.rs`) auto-registers `shiki-mcp` with an agentic tool's own config —
-Claude Code, Claude Desktop, OpenCode, Cursor, Windsurf, Continue — plus a `generic` fallback that
-only prints the snippet.** This module is the one place in `shiki-core` that writes to files
-*outside* shiki's own config/data dirs, so it earns its own safety rule: every merge parses the
-target file as real JSON and only ever touches the one nested key it owns (`mcpServers.shiki`, or
-`mcp.shiki` for OpenCode, the one client whose own docs use a different top-level key) — every
-other key, at any depth, round-trips byte-for-byte. A file that doesn't parse as clean JSON is
-never touched at all; `connect` aborts and prints the exact snippet to paste in by hand instead of
-attempting a textual patch. This is also why `Continue` doesn't go through that merge path — its
-own MCP convention is a `.continue/mcpServers/` directory of one-server-per-file YAML, so it gets a
-brand-new dedicated `shiki.yaml` there instead, sidestepping "is this YAML (which can carry
-comments/anchors) even safe to parse" entirely. `AgentClient::uses_skill_file()` (Claude Code only)
-picks between writing a real Skill (`~/.claude/skills/shiki/SKILL.md`) and appending an idempotent
-`<!-- shiki:agent-section -->`-marked block to `AGENTS.md` (every other client, since that's the
-one convention they all already read) — both render from the same `agent_usage_guide()` string, so
-the guidance can't drift between the two. `find_shiki_mcp_on_path` resolves the binary from `$PATH`
-at connect time; found → embed the absolute path (GUI-launched clients are known to inherit a
-minimal `$PATH`), not found → still write the bare command name `shiki-mcp` plus a warning, never
-attempt to build/install it. Adding a new supported client is adding one `AgentClient` variant plus
-its `config_path`/`entry_value`/`supports_scope` arms — verify its actual current MCP config
-format live (web search, not assumed from training data) before wiring it in; this module's own
-client table was built that way, not from memory, since these tools' config schemas change.
+Claude Code, Claude Desktop, OpenCode, Cursor, Windsurf, Continue, Gemini CLI, Zed, Codex, VS
+Code — plus a `generic` fallback that only prints the snippet.** This module is the one place in
+`shiki-core` that writes to files *outside* shiki's own config/data dirs, so it earns its own
+safety rule: every merge parses the target file as real JSON (or TOML for Codex) and only ever
+touches the one key it owns (`mcpServers.shiki`, `mcp.shiki` for OpenCode,
+`context_servers.shiki` for Zed, or `[mcp_servers.shiki]` for Codex) — every other key, at any
+depth, round-trips untouched. Codex's TOML merge uses `toml_edit` specifically to preserve
+comments/table order. A file that doesn't parse cleanly is never touched at all; `connect` aborts
+and prints the exact snippet to paste in by hand instead of attempting a textual patch. This is
+also why `Continue` doesn't go through that merge path — its own MCP convention is a
+`.continue/mcpServers/` directory of one-server-per-file YAML, so it gets a brand-new dedicated
+`shiki.yaml` there instead, sidestepping "is this YAML (which can carry comments/anchors) even safe
+to parse" entirely. `AgentClient::uses_skill_file()` (Claude Code only) picks between writing a
+real Skill (`~/.claude/skills/shiki/SKILL.md`) and appending an idempotent
+`<!-- shiki:agent-section -->`-marked block to `AGENTS.md` — or `GEMINI.md` for Gemini CLI, whose
+default context file isn't `AGENTS.md`; both render from the same `agent_usage_guide()` string, so
+the guidance can't drift. `find_shiki_mcp_on_path` resolves the binary from `$PATH` at connect
+time; found → embed the absolute path (GUI-launched clients are known to inherit a minimal
+`$PATH`), not found → still write the bare command name `shiki-mcp` plus a warning, never attempt
+to build/install it. `shiki-mcp --version` plus `shiki doctor`/`agent status` use
+`agent_connect::shiki_mcp_version` to warn when a partial upgrade left the two binaries on
+different versions. Adding a new supported client is adding one `AgentClient` variant plus its
+`config_path`/`entry_value`/`supports_scope`/`default_scope` arms and its `guidance_file` — verify
+its actual current MCP config format live (web search, not assumed from training data) before
+wiring it in; this module's own client table was built that way, not from memory, since these
+tools' config schemas change. **`shiki-mcp` is packaged alongside `shiki`** in the release
+tarball/zip, both AUR PKGBUILDs, the Homebrew formula and both Scoop manifests — don't add a new
+install channel that only installs `shiki`, or `agent connect` starts warning about a missing
+server for that channel's users.
 
 **shiki-config is deliberately decoupled from ratatui.** `Theme` (`shiki-config/src/theme.rs`)
 stores every color slot as a string — `#rrggbb` hex, a terminal-native ANSI name

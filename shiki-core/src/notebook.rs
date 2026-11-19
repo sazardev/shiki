@@ -376,6 +376,18 @@ impl Notebook {
     /// renamed from inside shiki stays that same file type rather than
     /// being silently converted to `.md`, the one extension shiki itself
     /// ever creates new notes with.
+    /// Where `rename_note_at` would put `path` for `new_title`, without
+    /// touching anything — the read-only half of a rename, used by
+    /// `shiki-mcp`'s `dry_run` preview. Keeps the note's folder and its
+    /// original extension (case included), and resolves collisions with
+    /// the same `unique_slug_excluding` the real rename uses.
+    pub fn rename_target_path(&self, path: &Path, new_title: &str) -> Result<PathBuf> {
+        let dir = path.parent().unwrap_or(&self.path);
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("md");
+        let slug = unique_slug_excluding(dir, new_title, path, ext, self.fs.as_ref());
+        Ok(dir.join(format!("{slug}.{ext}")))
+    }
+
     pub fn rename_note_at(&self, path: &Path, new_title: &str) -> Result<Note> {
         let mut note = Note::from_file_in_notebook_with_crypto_and_fs(
             path,
@@ -383,10 +395,7 @@ impl Notebook {
             self.crypto.as_ref(),
             self.fs.as_ref(),
         )?;
-        let dir = path.parent().unwrap_or(&self.path);
-        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("md");
-        let slug = unique_slug_excluding(dir, new_title, path, ext, self.fs.as_ref());
-        let new_path = dir.join(format!("{slug}.{ext}"));
+        let new_path = self.rename_target_path(path, new_title)?;
         note.frontmatter.title = new_title.to_string();
         note.path = new_path;
         note.save_with_crypto_and_fs(self.crypto.as_ref(), self.fs.as_ref())?;

@@ -16,10 +16,11 @@ class Shiki < Formula
   end
 
   def install
-    bin.install "shiki"
+    bin.install "shiki", "shiki-mcp"
   end
 
   test do
     assert_match version.to_s, shell_output("#{bin}/shiki --version")
+    assert_match version.to_s, shell_output("#{bin}/shiki-mcp --version")
   end
 end

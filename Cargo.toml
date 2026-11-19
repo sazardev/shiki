@@ -11,7 +11,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.10.6"
+version = "0.11.0"
 edition = "2021"
 authors = ["Omar"]
 license = "MIT"
@@ -21,9 +21,9 @@ keywords = ["notes", "tui", "markdown", "git", "cli"]
 categories = ["command-line-utilities", "text-editors"]
 
 [workspace.dependencies]
-shiki-core = { path = "shiki-core", version = "0.10.6" }
-shiki-config = { path = "shiki-config", version = "0.10.6" }
-shiki-tui = { path = "shiki-tui", version = "0.10.6" }
+shiki-core = { path = "shiki-core", version = "0.11.0" }
+shiki-config = { path = "shiki-config", version = "0.11.0" }
+shiki-tui = { path = "shiki-tui", version = "0.11.0" }
 
 ratatui = "0.30"
 crossterm = "0.29"
@@ -54,6 +54,9 @@ nucleo-matcher = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "1.1"
+# Format-preserving TOML edits (comments, key order, unrelated tables intact)
+# for `shiki agent connect codex`, which writes into `~/.codex/config.toml`.
+toml_edit = "0.25"
 clap = { version = "4", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 notify = "8"

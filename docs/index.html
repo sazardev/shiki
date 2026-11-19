@@ -51,7 +51,7 @@
     "downloadUrl": "https://github.com/sazardev/shiki/releases/latest",
     "applicationCategory": "Utility",
     "operatingSystem": "Linux, Windows, macOS",
-    "softwareVersion": "0.10.6",
+    "softwareVersion": "0.11.0",
     "programmingLanguage": "Rust",
     "license": "https://github.com/sazardev/shiki/blob/main/LICENSE",
     "codeRepository": "https://github.com/sazardev/shiki",
@@ -81,6 +81,7 @@
       <a href="#features">Features</a>
       <a href="#install">Install</a>
       <a href="documentation.html">Docs</a>
+      <a href="mcp.html">MCP</a>
       <a href="changelog.html">Changelog</a>
       <a href="press.html">Press</a>
       <a href="https://github.com/sazardev/shiki">GitHub</a>
@@ -116,11 +117,11 @@
         <div class="install-hint">
           <p class="install-hint-label" id="quick-install-label">Quick install (Cargo):</p>
           <div class="quick-install code-block">
-            <pre id="quick-install-cmd">cargo install shiki-cli</pre>
+            <pre id="quick-install-cmd">cargo install shiki-cli shiki-mcp</pre>
             <button class="copy-btn" type="button" aria-label="Copy command">Copy</button>
           </div>
           <p class="install-alt" id="install-alt-line" hidden>
-            or, the universal fallback: <code>cargo install shiki-cli</code>
+            or, the universal fallback: <code>cargo install shiki-cli shiki-mcp</code>
             <button class="copy-btn copy-btn-inline" type="button" aria-label="Copy command">Copy</button>
           </p>
           <p class="install-more">See <a href="#install">all install options</a>.</p>
@@ -155,7 +156,7 @@
 
   <section id="agentic">
     <div class="container">
-      <span class="eyebrow">New in v0.10.0</span>
+      <span class="eyebrow">New in v0.11.0</span>
       <h2>Built for AI agents, not just you.</h2>
       <p class="muted" style="max-width: 62ch;">
         shiki now speaks <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">MCP</a>
@@ -169,15 +170,16 @@
           <div class="icon">⚡</div>
           <h3>One command connects any agent</h3>
           <p><code>shiki agent connect --all</code> registers <code>shiki-mcp</code> straight into
-          Claude Code, Claude Desktop, Cursor, Windsurf, OpenCode, and Continue's own config —
-          plus usage guidance, so the agent knows how to use it well from the first call.</p>
+          Claude Code, Claude Desktop, Cursor, Windsurf, OpenCode, Continue, Gemini CLI, Zed, Codex
+          and VS Code — plus usage guidance, so the agent knows how to use it well from the first
+          call. The binary ships with every package and release archive.</p>
         </div>
         <div class="feature-card">
           <div class="icon">⌘</div>
-          <h3>28 typed MCP tools</h3>
+          <h3>28 typed MCP tools, plus previews</h3>
           <p>Full parity with the CLI — read, write, tag, query, move, encrypt, sync — each with a
-          real JSON schema instead of flags to construct by hand. Calls go straight into
-          <code>shiki-core</code>, never through the <code>shiki</code> binary itself.</p>
+          real JSON schema instead of flags to construct by hand. <code>dry_run: true</code> shows
+          every note and wikilink a rename, move or delete would touch before anything is written.</p>
         </div>
         <div class="feature-card">
           <div class="icon">❯_</div>
@@ -200,9 +202,9 @@
         <button class="copy-btn" type="button" aria-label="Copy command">Copy</button>
       </div>
       <p class="install-more">
-        See the <a href="documentation.html#mcp">MCP server</a> and
-        <a href="documentation.html#cli">agent-friendly CLI</a> docs for the full tool list and
-        setup details.
+        See the <a href="mcp.html">MCP guide</a> for per-client setup, the <code>dry_run</code>
+        safety model, resources/prompts and troubleshooting — or the
+        <a href="documentation.html#cli">agent-friendly CLI</a> docs for scripted use.
       </p>
     </div>
   </section>
@@ -413,9 +415,10 @@
         <div class="install-card">
           <h3>Cargo (any platform)</h3>
           <div class="code-block">
-            <pre>cargo install shiki-cli</pre>
+            <pre>cargo install shiki-cli shiki-mcp</pre>
             <button class="copy-btn" type="button" aria-label="Copy command">Copy</button>
           </div>
+          <p class="theme-note">Both binaries are installed; package managers and prebuilt archives already bundle both.</p>
         </div>
         <div class="install-card">
           <h3>Scoop (Windows)</h3>

@@ -122,3 +122,24 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev
       - run: cargo check --workspace --locked
       - run: cargo test --workspace --locked
+
+  # The release workflow only builds on a tag, so a packaging regression
+  # (`shiki-mcp` silently dropped from the tarball, a crate that stops
+  # building in release mode) would otherwise only surface mid-release.
+  # Builds the same two binaries the release matrix does and proves both
+  # are runnable before any tag exists.
+  package-smoke:
+    name: package smoke (shiki + shiki-mcp)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked -p shiki-cli -p shiki-mcp
+      - run: |
+          set -euo pipefail
+          ./target/release/shiki --version
+          ./target/release/shiki-mcp --version
+          test "$(./target/release/shiki --version | awk '{print $2}')" = \
+               "$(./target/release/shiki-mcp --version | awk '{print $2}')"

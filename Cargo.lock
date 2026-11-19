@@ -5079,6 +5079,7 @@ dependencies = [
  "sha2 0.11.1",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tracing",
  "uuid",
@@ -5746,7 +5747,7 @@ dependencies = [
 
 [[package]]
 name = "shiki-cli"
-version = "0.10.6"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "arboard",
@@ -5772,7 +5773,7 @@ dependencies = [
 
 [[package]]
 name = "shiki-config"
-version = "0.10.6"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "directories",
@@ -5784,7 +5785,7 @@ dependencies = [
 
 [[package]]
 name = "shiki-core"
-version = "0.10.6"
+version = "0.11.0"
 dependencies = [
  "age",
  "chrono",
@@ -5805,12 +5806,13 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "toml 1.2.1+spec-1.1.0",
+ "toml_edit 0.25.19+spec-1.1.0",
  "tracing",
 ]
 
 [[package]]
 name = "shiki-desktop"
-version = "0.10.6"
+version = "0.11.0"
 dependencies = [
  "chrono",
  "git2",
@@ -5829,7 +5831,7 @@ dependencies = [
 
 [[package]]
 name = "shiki-mcp"
-version = "0.10.6"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5840,12 +5842,13 @@ dependencies = [
  "serde_yaml",
  "shiki-config",
  "shiki-core",
+ "tempfile",
  "tokio",
 ]
 
 [[package]]
 name = "shiki-native-host"
-version = "0.10.6"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5857,7 +5860,7 @@ dependencies = [
 
 [[package]]
 name = "shiki-tui"
-version = "0.10.6"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "arboard",
@@ -6904,6 +6907,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-stream"
+version = "0.1.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3d06f0b082ba57c26b79407372e57cf2a1e28124f78e9479fe80322cf53420b"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
 name = "tokio-util"
 version = "0.7.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7004,6 +7018,7 @@ dependencies = [
  "indexmap 2.14.2",
  "toml_datetime 1.1.3+spec-1.1.0",
  "toml_parser",
+ "toml_writer",
  "winnow 1.0.5",
 ]
 

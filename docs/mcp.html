@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="gruvbox-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agents &amp; MCP — shiki (私記)</title>
+  <meta name="description" content="Connect shiki to Claude Code, Claude Desktop, Cursor, Windsurf, OpenCode, Continue, Gemini CLI, Zed, Codex and VS Code over MCP. 28 typed tools, dry-run previews, resources and prompts." />
+  <meta name="keywords" content="shiki MCP, Model Context Protocol, Claude Code, Cursor, Codex, Gemini CLI, Zed, VS Code, AI agent note-taking, shiki-mcp" />
+  <meta name="author" content="sazardev" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://shiki.sazardev.stream/mcp.html" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://shiki.sazardev.stream/mcp.html" />
+  <meta property="og:site_name" content="shiki" />
+  <meta property="og:title" content="Agents &amp; MCP — shiki (私記)" />
+  <meta property="og:description" content="Give your agent typed access to your notes: 28 MCP tools, dry-run previews, resources and prompts." />
+  <meta property="og:image" content="https://shiki.sazardev.stream/assets/og-image.png" />
+  <meta property="og:locale" content="en_US" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Agents &amp; MCP — shiki (私記)" />
+  <meta name="twitter:description" content="Give your agent typed access to your notes: 28 MCP tools, dry-run previews, resources and prompts." />
+  <meta name="twitter:image" content="https://shiki.sazardev.stream/assets/og-image.png" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
+  <link rel="alternate" type="application/rss+xml" title="shiki changelog" href="feed.xml" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/documentation.css" />
+</head>
+<body class="doc-page">
+
+  <header class="topbar">
+    <div class="brand"><a href="index.html" style="color:inherit;text-decoration:none;">shiki (私記)</a><span class="cursor"></span></div>
+    <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">☰</button>
+    <nav id="site-nav">
+      <a href="index.html#themes">Themes</a>
+      <a href="index.html#features">Features</a>
+      <a href="index.html#install">Install</a>
+      <a href="documentation.html">Docs</a>
+      <a href="mcp.html" class="active">MCP</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="press.html">Press</a>
+      <a href="https://github.com/sazardev/shiki">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="doc-hero">
+    <div class="container">
+      <span class="eyebrow">Agents &amp; MCP</span>
+      <h1>Your notes, as typed tools.</h1>
+      <p class="muted" style="max-width: 68ch;">
+        <code>shiki-mcp</code> is a real MCP (Model Context Protocol) server over stdio. It calls
+        straight into <code>shiki-core</code> — the same domain logic as the TUI and CLI — never
+        through the <code>shiki</code> binary, so an agent gets structured JSON arguments and
+        results instead of shell quoting to parse. This page is the setup guide, the tool map and
+        the safety model.
+      </p>
+      <div class="code-block" style="max-width: 34rem;">
+        <pre>shiki agent connect --all</pre>
+        <button class="copy-btn" type="button" aria-label="Copy command">Copy</button>
+      </div>
+    </div>
+  </section>
+
+  <nav class="doc-toc">
+    <div class="container">
+      <a href="#install">Install</a>
+      <a href="#connect">Connect</a>
+      <a href="#tools">Tools</a>
+      <a href="#safety">Safety</a>
+      <a href="#resources">Resources &amp; prompts</a>
+      <a href="#clients">Per-client notes</a>
+      <a href="#encryption">Encryption</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+    </div>
+  </nav>
+
+  <section id="install">
+    <div class="container">
+      <h2>Install</h2>
+      <p style="max-width:70ch;">
+        Every prebuilt archive and every package manager now bundles both binaries: <code>shiki</code>
+        and <code>shiki-mcp</code>. AUR (<code>shiki-bin</code> or <code>shiki</code>), Scoop,
+        Homebrew and the GitHub release tarballs/zip need nothing extra. Confirm the server is on
+        your <code>$PATH</code>:
+      </p>
+      <pre class="code">shiki-mcp --version
+shiki --version   # both should report the same version</pre>
+      <p style="max-width:70ch;">
+        Building from crates.io or a clone installs them separately — install both:
+      </p>
+      <pre class="code">cargo install shiki-cli shiki-mcp
+# or, from a clone:
+cargo install --path shiki-cli
+cargo install --path shiki-mcp</pre>
+      <p style="max-width:70ch;">
+        If you ever see a version mismatch, update both together. <code>shiki doctor</code> flags
+        the skew, and <code>shiki agent status</code> prints the resolved path and version.
+      </p>
+    </div>
+  </section>
+
+  <section id="connect">
+    <div class="container">
+      <h2>Connect</h2>
+      <p style="max-width:70ch;">
+        One command writes the MCP entry into each client's own config <em>and</em> drops in usage
+        guidance, so the agent knows to start with <code>index</code>, paginate, preview destructive
+        edits with <code>dry_run</code>, and call <code>sync_notebook</code> after a batch of
+        changes.
+      </p>
+      <pre class="code">shiki agent status                  # what is connected, where, and which shiki-mcp
+shiki agent connect --all           # every supported client
+shiki agent connect cursor          # or just one
+shiki agent connect cursor --project  # this project's config instead of the user one
+shiki agent connect generic         # print a snippet, write nothing
+shiki agent disconnect --all        # reverse both halves</pre>
+      <p style="max-width:70ch;">
+        Each client defaults to its user/global scope (shiki notebooks aren't tied to one project),
+        except Continue, whose MCP convention is project-only, and Codex, whose project config is
+        only read for trusted projects — so Codex is user-scope only. <code>--project</code>
+        switches to the current directory where the client supports it.
+      </p>
+      <p style="max-width:70ch;">
+        Every merge only touches the one key shiki owns (<code>mcpServers.shiki</code>,
+        <code>mcp.shiki</code>, <code>context_servers.shiki</code>, or
+        <code>[mcp_servers.shiki]</code>). If the existing file doesn't parse cleanly, nothing is
+        written: the exact snippet to paste by hand is printed instead.
+      </p>
+
+      <table class="ref-table" style="width:100%; max-width:70ch;">
+        <thead>
+          <tr><th>Client</th><th>Config</th><th>Guidance file</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Claude Code</td><td><code>~/.claude.json</code> / <code>.mcp.json</code></td><td>Skill: <code>~/.claude/skills/shiki/SKILL.md</code></td></tr>
+          <tr><td>Claude Desktop</td><td>OS-specific <code>claude_desktop_config.json</code></td><td><code>AGENTS.md</code></td></tr>
+          <tr><td>Cursor</td><td><code>~/.cursor/mcp.json</code> / <code>.cursor/mcp.json</code></td><td><code>AGENTS.md</code></td></tr>
+          <tr><td>Windsurf</td><td><code>~/.codeium/windsurf/mcp_config.json</code></td><td><code>AGENTS.md</code></td></tr>
+          <tr><td>OpenCode</td><td><code>~/.config/opencode/opencode.json</code></td><td><code>AGENTS.md</code></td></tr>
+          <tr><td>Continue</td><td><code>.continue/mcpServers/shiki.yaml</code></td><td><code>AGENTS.md</code></td></tr>
+          <tr><td>Gemini CLI</td><td><code>~/.gemini/settings.json</code> / <code>.gemini/settings.json</code></td><td><code>GEMINI.md</code></td></tr>
+          <tr><td>Zed</td><td><code>~/.config/zed/settings.json</code> / <code>.zed/settings.json</code></td><td><code>AGENTS.md</code></td></tr>
+          <tr><td>Codex</td><td><code>~/.codex/config.toml</code> (user only)</td><td><code>AGENTS.md</code></td></tr>
+          <tr><td>VS Code (Copilot)</td><td><code>$COPILOT_HOME/mcp-config.json</code> / <code>.mcp.json</code></td><td><code>AGENTS.md</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="tools">
+    <div class="container">
+      <h2>28 typed tools</h2>
+      <p style="max-width:70ch;">
+        Pagination and response shapes match the CLI exactly: <code>limit</code>/<code>offset</code>/
+        <code>no_limit</code> (default 50) and
+        <code>{total, offset, limit, returned, has_more, items}</code>. A note is addressed by title
+        or filename slug; every write tool defaults to <code>general.default_notebook</code> when
+        <code>notebook</code> is omitted.
+      </p>
+      <ul style="max-width:70ch;">
+        <li><strong>Read:</strong> <code>list_notes</code>, <code>show_note</code>,
+          <code>search_notes</code>, <code>query_notes</code>, <code>list_tasks</code>,
+          <code>index</code>, <code>list_notebooks</code>, <code>diff_notebook</code>,
+          <code>log_notebook</code>, <code>doctor</code>.</li>
+        <li><strong>Write:</strong> <code>new_note</code>, <code>edit_note</code>,
+          <code>delete_note</code>, <code>rename_note</code>, <code>move_note</code>,
+          <code>tag_note</code>, <code>set_field</code>, <code>create_folder</code>,
+          <code>delete_folder</code>, <code>move_folder</code>, <code>daily_note</code>.</li>
+        <li><strong>Git:</strong> <code>sync_notebook</code> (commit, and push when the notebook's
+          policy allows it).</li>
+        <li><strong>Notebook management:</strong> <code>create_notebook</code>,
+          <code>rename_notebook</code>, <code>delete_notebook</code>, <code>encrypt_notebook</code>,
+          <code>decrypt_notebook</code>, <code>rekey_notebook</code>.</li>
+      </ul>
+      <p style="max-width:70ch;">
+        Start with <code>index</code> to orient (counts, busiest folders/tags, never bodies or
+        titles), then page through the specific list/search/query you need.
+      </p>
+    </div>
+  </section>
+
+  <section id="safety">
+    <div class="container">
+      <h2>Safety model</h2>
+      <ul style="max-width:70ch;">
+        <li><strong>Destructive calls need <code>confirm: true</code>.</strong>
+          <code>delete_note</code> (trash-first, recoverable), <code>delete_folder</code> and
+          <code>delete_notebook</code> (permanent) refuse without it — the tool-call equivalent of
+          <code>--yes</code>.</li>
+        <li><strong><code>dry_run: true</code> previews the risky edits.</strong>
+          <code>rename_note</code> reports the new path plus every note whose wikilinks would be
+          rewritten; <code>move_note</code>/<code>move_folder</code> report source and destination;
+          <code>delete_folder</code>/<code>delete_notebook</code> report the notes that would be
+          destroyed. Dry runs need no <code>confirm</code> and touch nothing.</li>
+        <li><strong>Writes are never auto-committed.</strong> <code>new_note</code>/<code>edit_note</code>
+          and friends only write the file. <code>sync_notebook</code> is what commits (and pushes,
+          if enabled); without it the changes sit as uncommitted working-tree state. The server
+          instructions tell the agent this directly.</li>
+        <li><strong>No hidden binary.</strong> Tools call <code>shiki-core</code> in-process, never
+          shell out to <code>shiki</code>, so there is no CLI output to scrape or quote.</li>
+        <li><strong>Read-only resources.</strong> Resources never write; prompts only gather
+          context and ask the model to propose a plan.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="resources">
+    <div class="container">
+      <h2>Resources &amp; prompts</h2>
+      <p style="max-width:70ch;">
+        Clients that support MCP resources can attach a note to a conversation without a tool call:
+      </p>
+      <ul style="max-width:70ch;">
+        <li><code>shiki://index</code> — visible notebooks and note counts.</li>
+        <li><code>shiki://notebook/&lt;name&gt;</code> — that notebook's notes (metadata only).</li>
+        <li><code>shiki://note/&lt;notebook&gt;/&lt;path&gt;</code> — one note's full Markdown
+          (frontmatter + body). Path segments are percent-encoded; the template is
+          <code>shiki://note/{notebook}/{path}</code>.</li>
+      </ul>
+      <p style="max-width:70ch;">
+        Two prompts preload the relevant notes: <code>weekly_review</code> (open tasks plus recent
+        daily notes) and <code>inbox_triage</code> (quick captures and untagged notes, with a
+        proposed filing plan). Tools are universal; client support for resources/prompts varies
+        (Zed, for example, supports prompts and tools but not resources). Clients that don't surface
+        a resource can still read the same note with <code>show_note</code>.
+      </p>
+    </div>
+  </section>
+
+  <section id="clients">
+    <div class="container">
+      <h2>Per-client notes</h2>
+      <ul style="max-width:70ch;">
+        <li><strong>Gemini CLI</strong> reads <code>GEMINI.md</code>, not <code>AGENTS.md</code> —
+          <code>connect gemini</code> writes its guidance there.</li>
+        <li><strong>Zed</strong> calls MCP servers <code>context_servers</code>; the entry shape is
+          the same <code>command</code>/<code>args</code> pair. Zed's settings are JSONC — if yours
+          contains comments (or trailing commas) the merge refuses to rewrite it and prints the
+          snippet to paste by hand instead of dropping your comments.</li>
+        <li><strong>Codex</strong> uses TOML (<code>[mcp_servers.shiki]</code>). The merge preserves
+          comments and sibling tables; project scope is intentionally unsupported.</li>
+        <li><strong>VS Code</strong> uses the current Copilot harness config
+          (<code>mcpServers</code> plus <code>"type": "stdio"</code>) and a workspace
+          <code>.mcp.json</code>. The older editor-managed <code>.vscode/mcp.json</code> format is
+          deprecated and not written.</li>
+        <li><strong>Continue</strong> gets a dedicated
+          <code>.continue/mcpServers/shiki.yaml</code> rather than a merge into its own YAML.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="encryption">
+    <div class="container">
+      <h2>Encrypted notebooks</h2>
+      <p style="max-width:70ch;">
+        An MCP server is spawned headless by its client and has no TTY, so there is nothing to
+        prompt on. The server reads the passphrase from its own environment:
+      </p>
+      <pre class="code">SHIKI_PASSPHRASE="…"          # unlock decrypt/read/write
+SHIKI_NEW_PASSPHRASE="…"      # new passphrase for encrypt/rekey</pre>
+      <p style="max-width:70ch;">
+        Set these in the environment the client launches the server with — for GUI clients that is
+        often not your shell's environment, so check the client's own <code>env</code> block.
+        Without it, encrypted tools fail with a clear message instead of hanging.
+      </p>
+    </div>
+  </section>
+
+  <section id="troubleshooting">
+    <div class="container">
+      <h2>Troubleshooting</h2>
+      <ul style="max-width:70ch;">
+        <li><code>shiki-mcp: not found on PATH</code> — install it (packages bundle it; otherwise
+          <code>cargo install shiki-mcp</code>), then re-run <code>agent connect</code> so the
+          absolute path is embedded. GUI clients often inherit a minimal <code>$PATH</code>.</li>
+        <li><strong>Version mismatch</strong> — <code>shiki doctor</code> and
+          <code>agent status</code> compare versions. Update both binaries together; the in-TUI
+          updater only replaces the running <code>shiki</code>.</li>
+        <li><strong>Client shows no tools</strong> — restart the client after connecting, and check
+          that its config file is the one it reads (the table above).</li>
+        <li><strong>Encrypted notebook errors</strong> — export <code>SHIKI_PASSPHRASE</code> in
+          the server process's environment, not just your shell.</li>
+        <li><strong>Agent made a mess</strong> — nothing is committed automatically. Use
+          <code>diff_notebook</code> to inspect, <code>git</code> to revert, and next time ask for
+          <code>dry_run: true</code> first.</li>
+        <li><strong>Connect failed on an existing config</strong> — the file isn't clean JSON/TOML
+          (for example a commented Zed <code>settings.json</code>) and was left untouched; paste
+          the printed snippet in by hand.</li>
+      </ul>
+      <p style="max-width:70ch;">
+        More command-level detail lives in <a href="documentation.html#cli">the CLI docs</a>; the
+        server's own tool descriptions are the source of truth for arguments.
+      </p>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/sazardev/shiki">GitHub</a>
+        <a href="https://github.com/sazardev/shiki/issues">Issues</a>
+        <a href="https://github.com/sazardev/shiki/blob/main/LICENSE">MIT License</a>
+        <a class="coffee-link" href="https://buymeacoffee.com/sazarcode">☕ Buy me a coffee</a>
+      </div>
+      <small>shiki (私記) — built by <a href="https://github.com/sazardev">sazardev</a>. Free and open source, forever.</small>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>

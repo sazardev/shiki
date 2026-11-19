@@ -28,6 +28,13 @@ chrono.workspace = true
 # TUI/CLI chain (`shiki-core -> shiki-config -> shiki-tui -> shiki-cli`),
 # so it's free to pull tokio in without breaking that chain's own
 # "stay synchronous" convention.
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-util"] }
 rmcp = { version = "3", features = ["server", "transport-io"] }
 schemars = "1.2"
+
+[dev-dependencies]
+tempfile.workspace = true
+# `client` is only needed by the in-process duplex tests in `main.rs`; keeping
+# it out of the normal dependency means the shipped `shiki-mcp` binary doesn't
+# pull in the client-side service/stream machinery.
+rmcp = { version = "3", features = ["client"] }

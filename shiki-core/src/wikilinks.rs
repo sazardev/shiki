@@ -328,15 +328,37 @@ pub fn rewrite_links_to(
     rewrite_links_to_with_fs(old_targets, new_title, pool, &crate::fs::LocalFs)
 }
 
-/// `rewrite_links_to`, through an injected `fs` backend instead of always
-/// `LocalFs` — the seam a future non-native caller (no local disk) uses
-/// instead.
-pub fn rewrite_links_to_with_fs(
+/// Metadata-only result of planning a link rewrite: everything
+/// `rewrite_links_to` would touch, without writing anything. Used by
+/// `shiki-mcp`'s `dry_run` previews so the plan and the real write share
+/// one scanner instead of drifting apart.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RewritePlan {
+    pub links_rewritten: usize,
+    pub notes: Vec<PathBuf>,
+    pub notebooks: Vec<String>,
+}
+
+/// One note whose body would change under a link rewrite — the shared,
+/// read-only half of `rewrite_links_to_with_fs`. Kept private: callers get
+/// `RewritePlan` (metadata) or the write path, never the intermediate
+/// rewritten text.
+struct RewrittenNote {
+    index: usize,
+    links: usize,
+    text: String,
+    was_encrypted: bool,
+}
+
+/// Scans `pool` and returns every note whose body would change, without
+/// writing. `rewrite_links_to_with_fs` applies the result; the `plan_*`
+/// functions below summarize it.
+fn plan_rewrites_with_fs(
     old_targets: &[String],
     new_title: &str,
     pool: &[(crate::Notebook, Note)],
     fs: &dyn crate::fs::FileStore,
-) -> crate::Result<(usize, usize, Vec<String>)> {
+) -> crate::Result<Vec<RewrittenNote>> {
     use crate::crypto::looks_encrypted;
 
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -354,13 +376,11 @@ pub fn rewrite_links_to_with_fs(
     let new_title = new_title.trim();
     let new_lc = new_title.to_lowercase();
     if old_lc.is_empty() || new_lc.is_empty() {
-        return Ok((0, 0, Vec::new()));
+        return Ok(Vec::new());
     }
 
-    let mut links_rewritten = 0usize;
-    let mut notes_updated = 0usize;
-    let mut notebooks_touched: Vec<String> = Vec::new();
-    for (nb, note) in pool {
+    let mut candidates = Vec::new();
+    for (index, (nb, note)) in pool.iter().enumerate() {
         let raw = match fs.read_to_string(&note.path) {
             Ok(raw) => raw,
             Err(_) => continue,
@@ -394,6 +414,7 @@ pub fn rewrite_links_to_with_fs(
         }
 
         let mut changed = false;
+        let mut links = 0usize;
         let mut in_fence = false;
         for line in lines.iter_mut().skip(start) {
             if line.trim_start().starts_with("```") {
@@ -409,7 +430,7 @@ pub fn rewrite_links_to_with_fs(
                 if !old_lc.contains(&tl) || tl == new_lc {
                     return caps[0].to_string();
                 }
-                links_rewritten += 1;
+                links += 1;
                 format!(
                     "[[{new_title}{}{}]]",
                     caps.get(3).map(|m| m.as_str()).unwrap_or(""),
@@ -423,19 +444,75 @@ pub fn rewrite_links_to_with_fs(
         }
 
         if changed {
-            let out = if was_encrypted {
-                nb.crypto
-                    .as_ref()
-                    .expect("checked above")
-                    .encrypt(&lines.join("\n"))?
-            } else {
-                lines.join("\n")
-            };
-            fs.write(&note.path, out.as_bytes())?;
-            notes_updated += 1;
-            if !notebooks_touched.contains(&nb.name) {
-                notebooks_touched.push(nb.name.clone());
-            }
+            candidates.push(RewrittenNote {
+                index,
+                links,
+                text: lines.join("\n"),
+                was_encrypted,
+            });
+        }
+    }
+    Ok(candidates)
+}
+
+/// Read-only counterpart of `rewrite_links_to`: what would change, without
+/// touching a single file.
+pub fn plan_rewrite_links_to(
+    old_targets: &[String],
+    new_title: &str,
+    pool: &[(crate::Notebook, Note)],
+) -> crate::Result<RewritePlan> {
+    plan_rewrite_links_to_with_fs(old_targets, new_title, pool, &crate::fs::LocalFs)
+}
+
+/// `plan_rewrite_links_to`, through an injected `fs` backend.
+pub fn plan_rewrite_links_to_with_fs(
+    old_targets: &[String],
+    new_title: &str,
+    pool: &[(crate::Notebook, Note)],
+    fs: &dyn crate::fs::FileStore,
+) -> crate::Result<RewritePlan> {
+    let candidates = plan_rewrites_with_fs(old_targets, new_title, pool, fs)?;
+    let mut plan = RewritePlan::default();
+    for candidate in &candidates {
+        let (nb, note) = &pool[candidate.index];
+        plan.links_rewritten += candidate.links;
+        plan.notes.push(note.path.clone());
+        if !plan.notebooks.contains(&nb.name) {
+            plan.notebooks.push(nb.name.clone());
+        }
+    }
+    Ok(plan)
+}
+
+/// `rewrite_links_to`, through an injected `fs` backend instead of always
+/// `LocalFs` — the seam a future non-native caller (no local disk) uses
+/// instead.
+pub fn rewrite_links_to_with_fs(
+    old_targets: &[String],
+    new_title: &str,
+    pool: &[(crate::Notebook, Note)],
+    fs: &dyn crate::fs::FileStore,
+) -> crate::Result<(usize, usize, Vec<String>)> {
+    let candidates = plan_rewrites_with_fs(old_targets, new_title, pool, fs)?;
+    let mut links_rewritten = 0usize;
+    let mut notes_updated = 0usize;
+    let mut notebooks_touched: Vec<String> = Vec::new();
+    for candidate in candidates {
+        let (nb, note) = &pool[candidate.index];
+        let out = if candidate.was_encrypted {
+            nb.crypto
+                .as_ref()
+                .expect("checked while planning")
+                .encrypt(&candidate.text)?
+        } else {
+            candidate.text
+        };
+        fs.write(&note.path, out.as_bytes())?;
+        links_rewritten += candidate.links;
+        notes_updated += 1;
+        if !notebooks_touched.contains(&nb.name) {
+            notebooks_touched.push(nb.name.clone());
         }
     }
     Ok((links_rewritten, notes_updated, notebooks_touched))
@@ -550,6 +627,37 @@ mod tests {
             "---\ntitle: Journal\n---\n\nSee [[New Name]], [[New Name|custom text]] \
              and [[New Name#Gear]].\n"
         );
+    }
+
+    #[test]
+    fn plan_rewrite_reports_the_same_work_without_writing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let body = "---\ntitle: Journal\n---\n\nSee [[Old Name]], [[old-name|text]] and \
+                    [[Old Name#Gear]].\n";
+        let (nb, linker) = on_disk(tmp.path(), "journal.md", body);
+        let plan = plan_rewrite_links_to(
+            &[String::from("Old Name"), String::from("old-name")],
+            "New Name",
+            &[(nb.clone(), linker.clone())],
+        )
+        .unwrap();
+
+        assert_eq!(plan.links_rewritten, 3);
+        assert_eq!(plan.notes, vec![linker.path.clone()]);
+        assert_eq!(plan.notebooks, vec!["nb".to_string()]);
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("journal.md")).unwrap(),
+            body,
+            "the plan must not touch the file"
+        );
+
+        let (links, files, _) = rewrite_links_to(
+            &[String::from("Old Name"), String::from("old-name")],
+            "New Name",
+            &[(nb, linker)],
+        )
+        .unwrap();
+        assert_eq!((links, files), (3, 1));
     }
 
     #[test]

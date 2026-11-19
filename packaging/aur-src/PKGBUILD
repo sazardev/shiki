@@ -29,12 +29,13 @@ build() {
   # while testing this PKGBUILD, not a hypothetical. Unset them for the
   # Rust build specifically rather than fighting the flags themselves.
   unset CFLAGS CXXFLAGS LDFLAGS LTOFLAGS
-  cargo build --frozen --release -p shiki-cli
+  cargo build --frozen --release -p shiki-cli -p shiki-mcp
 }
 
 package() {
   cd "$pkgname-$pkgver"
   install -Dm755 "target/release/shiki" "$pkgdir/usr/bin/shiki"
+  install -Dm755 "target/release/shiki-mcp" "$pkgdir/usr/bin/shiki-mcp"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 }
