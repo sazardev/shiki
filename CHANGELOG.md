@@ -6,6 +6,14 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Image paste now works with the default config and on more terminals.** `paste_images` no
+  longer depends on `os_clipboard` being enabled, and an empty bracketed paste (the signal
+  terminals send when the clipboard holds only a screenshot) now probes the clipboard for an image
+  instead of doing nothing — fixing `Ctrl+V` image paste in Windows Terminal (#122). Clipboard
+  text still wins over an image, and the real note-only gating is unchanged.
+
 ## [0.11.0] - 2026-11-19
 
 ### Added

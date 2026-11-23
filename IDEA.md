@@ -429,9 +429,12 @@ The rest of the editor's mouse/keyboard UX is opt-in via `[editor]` (Settings' E
 - `paste_images` (on by default): `Ctrl+V` with an *image* on the clipboard saves it as a PNG under
   `[general] attachments_dir` (default `attachments/`, created at the notebook root so the inserted
   `![pasted-…](attachments/…)` link resolves from any note depth) and drops the markdown link at
-  the cursor as a single undo step — screenshots straight into notes. Only engages for real note
-  edits (not config.toml/snippet/scratchpad/conflict-file buffers), and only when the clipboard
-  actually holds an image; text pastes behave exactly as before either way.
+  the cursor as a single undo step — screenshots straight into notes. An empty bracketed paste
+  (terminals with an image-only clipboard have no text to inject) triggers the same path, so it
+  works even when the terminal consumes the `Ctrl+V` key. Independent of `os_clipboard`, which
+  only opts into OS-clipboard *text*. Only engages for real note edits (not
+  config.toml/snippet/scratchpad/conflict-file buffers), and only when the clipboard actually
+  holds an image; text on the clipboard wins over an image.
 - `snippet_expand_tab` (on by default): `Tab`, when the text immediately before the cursor matches
   a configured snippet trigger, replaces that trigger text with the snippet's body instead of
   inserting a literal tab.

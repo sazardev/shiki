@@ -1251,7 +1251,14 @@ needed its `image-data` feature enabled) → PNG via the `png` crate → written
 `{notebook}/attachments_dir/pasted-YYYYMMDD-HHMMSS.png` (numeric `-2`/`-3` suffixes on collision,
 never overwrite) with the markdown link inserted as one undo step. It only engages for real note
 edits — the `editing_config`/`editing_snippet`/`editing_scratchpad`/`editing_conflict` flags all
-gate it off — and text on the clipboard always wins over an image.
+gate it off — and text on the clipboard always wins over an image. Two entry points, sharing the
+pure `should_paste_image*` helpers in `key_handlers.rs`: `editor_paste` (the `Ctrl+V` key event)
+and `on_paste` (an empty bracketed paste — terminals like Windows Terminal consume `Ctrl+V` as
+their own paste action and have no text to inject for an image-only clipboard, so the key event
+may never arrive; issue #122). Images are **independent of `os_clipboard`** — that toggle only
+opts into reading OS-clipboard *text* — so pasting images works with the default config. Note
+crossterm's Windows backend doesn't emit `Event::Paste` at all (console `INPUT_RECORD`s only), so
+on native Windows the key-event path is the one that matters.
 
 **`Ctrl+D` in the inline editor inserts a timestamp (`insert_timestamp`, on by default) — and it
 deliberately yields precedence to `multi_cursor`'s own Ctrl+D ("add next occurrence").** The two

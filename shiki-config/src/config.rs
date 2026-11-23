@@ -1329,9 +1329,12 @@ pub struct EditorConfig {
     /// Ctrl+V with an *image* on the clipboard saves it as a PNG under
     /// `[general] attachments_dir` (inside the current notebook) and
     /// inserts `![name](attachments/name.png)` at the cursor — screenshots
-    /// straight into notes, no intermediate file juggling. Text pastes are
-    /// unaffected either way; this only decides what happens when the
-    /// clipboard holds an image. Defaults to `true`.
+    /// straight into notes, no intermediate file juggling. Also triggered
+    /// by an *empty* bracketed paste, the signal terminals send when the
+    /// clipboard holds only an image and there's no text to type. Works
+    /// independently of `os_clipboard` (which only opts into OS-clipboard
+    /// text). Text on the clipboard always wins over an image. Defaults to
+    /// `true`.
     #[serde(default = "default_true")]
     pub paste_images: bool,
     /// Tab, when the text immediately before the cursor matches a
@@ -2022,10 +2025,11 @@ fn section_comment(line: &str) -> Option<&'static str> {
 # Inline note editor UX (Mode::Edit) — each key defaults independently; the
 # mostly-additive conveniences (mouse_selection, find_replace, auto_list_
 # continue, format_shortcuts, auto_pair_brackets, paste_url_as_link,
-# snippet_expand_tab, move_line, duplicate_line, block_indent_select) are on
-# by default, while the ones that change existing behavior (os_clipboard,
-# select_all_ctrl_a, line_numbers, multi_cursor, typewriter_scroll) are off
-# until you opt in from the EDITOR tab in Settings (leader+`s`).
+# paste_images, snippet_expand_tab, move_line, duplicate_line,
+# block_indent_select) are on by default, while the ones that change existing
+# behavior (os_clipboard, select_all_ctrl_a, line_numbers, multi_cursor,
+# typewriter_scroll) are off until you opt in from the EDITOR tab in Settings
+# (leader+`s`).
 # - mouse_selection: click to position the cursor, drag to select,
 #   double-click for a word, triple-click for a line. Defaults to true.
 # - find_replace: Ctrl+F opens a find/replace bar. Defaults to true.
@@ -2045,6 +2049,9 @@ fn section_comment(line: &str) -> Option<&'static str> {
 #   empty pair. Defaults to true.
 # - paste_url_as_link: pasting a bare URL over a selection wraps it as a
 #   markdown link. Defaults to true.
+# - paste_images: Ctrl+V with a screenshot saves it in the notebook's
+#   attachments dir and inserts the markdown link. Defaults to true, and
+#   works independently of os_clipboard.
 # - snippet_expand_tab: Tab expands a matching snippet trigger instead of
 #   inserting a literal tab. Defaults to true.
 # - typewriter_scroll: keeps the cursor's line vertically centered while
