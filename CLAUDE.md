@@ -24,7 +24,7 @@ cargo test -p shiki-tui clicking_the_button_row   # single test by (substring of
 cargo audit                          # CI runs this too; ignore list is .cargo/audit.toml
 ```
 
-There are 550 tests: 252 in `shiki-core`, 33 in `shiki-config`, 207 in `shiki-tui`, 33 in
+There are 554 tests: 252 in `shiki-core`, 33 in `shiki-config`, 211 in `shiki-tui`, 33 in
 `shiki-cli`, 19 in `shiki-mcp`, plus 1 in `shiki-native-host` and 5 in `shiki-desktop` —
 `cargo test --workspace` is green. They're all inline `#[cfg(test)]` modules inside
 the source files (no `tests/` dirs, no `#[ignore]`, no fixture setup), so the pattern set by
