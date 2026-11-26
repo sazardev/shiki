@@ -1,6 +1,6 @@
-//! Saving clipboard images as note attachments: `Ctrl+V` in the editor
-//! with an image on the clipboard writes it into the notebook's configured
-//! attachments folder (`[general] attachments_dir`, resolved against the
+//! Saving clipboard images as note attachments: `Ctrl+V`/`Alt+V` in the
+//! editor with an image on the clipboard writes it into the notebook's
+//! configured attachments folder (`[general] attachments_dir`, resolved against the
 //! notebook root) as a PNG and returns the markdown link to insert. The
 //! preview already resolves image paths through note-folder → notebook
 //! root → data-dir, so the written link renders everywhere in the notebook
