@@ -1,4 +1,4 @@
-//! Saving clipboard images as note attachments: `Ctrl+V`/`Alt+V` in the
+//! Saving clipboard images as note attachments: `Ctrl+V`/`Alt+V`/`F9` in the
 //! editor with an image on the clipboard writes it into the notebook's
 //! configured attachments folder (`[general] attachments_dir`, resolved against the
 //! notebook root) as a PNG and returns the markdown link to insert. The

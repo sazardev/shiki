@@ -426,13 +426,14 @@ The rest of the editor's mouse/keyboard UX is opt-in via `[editor]` (Settings' E
   typing two real `[` characters in a row.
 - `paste_url_as_link` (on by default): pasting a bare URL over an active selection wraps it as
   `[selected text](url)` instead of replacing the selection with the raw URL.
-- `paste_images` (on by default): `Ctrl+V` or `Alt+V` with an *image* on the clipboard saves it as
-  a PNG under `[general] attachments_dir` (default `attachments/`, created at the notebook root so
-  the inserted `![pasted-…](attachments/…)` link resolves from any note depth) and drops the
-  markdown link at the cursor as a single undo step — screenshots straight into notes. `Alt+V` is
-  the terminal-proof path: Windows Terminal always consumes `Ctrl+V` (and `Ctrl+Shift+V` /
-  `Shift+Insert`) as its own paste action before the app can see it, so on native Windows the
-  `Alt+V` key event is what reaches shiki; it is image-only, so clipboard text is ignored. On
+- `paste_images` (on by default): `Ctrl+V`, `Alt+V` or `F9` with an *image* on the clipboard saves
+  it as a PNG under `[general] attachments_dir` (default `attachments/`, created at the notebook
+  root so the inserted `![pasted-…](attachments/…)` link resolves from any note depth) and drops
+  the markdown link at the cursor as a single undo step — screenshots straight into notes.
+  `Alt+V`/`F9` are the terminal-proof paths: Windows Terminal always consumes `Ctrl+V` (and
+  `Ctrl+Shift+V` / `Shift+Insert`) as its own paste action before the app can see it, so on native
+  Windows those chords are what reach shiki; they are image-only, so clipboard text is ignored.
+  `F9` is the fallback for builds that swallow `Alt+V` too. On
   terminals that forward it, an empty bracketed paste (an image-only clipboard has no text to
   inject) triggers the same `Ctrl+V` path, where text on the clipboard wins over an image.
   Independent of `os_clipboard`, which only opts into OS-clipboard *text*. Only engages for real
@@ -1199,7 +1200,7 @@ preview_images = true
 chafa_path = ""
 # Fraction of the preview panel's width the art is drawn at (0.0, 1.0].
 preview_image_scale = 0.5
-# Notebook-root folder pasted images (Ctrl+V, or Alt+V on terminals that
+# Notebook-root folder pasted images (Ctrl+V, or Alt+V/F9 on terminals that
 # reserve Ctrl+V) are saved into; the inserted link resolves from any depth.
 attachments_dir = "attachments"
 # When true, switching to a notebook that has a remote configured triggers
@@ -1345,7 +1346,7 @@ auto_list_continue = true  # Enter continues a list/checkbox line; empty item ex
 format_shortcuts = true    # Ctrl+B / Ctrl+Alt+I wrap the selection in bold/italic
 auto_pair_brackets = true  # typing ( ` " wraps the selection or inserts an empty pair
 paste_url_as_link = true   # pasting a URL over a selection wraps it as a markdown link
-paste_images = true        # Ctrl+V/Alt+V with an image saves it to attachments/ and inserts the link
+paste_images = true        # Ctrl+V/Alt+V/F9 with an image saves it to attachments/ and inserts the link
 snippet_expand_tab = true  # Tab expands a matching snippet trigger
 typewriter_scroll = false  # keeps the cursor's line vertically centered while typing
 move_line = true          # Alt+Up/Alt+Down move the current line past its neighbor

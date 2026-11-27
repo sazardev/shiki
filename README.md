@@ -154,8 +154,8 @@ the [website](https://shiki.sazardev.stream/#themes).
   and `shiki import notion <export.zip>` converts a Notion export — UUID-stripped names, internal
   links become `[[wikilinks]]`. Renaming notes updates every inbound `[[wikilink]]` (behind a
   confirm), Obsidian's `aliases:` and `[[note#heading]]` syntax resolve natively, `![[embed]]`
-  images render in PREVIEW, and pasting a screenshot with `Ctrl+V` (or `Alt+V` in terminals that
-  reserve `Ctrl+V`, like Windows Terminal) saves it into the notebook's
+  images render in PREVIEW, and pasting a screenshot with `Ctrl+V` (or `Alt+V`/`F9` in terminals
+  that reserve `Ctrl+V`, like Windows Terminal) saves it into the notebook's
   `attachments/` and inserts the link.
 
 ## Install

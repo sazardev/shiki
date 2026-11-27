@@ -237,8 +237,8 @@ pub struct General {
     /// so a value outside that range can't blow up the chafa command.
     #[serde(default = "default_preview_image_scale")]
     pub preview_image_scale: f64,
-    /// Notebook-root folder pasted images are saved into (`Ctrl+V`/`Alt+V`
-    /// with an image on the clipboard). Resolved against the notebook's
+    /// Notebook-root folder pasted images are saved into (`Ctrl+V`/`Alt+V`/
+    /// `F9` with an image on the clipboard). Resolved against the notebook's
     /// root, so a link written from any nested note still resolves through the
     /// preview's usual folder→notebook→data-dir chain. Defaults to
     /// `"attachments"`; an empty value falls back to the same default.
@@ -1326,17 +1326,17 @@ pub struct EditorConfig {
     /// itself a URL, otherwise paste behaves exactly as before.
     #[serde(default = "default_true")]
     pub paste_url_as_link: bool,
-    /// Ctrl+V (or Alt+V) with an *image* on the clipboard saves it as a
-    /// PNG under `[general] attachments_dir` (inside the current notebook)
-    /// and inserts `![name](attachments/name.png)` at the cursor —
-    /// screenshots straight into notes, no intermediate file juggling.
-    /// Alt+V exists because Windows Terminal always consumes Ctrl+V as its
-    /// own paste action; it is image-only, so text on the clipboard is
-    /// ignored. Ctrl+V also probes an *empty* bracketed paste (the signal
-    /// Unix terminals send when the clipboard holds only an image), and
-    /// there text on the clipboard always wins. Works independently of
-    /// `os_clipboard` (which only opts into OS-clipboard text). Defaults to
-    /// `true`.
+    /// Ctrl+V (or Alt+V / F9) with an *image* on the clipboard saves it as
+    /// a PNG under `[general] attachments_dir` (inside the current
+    /// notebook) and inserts `![name](attachments/name.png)` at the cursor
+    /// — screenshots straight into notes, no intermediate file juggling.
+    /// Alt+V/F9 exist because Windows Terminal always consumes Ctrl+V as
+    /// its own paste action (and some builds swallow Alt+V too); they are
+    /// image-only, so text on the clipboard is ignored. Ctrl+V also probes
+    /// an *empty* bracketed paste (the signal Unix terminals send when the
+    /// clipboard holds only an image), and there text on the clipboard
+    /// always wins. Works independently of `os_clipboard` (which only opts
+    /// into OS-clipboard text). Defaults to `true`.
     #[serde(default = "default_true")]
     pub paste_images: bool,
     /// Tab, when the text immediately before the cursor matches a
@@ -2051,7 +2051,7 @@ fn section_comment(line: &str) -> Option<&'static str> {
 #   empty pair. Defaults to true.
 # - paste_url_as_link: pasting a bare URL over a selection wraps it as a
 #   markdown link. Defaults to true.
-# - paste_images: Ctrl+V (or Alt+V where the terminal reserves Ctrl+V,
+# - paste_images: Ctrl+V (or Alt+V/F9 where the terminal reserves Ctrl+V,
 #   e.g. Windows Terminal) with a screenshot saves it in the notebook's
 #   attachments dir and inserts the markdown link. Defaults to true, and
 #   works independently of os_clipboard.

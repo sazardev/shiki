@@ -46,19 +46,22 @@ pub(crate) fn should_paste_image(paste_images: bool, editing_note: bool) -> bool
     paste_images && editing_note
 }
 
-/// `Alt+V` is the explicit, terminal-proof image-paste chord. Windows
-/// Terminal always consumes `Ctrl+V` as its own paste action before the
-/// key event can reach the app (microsoft/terminal#11267), and its
-/// `Ctrl+Shift+V`/`Shift+Insert` bindings are paste too, so those can't be
-/// used either. `Alt+V` is unbound in Windows Terminal and every other
-/// terminal shiki runs in. Ctrl is excluded so an AltGr `Ctrl+Alt+V`
-/// (which some layouts synthesize for a real character) never triggers
-/// it; the `paste_images`/note gating is `should_paste_image`. Both cases
-/// are accepted because CapsLock makes the console report `V`.
+/// Explicit image-paste chords for terminals that reserve `Ctrl+V`.
+/// Windows Terminal always consumes `Ctrl+V` as its own paste action
+/// before the key event can reach the app (microsoft/terminal#11267), and
+/// its `Ctrl+Shift+V`/`Shift+Insert` bindings are paste too.
+/// `Alt+V` is unbound there, but some builds still swallow it (menu
+/// mnemonic / VT input), so `F9` is a second, modifier-free fallback:
+/// function keys aren't reserved by Windows Terminal. Ctrl is excluded
+/// from the `Alt+V` form so an AltGr `Ctrl+Alt+V` (which some layouts
+/// synthesize for a real character) never triggers it. Both `v`/`V` are
+/// accepted because CapsLock makes the console report `V`. The
+/// `paste_images`/note gating is `should_paste_image`.
 pub(crate) fn is_paste_image_shortcut(key: &KeyEvent) -> bool {
-    matches!(key.code, KeyCode::Char('v' | 'V'))
-        && key.modifiers.contains(KeyModifiers::ALT)
-        && !key.modifiers.contains(KeyModifiers::CONTROL)
+    key.code == KeyCode::F(9)
+        || (matches!(key.code, KeyCode::Char('v' | 'V'))
+            && key.modifiers.contains(KeyModifiers::ALT)
+            && !key.modifiers.contains(KeyModifiers::CONTROL))
 }
 
 /// Terminals with an image-only clipboard have no text to inject, so some
@@ -67,7 +70,7 @@ pub(crate) fn is_paste_image_shortcut(key: &KeyEvent) -> bool {
 /// in that case; a non-empty paste is text and keeps winning, as
 /// documented. Note this path is Unix-only in practice: crossterm's
 /// Windows backend reads `INPUT_RECORD`s and never emits `Event::Paste`,
-/// so Windows Terminal users need the `Alt+V` shortcut instead
+/// so Windows Terminal users need the `Alt+V`/`F9` shortcuts instead
 /// (`is_paste_image_shortcut`).
 pub(crate) fn should_paste_image_from_empty_bracketed(
     paste_images: bool,
@@ -3974,7 +3977,7 @@ impl App {
             // Probe arboard here, but only when there's no text to insert —
             // text on the clipboard keeps winning as documented. Only Unix
             // terminals deliver this (crossterm's Windows backend has no
-            // `Event::Paste`); Windows Terminal uses `Alt+V` instead.
+            // `Event::Paste`); Windows Terminal uses `Alt+V`/`F9` instead.
             if should_paste_image_from_empty_bracketed(
                 self.config.editor.paste_images,
                 self.editing_a_note(),
@@ -6653,12 +6656,13 @@ impl App {
             {
                 self.editor_paste(key);
             }
-            // Alt+V: explicit image paste for terminals that reserve Ctrl+V
-            // (and Ctrl+Shift+V / Shift+Insert) as their own paste action —
-            // notably Windows Terminal, where the Ctrl+V key event never
-            // reaches the app at all (issue #122). Image-only: text on the
+            // Alt+V / F9: explicit image paste for terminals that reserve
+            // Ctrl+V (and Ctrl+Shift+V / Shift+Insert) as their own paste
+            // action — notably Windows Terminal, where the Ctrl+V key event
+            // never reaches the app at all (issue #122). F9 is the fallback
+            // for builds that also swallow Alt+V. Image-only: text on the
             // clipboard is ignored here, unlike Ctrl+V's text-wins rule.
-            KeyCode::Char('v')
+            KeyCode::Char('v' | 'V') | KeyCode::F(9)
                 if is_paste_image_shortcut(&key)
                     && should_paste_image(
                         self.config.editor.paste_images,
@@ -7568,7 +7572,7 @@ impl App {
     /// does so unconditionally and types the clipboard text as plain key
     /// events instead. With an image-only clipboard there is no text to
     /// type, and crossterm's Windows backend never emits `Event::Paste`, so
-    /// nothing at all arrives on native Windows — that's what `Alt+V`
+    /// nothing at all arrives on native Windows — that's what `Alt+V`/`F9`
     /// (`is_paste_image_shortcut`) is for. On terminals that *do* forward
     /// the key event or an empty bracketed paste, the paths below apply.
     /// Here: OS-clipboard text wins when `os_clipboard` is on, then an image
@@ -8631,9 +8635,15 @@ mod tests {
     }
 
     #[test]
-    fn alt_v_is_the_image_shortcut_without_ctrl() {
+    fn alt_v_and_f9_are_image_shortcuts() {
         let alt_v = KeyEvent::new(KeyCode::Char('v'), KeyModifiers::ALT);
         assert!(is_paste_image_shortcut(&alt_v));
+        // Windows Terminal 1.25 can swallow Alt+V, so F9 is a second,
+        // modifier-free chord that no terminal reserves by default.
+        assert!(is_paste_image_shortcut(&KeyEvent::new(
+            KeyCode::F(9),
+            KeyModifiers::NONE
+        )));
         // CapsLock makes the console report an uppercase `V`.
         assert!(is_paste_image_shortcut(&KeyEvent::new(
             KeyCode::Char('V'),
