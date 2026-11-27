@@ -24,7 +24,7 @@ cargo test -p shiki-tui clicking_the_button_row   # single test by (substring of
 cargo audit                          # CI runs this too; ignore list is .cargo/audit.toml
 ```
 
-There are 550 tests: 252 in `shiki-core`, 33 in `shiki-config`, 207 in `shiki-tui`, 33 in
+There are 554 tests: 252 in `shiki-core`, 33 in `shiki-config`, 211 in `shiki-tui`, 33 in
 `shiki-cli`, 19 in `shiki-mcp`, plus 1 in `shiki-native-host` and 5 in `shiki-desktop` —
 `cargo test --workspace` is green. They're all inline `#[cfg(test)]` modules inside
 the source files (no `tests/` dirs, no `#[ignore]`, no fixture setup), so the pattern set by
@@ -1245,13 +1245,25 @@ stripped), and `resolve_embed_path` adds an Obsidian-style bare-name lookup — 
 relative chain misses, each base dir's immediate subdirectories are tried (one level, bounded), so
 an imported vault's `attachments/` layout just works.
 
-**Image paste (`Ctrl+V`, `[editor] paste_images` on by default) saves the clipboard image as an
-attachment** (`shiki-tui/src/attachments.rs::save_image`): RGBA straight from arboard (which
+**Image paste (`Ctrl+V`/`Alt+V`/`F9`, `[editor] paste_images` on by default) saves the clipboard image
+as an attachment** (`shiki-tui/src/attachments.rs::save_image`): RGBA straight from arboard (which
 needed its `image-data` feature enabled) → PNG via the `png` crate → written under
 `{notebook}/attachments_dir/pasted-YYYYMMDD-HHMMSS.png` (numeric `-2`/`-3` suffixes on collision,
 never overwrite) with the markdown link inserted as one undo step. It only engages for real note
 edits — the `editing_config`/`editing_snippet`/`editing_scratchpad`/`editing_conflict` flags all
-gate it off — and text on the clipboard always wins over an image.
+gate it off. Three entry points share the pure `should_paste_image*`/`is_paste_image_shortcut`
+helpers in `key_handlers.rs`: `editor_paste` (the `Ctrl+V` key event, where OS text wins over an
+image and an empty clipboard falls back to the yank register), `on_paste` (an empty bracketed
+paste), and **`Alt+V`/`F9`** (`is_paste_image_shortcut`, image-only). Those two chords are what
+make this work on **Windows Terminal**, which always consumes `Ctrl+V` (and
+`Ctrl+Shift+V`/`Shift+Insert`) as its own paste action, so that key event never reaches the app
+(microsoft/terminal#11267); crossterm's Windows backend also never emits `Event::Paste` (console
+`INPUT_RECORD`s only), so the empty-bracketed-paste path is Unix-only in practice. Some Windows
+Terminal builds swallow `Alt+V` too (menu mnemonic / VT input), hence **`F9`** as a modifier-free
+fallback — function keys aren't reserved there. Images are **independent of `os_clipboard`** —
+that toggle only opts into reading OS-clipboard *text* — so pasting images works with the default
+config. `Ctrl+Alt+V` is deliberately excluded so AltGr layouts that synthesize it for a real
+character can't trigger image paste.
 
 **`Ctrl+D` in the inline editor inserts a timestamp (`insert_timestamp`, on by default) — and it
 deliberately yields precedence to `multi_cursor`'s own Ctrl+D ("add next occurrence").** The two

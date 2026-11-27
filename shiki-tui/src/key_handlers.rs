@@ -27,6 +27,59 @@ use crate::{
 /// nested-list rules already expect.
 const LIST_INDENT_STEP: usize = 2;
 
+/// Only a real note edit may turn a pasted image into an attachment:
+/// config.toml, snippet bodies, the scratchpad and conflict files may not.
+/// Pure so the gating is testable without constructing an `App`.
+pub(crate) fn is_real_note_edit(
+    editing_config: bool,
+    editing_scratchpad: bool,
+    editing_snippet: bool,
+    editing_conflict: bool,
+) -> bool {
+    !editing_config && !editing_scratchpad && !editing_snippet && !editing_conflict
+}
+
+/// Whether an image paste should be attempted at all. `os_clipboard` is
+/// deliberately *not* an input: it opts into reading OS-clipboard **text**,
+/// while `paste_images` (on by default) owns images independently.
+pub(crate) fn should_paste_image(paste_images: bool, editing_note: bool) -> bool {
+    paste_images && editing_note
+}
+
+/// Explicit image-paste chords for terminals that reserve `Ctrl+V`.
+/// Windows Terminal always consumes `Ctrl+V` as its own paste action
+/// before the key event can reach the app (microsoft/terminal#11267), and
+/// its `Ctrl+Shift+V`/`Shift+Insert` bindings are paste too.
+/// `Alt+V` is unbound there, but some builds still swallow it (menu
+/// mnemonic / VT input), so `F9` is a second, modifier-free fallback:
+/// function keys aren't reserved by Windows Terminal. Ctrl is excluded
+/// from the `Alt+V` form so an AltGr `Ctrl+Alt+V` (which some layouts
+/// synthesize for a real character) never triggers it. Both `v`/`V` are
+/// accepted because CapsLock makes the console report `V`. The
+/// `paste_images`/note gating is `should_paste_image`.
+pub(crate) fn is_paste_image_shortcut(key: &KeyEvent) -> bool {
+    key.code == KeyCode::F(9)
+        || (matches!(key.code, KeyCode::Char('v' | 'V'))
+            && key.modifiers.contains(KeyModifiers::ALT)
+            && !key.modifiers.contains(KeyModifiers::CONTROL))
+}
+
+/// Terminals with an image-only clipboard have no text to inject, so some
+/// send an *empty* bracketed paste (`ESC[200~ESC[201~`) as the only signal
+/// — the `Ctrl+V` key event itself may never reach us. Probe the clipboard
+/// in that case; a non-empty paste is text and keeps winning, as
+/// documented. Note this path is Unix-only in practice: crossterm's
+/// Windows backend reads `INPUT_RECORD`s and never emits `Event::Paste`,
+/// so Windows Terminal users need the `Alt+V`/`F9` shortcuts instead
+/// (`is_paste_image_shortcut`).
+pub(crate) fn should_paste_image_from_empty_bracketed(
+    paste_images: bool,
+    editing_note: bool,
+    text_is_empty: bool,
+) -> bool {
+    text_is_empty && should_paste_image(paste_images, editing_note)
+}
+
 /// Which whole side of a conflict to keep — v1's resolution model (see
 /// `App::resolve_selected_conflict`'s doc comment for why line-level manual
 /// merging isn't offered here).
@@ -3918,6 +3971,21 @@ impl App {
             && !self.show_slash_menu
             && !self.show_wikilink_menu
         {
+            // A terminal pasting an image-only clipboard has no text to
+            // inject: it sends an empty bracketed paste, and the Ctrl+V key
+            // event itself may never reach `handle_edit_key` (issue #122).
+            // Probe arboard here, but only when there's no text to insert —
+            // text on the clipboard keeps winning as documented. Only Unix
+            // terminals deliver this (crossterm's Windows backend has no
+            // `Event::Paste`); Windows Terminal uses `Alt+V`/`F9` instead.
+            if should_paste_image_from_empty_bracketed(
+                self.config.editor.paste_images,
+                self.editing_a_note(),
+                text.is_empty(),
+            ) && self.paste_image_into_note()
+            {
+                return;
+            }
             let edits = self.insert_pasted_text(&text);
             if edits > 0 {
                 self.editor_undo_groups.push(edits);
@@ -6584,9 +6652,26 @@ impl App {
             }
             KeyCode::Char('v')
                 if key.modifiers.contains(KeyModifiers::CONTROL)
-                    && self.config.editor.os_clipboard =>
+                    && (self.config.editor.paste_images || self.config.editor.os_clipboard) =>
             {
-                self.editor_paste_os();
+                self.editor_paste(key);
+            }
+            // Alt+V / F9: explicit image paste for terminals that reserve
+            // Ctrl+V (and Ctrl+Shift+V / Shift+Insert) as their own paste
+            // action — notably Windows Terminal, where the Ctrl+V key event
+            // never reaches the app at all (issue #122). F9 is the fallback
+            // for builds that also swallow Alt+V. Image-only: text on the
+            // clipboard is ignored here, unlike Ctrl+V's text-wins rule.
+            KeyCode::Char('v' | 'V') | KeyCode::F(9)
+                if is_paste_image_shortcut(&key)
+                    && should_paste_image(
+                        self.config.editor.paste_images,
+                        self.editing_a_note(),
+                    ) =>
+            {
+                if !self.paste_image_into_note() {
+                    self.set_status("no image on the clipboard".into());
+                }
             }
             // Off by default: ratatui-textarea's own Ctrl+A is Emacs-style
             // "move to start of line," existing muscle memory this
@@ -7461,43 +7546,69 @@ impl App {
             self.editor_redo_groups.clear();
         }
     }
-    /// Ctrl+V — an *image* on the clipboard wins when `paste_images` is on
-    /// and a real note is being edited (not config.toml, a snippet body,
-    /// the scratchpad, or a conflict file): it's saved into the current
-    /// notebook's attachments folder and its markdown link inserted as one
-    /// undo step. Text still takes priority everywhere else, and if
-    /// arboard can't reach any clipboard (no display server), falls
-    /// through to `ratatui-textarea`'s own internal yank register
-    /// (`paste()`), exactly what Ctrl+V already did before `os_clipboard`
-    /// existed, so nothing regresses in that case.
-    fn editor_paste_os(&mut self) {
-        let editing_a_note = !self.editing_config
-            && !self.editing_scratchpad
-            && self.editing_snippet.is_none()
-            && self.editing_conflict.is_none();
-        if self.config.editor.paste_images && editing_a_note {
-            if let Some(image) = crate::clipboard::paste_image() {
-                self.insert_pasted_image(&image);
-                return;
-            }
-        }
-        match crate::clipboard::paste_os() {
-            Some(text) => {
+    fn editing_a_note(&self) -> bool {
+        is_real_note_edit(
+            self.editing_config,
+            self.editing_scratchpad,
+            self.editing_snippet.is_some(),
+            self.editing_conflict.is_some(),
+        )
+    }
+
+    /// Tries an image on the OS clipboard and inserts its markdown link.
+    /// Returns `false` when there was no image, so callers can fall through
+    /// to their text path. Gating lives in the (pure) `should_paste_image*`
+    /// helpers shared with `on_paste`.
+    fn paste_image_into_note(&mut self) -> bool {
+        let Some(image) = crate::clipboard::paste_image() else {
+            return false;
+        };
+        self.insert_pasted_image(&image);
+        true
+    }
+
+    /// Ctrl+V in the editor, when the key event actually reaches us. Some
+    /// terminals consume Ctrl+V as their own paste action: Windows Terminal
+    /// does so unconditionally and types the clipboard text as plain key
+    /// events instead. With an image-only clipboard there is no text to
+    /// type, and crossterm's Windows backend never emits `Event::Paste`, so
+    /// nothing at all arrives on native Windows — that's what `Alt+V`/`F9`
+    /// (`is_paste_image_shortcut`) is for. On terminals that *do* forward
+    /// the key event or an empty bracketed paste, the paths below apply.
+    /// Here: OS-clipboard text wins when `os_clipboard` is on, then an image
+    /// when `paste_images` is on and this is a real note, then the
+    /// pre-`os_clipboard` fallback (ratatui-textarea's own key handling /
+    /// internal yank register).
+    fn editor_paste(&mut self, key: KeyEvent) {
+        if self.config.editor.os_clipboard {
+            if let Some(text) = crate::clipboard::paste_os() {
                 let edits = self.insert_pasted_text(&text);
                 if edits > 0 {
                     self.editor_undo_groups.push(edits);
                     self.editor_redo_groups.clear();
                 }
+                return;
             }
-            None => {
-                let Some(editor) = &mut self.editor else {
-                    return;
-                };
-                if editor.textarea.paste() {
-                    self.editor_undo_groups.push(1);
-                    self.editor_redo_groups.clear();
-                }
+        }
+        if should_paste_image(self.config.editor.paste_images, self.editing_a_note())
+            && self.paste_image_into_note()
+        {
+            return;
+        }
+        if self.config.editor.os_clipboard {
+            // Clipboard reachable but held neither text nor a decodable
+            // image: keep the old internal-yank-register fallback.
+            let Some(editor) = &mut self.editor else {
+                return;
+            };
+            if editor.textarea.paste() {
+                self.editor_undo_groups.push(1);
+                self.editor_redo_groups.clear();
             }
+        } else {
+            // Let the default arm do what Ctrl+V did before `os_clipboard`
+            // existed (ratatui-textarea's own paste handling).
+            self.editor_forward_key_default(key);
         }
     }
     /// Saves a clipboard image into the current notebook's attachments
@@ -7524,7 +7635,7 @@ impl App {
             Err(e) => self.set_status(format!("could not save pasted image: {e}")),
         }
     }
-    /// Shared by `editor_paste_os` (Ctrl+V) and `on_paste` (bracketed
+    /// Shared by `editor_paste` (Ctrl+V) and `on_paste` (bracketed
     /// paste): inserts `text` as-is, unless `paste_url_as_link` is on,
     /// there's an active selection, and `text` (trimmed) is a bare
     /// `http(s)://` URL with no whitespace — in that case the selected
@@ -8484,5 +8595,73 @@ impl App {
             Mode::Edit => self.handle_edit_key(key),
             Mode::Normal | Mode::Visual => self.handle_normal_key(key),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        is_paste_image_shortcut, is_real_note_edit, should_paste_image,
+        should_paste_image_from_empty_bracketed,
+    };
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    #[test]
+    fn image_paste_is_limited_to_real_notes() {
+        assert!(is_real_note_edit(false, false, false, false));
+        assert!(!is_real_note_edit(true, false, false, false));
+        assert!(!is_real_note_edit(false, true, false, false));
+        assert!(!is_real_note_edit(false, false, true, false));
+        assert!(!is_real_note_edit(false, false, false, true));
+    }
+
+    #[test]
+    fn image_paste_does_not_depend_on_os_clipboard() {
+        // `os_clipboard` opts into OS-clipboard *text*; the image decision
+        // takes only `paste_images` + note-ness, so the default config
+        // (`paste_images = true`, `os_clipboard = false`) works (issue #122).
+        assert!(should_paste_image(true, true));
+        assert!(!should_paste_image(false, true));
+        assert!(!should_paste_image(true, false));
+    }
+
+    #[test]
+    fn empty_bracketed_paste_probes_image_but_text_wins() {
+        assert!(should_paste_image_from_empty_bracketed(true, true, true));
+        // Non-empty bracketed paste is text — insert it, don't probe images.
+        assert!(!should_paste_image_from_empty_bracketed(true, true, false));
+        assert!(!should_paste_image_from_empty_bracketed(false, true, true));
+        assert!(!should_paste_image_from_empty_bracketed(true, false, true));
+    }
+
+    #[test]
+    fn alt_v_and_f9_are_image_shortcuts() {
+        let alt_v = KeyEvent::new(KeyCode::Char('v'), KeyModifiers::ALT);
+        assert!(is_paste_image_shortcut(&alt_v));
+        // Windows Terminal 1.25 can swallow Alt+V, so F9 is a second,
+        // modifier-free chord that no terminal reserves by default.
+        assert!(is_paste_image_shortcut(&KeyEvent::new(
+            KeyCode::F(9),
+            KeyModifiers::NONE
+        )));
+        // CapsLock makes the console report an uppercase `V`.
+        assert!(is_paste_image_shortcut(&KeyEvent::new(
+            KeyCode::Char('V'),
+            KeyModifiers::ALT
+        )));
+        // Ctrl+V keeps its own (text-aware) path; Ctrl+Alt+V is the AltGr
+        // shape on several layouts and must not become image paste.
+        assert!(!is_paste_image_shortcut(&KeyEvent::new(
+            KeyCode::Char('v'),
+            KeyModifiers::CONTROL
+        )));
+        assert!(!is_paste_image_shortcut(&KeyEvent::new(
+            KeyCode::Char('v'),
+            KeyModifiers::CONTROL | KeyModifiers::ALT
+        )));
+        assert!(!is_paste_image_shortcut(&KeyEvent::new(
+            KeyCode::Char('x'),
+            KeyModifiers::ALT
+        )));
     }
 }

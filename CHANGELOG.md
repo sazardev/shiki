@@ -6,6 +6,17 @@ semver yet (pre-1.0), but version bumps are still meaningful and tracked here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Image paste now works with the default config and on Windows Terminal.** `paste_images` no
+  longer depends on `os_clipboard` being enabled, so `Ctrl+V` with a screenshot works out of the
+  box wherever the terminal forwards that key. Windows Terminal always consumes `Ctrl+V` as its
+  own paste action (the key event never reaches the app), so new **`Alt+V`** and **`F9`** shortcuts
+  paste the clipboard image there — they are image-only and ignore clipboard text; `F9` covers
+  builds that swallow `Alt+V` as well. An empty bracketed paste still probes for an image on Unix
+  terminals that send one. Text still wins over an image on the `Ctrl+V` path, and the real
+  note-only gating is unchanged (#122).
+
 ## [0.11.0] - 2026-11-19
 
 ### Added

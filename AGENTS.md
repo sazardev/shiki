@@ -21,7 +21,7 @@ cargo run -p shiki-cli -- --help                 # CLI; no args launches the TUI
 
 ## Testing
 
-- There are **550 tests** (252 in `shiki-core`, 33 `shiki-config`, 207 `shiki-tui`, 33 `shiki-cli`, 19 in `shiki-mcp`, 1 in `shiki-native-host` and 5 in `shiki-desktop`). They are all inline `#[cfg(test)]` modules inside source files (no `tests/` dirs, no `#[ignore]`, no fixture setup). `shiki-mcp` has real unit + in-process `tokio::io::duplex` MCP protocol tests now (tools/list, resources, prompts, a full tool call). `cargo test --workspace` is green.
+- There are **554 tests** (252 in `shiki-core`, 33 `shiki-config`, 211 `shiki-tui`, 33 `shiki-cli`, 19 in `shiki-mcp`, 1 in `shiki-native-host` and 5 in `shiki-desktop`). They are all inline `#[cfg(test)]` modules inside source files (no `tests/` dirs, no `#[ignore]`, no fixture setup). `shiki-mcp` has real unit + in-process `tokio::io::duplex` MCP protocol tests now (tools/list, resources, prompts, a full tool call). `cargo test --workspace` is green.
 - To exercise the CLI/TUI without touching real user data, override XDG dirs (used via `directories::ProjectDirs::from("", "", "shiki")`):
 
 ```sh

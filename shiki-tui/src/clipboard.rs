@@ -56,8 +56,9 @@ pub fn paste_os() -> Option<String> {
 
 /// Reads an *image* from the real OS clipboard, if one is there — the
 /// entry point for pasting screenshots straight into a note. `None` means
-/// no display server, or the clipboard holds text rather than an image
-/// (callers try `paste_os` first, so text keeps winning).
+/// no display server, or the clipboard holds no image. Callers give text
+/// precedence (OS text when `os_clipboard` is on, bracketed-paste text
+/// otherwise), so a text clipboard never turns into an attachment.
 pub fn paste_image() -> Option<arboard::ImageData<'static>> {
     let cb = os_clipboard()?;
     let mut cb = cb.lock().ok()?;
